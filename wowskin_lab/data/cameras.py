@@ -5,8 +5,8 @@ import xml.etree.ElementTree as ET
 import mujoco
 import numpy as np
 
-CAMERAS = dict(pixels1='lab_front', pixels2='lab_side',
-               pixels51='lab_overhead', pixels52='lab_wrist')
+# Shared acquisition rig: exactly two fixed views of the same workspace.
+CAMERAS = dict(pixels1='lab_front', pixels2='lab_side')
 
 
 def add_camera(parent, name, position, target, fovy=55):
@@ -24,10 +24,7 @@ def add_camera(parent, name, position, target, fovy=55):
 def add_recording_cameras(world, hand, tcp_z):
     add_camera(world, CAMERAS['pixels1'], [.65, -.40, .42], [.4, 0, .17])
     add_camera(world, CAMERAS['pixels2'], [.55, .40, .35], [.4, 0, .17])
-    add_camera(world, CAMERAS['pixels51'], [.10, -.35, .50], [.4, 0, .14])
-    # Include the object below the fingertips during approach, including the
-    # upstream ViSk converter's rightmost-20% crop of this camera.
-    add_camera(hand, CAMERAS['pixels52'], [.10, 0., .075], [0., 0., tcp_z+.08], 90)
+
 
 
 def project(points, intrinsic, world_to_camera):

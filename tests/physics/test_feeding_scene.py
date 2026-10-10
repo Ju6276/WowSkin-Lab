@@ -96,7 +96,7 @@ class FeedingChecks(unittest.TestCase):
                 times = v['timestamp'][1:]; indices = np.searchsorted(f['timestamp'][:], times)
                 np.testing.assert_allclose(f['timestamp'][:][indices], times, atol=1e-10)
                 np.testing.assert_allclose(f['sensor_values'][:][indices], v['sensor_states'][1:], atol=1e-4)
-                for cid in (1, 2, 51, 52):
+                for cid in (1, 2):
                     stream = cv2.VideoCapture(str(result['visk']/f'cam_{cid}.avi'))
                     ok, frame = stream.read();stream.release()
                     self.assertTrue(ok);self.assertEqual(frame.shape, (480, 640, 3))

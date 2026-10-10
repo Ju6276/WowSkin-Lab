@@ -82,7 +82,7 @@ class JointAcquisitionChecks(unittest.TestCase):
                 self.assertEqual(v['sensor_states'].shape,(121,15))
                 self.assertEqual(v['command_7d'].shape,(121,7))
                 self.assertFalse(any('object' in key or 'cube' in key for key in v))
-                for camera in (1,2,51,52):
+                for camera in (1,2):
                     stream=cv2.VideoCapture(str(result['visk']/f'cam_{camera}.avi'))
                     try:
                         ok,frame=stream.read()

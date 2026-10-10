@@ -35,7 +35,7 @@
 
 **ViSk**：原始 XArm 数据用 `process_xarm_data.py`；本项目 MuJoCo 数据用明确记录的采集格式桥接器，两者随后都进入原版 `convert_to_pkl.py` → `train_bc.py`。README 的 `process_data.py` 与实际文件名不同，以代码为准。保持 batch 256、动作块 10、subsample 5、训练 10000 步；部署 `eval.py` 仍是 XArm 接口，尚未接入 MuJoCo 闭环。
 
-[论文 IV-A](https://arxiv.org/html/2410.17246v2#S4.SS1) 明确是左 AnySkin、右普通硅胶。公开默认代码却读两组磁场，作者未解释原因。按用户要求，`official prepare visk` 默认 `paper-single`：只把加载器数量、环境数量改为 1，配置改为 `sensor0`，共三行；生成 `PAPER_SINGLE_SENSOR.patch` 和 manifest。官方参考 checkout 保持原样，模型、损失、归一化（含最小尺度 100）、基线处理、动作块和采样逻辑不改。不补零、不复制第二组。
+[论文 IV-A](https://arxiv.org/html/2410.17246v2#S4.SS1) 明确是左 AnySkin、右普通硅胶。公开默认代码却读两组磁场，作者未解释原因。按用户要求，`official prepare visk` 默认 `paper-single`：只把加载器数量、环境数量改为 1，配置改为 `sensor0`，保留单传感器变更；另按用户要求统一两台固定相机，生成 `PAPER_SINGLE_SENSOR.patch`、`TWO_FIXED_CAMERAS.patch` 和 manifest。ViSk 论文原实验仍是四相机。官方参考 checkout 保持原样，模型、损失、归一化（含最小尺度 100）、基线处理、动作块和采样逻辑不改。不补零、不复制第二组。
 
 **FTF 机器人分支**：机器人遥操作记录 → `process_data_robot.py` → `convert_to_pkl_robot.py` 初始转换 → `label_points.ipynb` 标注 → 再运行转换器并启用 `--process_points` → `train.py agent=p3po suite=p3po dataloader=p3po` → 官方带接触反馈的推理。沿用官方 README 的 FTF 机器人设置：subsample 15、`binarize_gripper_data=true`；batch 64、历史 10、动作块 20、训练 100100 步来自固定版配置。
 
@@ -43,7 +43,7 @@
 
 FTF 两条路线都保留 DIFT / CoTracker 物体跟踪；人手主线额外保留 MediaPipe 和手部映射。机器人九个参考点按官方位姿几何构造；物体点来自任务的人工语义标注和视觉跟踪，不固定为八个方块角点。
 
-上述数字是固定版本公开配置，并非断言所有论文实验使用同一训练步数。模型、归一化和控制器不应用此前历史补丁；数据加载器只有上面明确记录的传感器数量变更。公开代码中的错误/论文差异需逐项记录。
+上述数字是固定版本公开配置，并非断言所有论文实验使用同一训练步数。模型、归一化和控制器不应用此前历史补丁；采集、转换和训练配置包含上述明确记录的单传感器与双相机变更。公开代码中的错误/论文差异需逐项记录。
 
 ## 采集后如何处理
 
@@ -51,14 +51,17 @@ FTF 两条路线都保留 DIFT / CoTracker 物体跟踪；人手主线额外保�
 
 线材场景已接入 `teleop --task cable --record-format both-raw --ideal`，使用形变＋磁偶极子输出，数据单独写入 `visk/raw/cable` 与 `ftf-robot/extracted_data/cable`。本页已有转换命令和工作目录仍针对 `pick_cube`，不能直接当作线材配置使用；后续须准备任务名 `cable` 的独立工作目录，FTF 物体点依据线材任务视觉标注确定。已接通原始录制，不表示线材策略已训练或布线成功率已验证。
 
-**ViSk**：已准备 `outputs/official/visk-paper-single` 对应默认录制目录。
+**ViSk**：双相机需要新建工作目录；旧四相机工作目录保留。
 
 ```bash
+.venv/bin/python -m wowskin_lab official prepare visk \
+  --workspace outputs/official/visk-two-camera \
+  --data-root data/official_two_camera/visk --task pick_cube
 .venv/bin/python -m wowskin_lab official process-visk-sim \
-  --workspace outputs/official/visk-paper-single
+  --workspace outputs/official/visk-two-camera
 ```
 
-输出 `data/official/visk/processed_data_pkl_aa/pick_cube.pkl`，并检查原版加载器输入：四路 `[1,3,128,128]` 图像、`sensor0=[1,15]`、`actions=[1,10,7]`。原版转换器负责 BGR 色序、腕相机裁剪、128px 缩放和统计量。原 XArm 预处理依靠位姿完全相等推断暂停；仿真桥接仅改用录制起止事件切段，不伪造静止位姿。已扣/未扣基线不能混用。
+输出 `data/official_two_camera/visk/processed_data_pkl_aa/pick_cube.pkl`，并检查原版加载器输入：两路 `[1,3,128,128]` 图像、`sensor0=[1,15]`、`actions=[1,10,7]`。原版转换器负责 BGR 色序、128px 缩放和统计量。原 XArm 预处理依靠位姿完全相等推断暂停；仿真桥接仅改用录制起止事件切段，不伪造静止位姿。已扣/未扣基线不能混用。
 
 现有处理结果不覆盖。新批次可用新的 `data-root/workspace`，通过 `--raw-root` 指向原始目录。训练命令在对应工作目录的 `COMMANDS.md`；Mac 支持范围见本文开头。PickCube 是本项目任务，方向噪声、实物任务和成绩尚未复现。
 
@@ -66,10 +69,10 @@ FTF 两条路线都保留 DIFT / CoTracker 物体跟踪；人手主线额外保�
 
 ```bash
 .venv/bin/python -m wowskin_lab official process-ftf-robot \
-  --data-root data/official/ftf-robot --task pick_cube
+  --data-root data/official_two_camera/ftf-robot --task pick_cube
 .venv/bin/python -m wowskin_lab official convert-ftf-robot-initial \
-  --data-root data/official/ftf-robot --task pick_cube \
-  --calib-path data/official/ftf-robot/extracted_data/pick_cube/demonstration_0/sim_camera_calibration.npy
+  --data-root data/official_two_camera/ftf-robot --task pick_cube \
+  --calib-path data/official_two_camera/ftf-robot/extracted_data/pick_cube/demonstration_0/sim_camera_calibration.npy
 ```
 
 第一步运行原版 `process_data_robot.py` 生成 MP4/CSV；第二步运行原版 `convert_to_pkl_robot.py`，不加 `--process_points`。输出位于 `processed_data_pkl/expert_demos/franka_env/pick_cube.pkl`，**目录叫 expert_demos 也不代表已能训练**；同名 `.initial_conversion.json` 记录 `training_ready=false`。包装入口只补建目录、检查长度/有限值、阻止追加。
@@ -149,11 +152,11 @@ python collect_data.py collect_img=true collect_state=true collect_reskin=true d
 `official prepare` 复制固定版本上游代码，填写路径/任务配置；ViSk 默认另外应用上面三行论文单传感器配置，逐文件记录 SHA256 和变更理由。不会训练、打开机器人连接、编造数据或自动执行步骤。
 
 ```bash
-.venv/bin/python -m wowskin_lab official prepare visk   --workspace outputs/official/visk --data-root data/official/visk --task pick_cube
+.venv/bin/python -m wowskin_lab official prepare visk   --workspace outputs/official/visk-two-camera --data-root data/official_two_camera/visk --task pick_cube
 
 # pick_bread 是官方配置文件名；其真实数据名由 YAML 读取，不被擅自改名。
-.venv/bin/python -m wowskin_lab official prepare ftf-robot   --workspace outputs/official/ftf-robot --data-root data/official/ftf-robot --task pick_bread
-.venv/bin/python -m wowskin_lab official prepare ftf-human   --workspace outputs/official/ftf-human --data-root data/official/ftf-human --task pick_bread
+.venv/bin/python -m wowskin_lab official prepare ftf-robot   --workspace outputs/official/ftf-robot-two-camera --data-root data/official_two_camera/ftf-robot --task pick_bread
+.venv/bin/python -m wowskin_lab official prepare ftf-human   --workspace outputs/official/ftf-human-two-camera --data-root data/official_two_camera/ftf-human --task pick_bread
 ```
 
 这些是**配置准备示例，数据尚不存在，不表示这些任务已复现**。自建任务使用 `--task-config PATH.yaml`，物体点数必须与实际语义标注一致；没有自动把 PickCube 当成官方任务。
@@ -170,4 +173,6 @@ python collect_data.py collect_img=true collect_state=true collect_reskin=true d
 
 **FTF：2 台固定、经过标定的 RealSense。** [论文 §3.1 / §3.2.1](https://arxiv.org/html/2506.01944v1#S3.SS1) 描述两台相机从不同视角拍摄手和操作物体，利用双视角三角化恢复三维点。人手采集与机器人部署沿用同一相机设置；没有腕部相机。论文正文没有给出可直接照抄的 XYZ / RPY 安装坐标，不能自行指定前方/侧方为作者精确布局。
 
-**本地仿真：** ViSk 保存 `lab_front`、`lab_side`、`lab_overhead`、`lab_wrist` 四路；FTF 保存前两路固定视角。安装数量与固定/随动关系按上述配置组织，具体虚拟相机外参是本地场景设置，尚未声称复刻论文实物外参。定义在 [cameras.py](../wowskin_lab/data/cameras.py)。
+**本地仿真：** 按当前用户配置只保留 `lab_front`、`lab_side` 两台固定相机；ViSk 和 FTF 使用同一对相机、相同内外参与 30 Hz 采样时钟。不再录制顶部或腕部相机。ViSk 相机数量与论文四视角不同；其他策略、损失和动作配置保留。`published-default` 保留原四视角配置用于对照，不用于当前双相机采集。定义在 [cameras.py](../wowskin_lab/data/cameras.py)。
+
+新数据写入 `data/official_two_camera/`，旧 `data/official/` 和工作目录保持原样。ViSk 原始格式升级为 `visk_mujoco_raw_v2`；处理器检查相机 ID 为 `[1, 2]`，拒绝把旧四视角记录混入新数据。

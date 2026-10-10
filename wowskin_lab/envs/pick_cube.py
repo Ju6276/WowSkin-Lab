@@ -61,6 +61,12 @@ def limit_vector(vector, limit):
 
 def pick_scene(cfg, layout):
     root = ET.fromstring(build_scene(cfg, layout))
+    # The upstream Panda includes two wrist cameras; acquisition uses only
+    # the shared pair of fixed tabletop cameras requested for this project.
+    for parent in root.iter():
+        for child in list(parent):
+            if child.tag == "camera":
+                parent.remove(child)
     root.set("model", "WowSkin-Lab | PandaPickCube: WowSkin + plain silicone")
     # Broad box/flex contacts create hundreds of constraints. CG avoids the
     # costly Newton factorization while preserving the same contact geometry.
@@ -905,7 +911,7 @@ def main():
     parser.add_argument('--record-dir', type=Path, help='Enable synchronized episode recording with B/Enter/N')
     parser.add_argument('--record-hz', type=int, default=10)
     parser.add_argument('--record-format', choices=['local', 'ftf-raw', 'visk-raw', 'both-raw'], default='local',
-                        help='visk-raw: paper single-sensor/four cameras; ftf-raw: original Franka-Teach writer; training is separate')
+                        help='visk-raw: single-sensor/two fixed cameras; ftf-raw: original Franka-Teach writer; training is separate')
     parser.add_argument("--output", default="outputs/pick_cube")
     args = parser.parse_args()
     if args.cable_layout is not None and args.task != 'cable':

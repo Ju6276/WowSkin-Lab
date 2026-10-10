@@ -1,6 +1,6 @@
 # WowSkin-Lab
 
-Franka 的 MuJoCo 遥操作与触觉采集：左指 WowSkin、右指普通硅胶，支持键盘、SpaceMouse 和 Pico。采集与训练流程面向 ViSk、FTF；真实 Franka 后端尚未接入。
+Franka 的 MuJoCo 遥操作与触觉采集：左指 WowSkin、右指普通硅胶，支持键盘、SpaceMouse 和 Pico。采集固定使用两台外部相机，从不同角度观察同一桌面区域。采集与训练流程面向 ViSk、FTF；真实 Franka 后端尚未接入。
 
 ## 安装（Mac）
 
@@ -40,7 +40,7 @@ python3.12 -m venv .venv
 - **B** 复位并开始录制，先保持无接触约 1 秒仿真时间。
 - **Enter / N** 保存成功 / 失败；**R** 复位；**V** 切视角；**P** 保存中断记录并退出。
 
-双格式原始记录保存在 `data/official/`；使用幅值拟合预览时保存在 `outputs/diagnostics/fitted_dipole_preview/episodes/`。录制完成后仍须按各官方流程预处理；FTF 视觉跟踪依赖的 CUDA 阶段尚未在 Mac 验证。
+双格式原始记录保存在 `data/official_two_camera/`；使用幅值拟合预览时保存在 `outputs/diagnostics/fitted_dipole_preview/two_camera/episodes/`。录制完成后仍须按各官方流程预处理；FTF 视觉跟踪依赖的 CUDA 阶段尚未在 Mac 验证。
 
 ## 独立传感器与检查
 

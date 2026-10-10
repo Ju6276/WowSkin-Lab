@@ -151,7 +151,6 @@ def feeding_scene(cfg, layout):
         world.append(copy.deepcopy(e))
     add_camera(world, 'lab_front', [-2.45, -.75, 1.90], [-1.73, .12, 1.19])
     add_camera(world, 'lab_side', [-.80, -.05, 1.70], [-1.74, .12, 1.18])
-    add_camera(world, 'lab_overhead', [-1.75, .04, 2.15], [-1.75, .05, 1.1])
     root.find('statistic').set('center', '-1.65 .0 1.25')
     root.find('statistic').set('extent', '1.2')
     # The thin local sensor requires a smaller timestep than EBiM's 1 ms.

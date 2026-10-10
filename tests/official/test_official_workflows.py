@@ -30,6 +30,9 @@ class OfficialWorkflowChecks(unittest.TestCase):
                         self.assertEqual(cfg.dataloader.bc_dataset.subsample, 5)
                         self.assertEqual(list(cfg.suite.aux_keys), ['sensor0'])
                         self.assertEqual(manifest['visk_profile'], 'paper-single')
+                        self.assertEqual(list(cfg.suite.pixel_keys), ['pixels1', 'pixels2'])
+                        self.assertEqual(manifest['camera_ids'], [1, 2])
+                        self.assertTrue((directory/'TWO_FIXED_CAMERAS.patch').is_file())
                         self.assertTrue((directory/'PAPER_SINGLE_SENSOR.patch').is_file())
                         self.assertEqual(cfg.suite.num_train_steps, 10000)
                     else:

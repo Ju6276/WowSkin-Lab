@@ -59,11 +59,11 @@ V 切换近景/全景，Esc 恢复全景；鼠标左拖旋转、右拖平移、�
 
 Enter 是操作者标记，线材/喂食没有自动成功评分。未经审核或失败的段不会自动作为成功专家示教使用。
 
-- ViSk：四路图像、实际位姿与夹爪、七维命令、15 路原始磁场、基线、时间戳和配置。
+- ViSk：两路固定相机图像、实际位姿与夹爪、七维命令、15 路原始磁场、基线、时间戳和配置。
 - FTF：官方 Franka-Teach 写出的双路视频、状态/动作 PKL、触觉 H5 与元数据。
 - 两套数据通过 `paired_recording_id` 关联；状态/触觉为 100 Hz 仿真时钟，相机约 30 Hz。
 
-默认根目录为 `data/official/`，其下 `visk/raw/<任务>/` 与 `ftf-robot/extracted_data/<任务>/` 分开保存。`--record-dir` 可指定另一根目录。启用拟合或网络预览时，默认改用 `outputs/diagnostics/fitted_dipole_preview/episodes/` 或 `reskin_preview/episodes/`，其下仍按任务分开。
+默认根目录为 `data/official_two_camera/`，其下 `visk/raw/<任务>/` 与 `ftf-robot/extracted_data/<任务>/` 分开保存。`--record-dir` 可指定另一根目录。启用拟合或网络预览时，默认改用 `outputs/diagnostics/fitted_dipole_preview/two_camera/episodes/` 或 `reskin_preview/two_camera/episodes/`，其下仍按任务分开。
 
 全会话数值诊断在 `outputs/<任务>/teleop_*/`，不能替代包含图像的正式示教。FTF 还需要官方视觉点标注与跟踪，录制后处理见 [学习工作流](LEARNING_WORKFLOWS_ZH.md)。
 
@@ -78,3 +78,7 @@ Enter 是操作者标记，线材/喂食没有自动成功评分。未经审核�
 ## 使用范围
 
 方块保持段的滑移回归未通过，线材夹爪仍可能被负载顶开。喂食采用 50 μs、线材 100 μs、方块 20 μs 积分步长；当前软指尖会使抓持和多相机录制低于实时速度。头部峰值为本地刚性碰撞指标，不是人体安全标定。
+
+## 查看相机画面
+
+`.venv/bin/python scripts/preview_cameras.py` 生成 `outputs/previews/camera_views.png`：前两排为之前本地四视角，最后一排为当前 ViSk / FTF 共用的两台固定相机。场景和机械臂姿态一致；顶部与腕部相机仅用于生成历史布局对照，不加入当前采集场景。

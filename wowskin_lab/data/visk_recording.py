@@ -17,7 +17,7 @@ from scipy.spatial.transform import Rotation
 from wowskin_lab.data.cameras import CAMERAS
 from wowskin_lab.data.recording import magnetic_baseline, magnetic_metadata
 
-CAMERA_IDS = (1, 2, 51, 52)
+CAMERA_IDS = (1, 2)
 
 
 class ViSkSimRecorder:
@@ -53,14 +53,14 @@ class ViSkSimRecorder:
         path = self.directory/f'demonstration_{max(ids, default=-1)+1}'
         path.mkdir()
         self.writer = SimpleNamespace(path=path, count=0)
-        self.metadata = dict(schema='visk_mujoco_raw_v1', status='in_progress',
+        self.metadata = dict(schema='visk_mujoco_raw_v2', status='in_progress',
             backend='mujoco', source=self.source, task=self.directory.name,
             simulation_config=dict(self.env.cfg), simulation_episode_id=self.env.episode_id,
             paper='https://arxiv.org/html/2410.17246v2#S4.SS1',
             tactile_sensors=1, tactile_channels=15, tactile_hz=100,
             camera_ids=list(CAMERA_IDS), camera_names=CAMERAS, camera_size=[640, 480],
             camera_hz=30, camera_clock='simulation seconds; captures on first 100 Hz tick at/after deadline',
-            camera_model='MuJoCo pinhole; three fixed views and one wrist view',
+            camera_model='MuJoCo pinhole; two fixed views of the same tabletop workspace',
             color_order='BGR in OpenCV video', pose='world xyz metres + rotvec radians; tactile_tcp',
             gripper='measured closure fraction: 0 open, 1 closed',
             control='world dxyz metres + local drotvec radians + closure target 0..1',

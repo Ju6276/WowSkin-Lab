@@ -144,6 +144,25 @@ def prepare(route, destination, data_root, task, task_config=None, visk_profile=
                 changes.extend(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
                                fromfile='a/'+name, tofile='b/'+name))
             (destination/'PAPER_SINGLE_SENSOR.patch').write_text(''.join(changes))
+            # Explicit user-requested acquisition change: two fixed cameras.
+            # Keep the pinned reference checkout and published-default intact.
+            camera_changes = []
+            camera_replacements = {
+                'cfgs/suite/xarm_env_aa.yaml': ('pixel_keys: ["pixels1", "pixels2", "pixels51", "pixels52"]',
+                                             'pixel_keys: ["pixels1", "pixels2"]'),
+                'convert_to_pkl.py': ('camera_indices = [1, 2, 51, 52]', 'camera_indices = [1, 2]'),
+                'process_xarm_data.py': ('    51: "fish_eye",\n    52: "fish_eye",\n', ''),
+            }
+            for name, (old, new) in camera_replacements.items():
+                before = (code/name).read_text()
+                if before.count(old) != 1:
+                    raise ValueError(f'Unexpected upstream camera configuration in {name}')
+                after = before.replace(old, new)
+                write(name, after, 'User-requested two fixed cameras; paper-single tactile count retained; policy/loss unchanged')
+                camera_changes.extend(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
+                                      fromfile='a/'+name, tofile='b/'+name))
+            (destination/'TWO_FIXED_CAMERAS.patch').write_text(''.join(camera_changes))
+
         task_override = 'suite.task.tasks=['+task+']'
         command('process', '', ['python', 'process_xarm_data.py', '-t', task],
                 ['original XArm raw format only; MuJoCo recordings use `official process-visk-sim`',
@@ -212,6 +231,8 @@ def prepare(route, destination, data_root, task, task_config=None, visk_profile=
                     original_sha256=hashes, configured_files=configured, commands=commands)
     if route == 'visk':
         manifest['visk_profile'] = visk_profile
+        manifest['camera_ids'] = [1, 2] if visk_profile == 'paper-single' else [1, 2, 51, 52]
+        manifest['camera_profile'] = 'two-fixed-user-requested' if visk_profile == 'paper-single' else 'published-four-view'
     (destination/'manifest.json').write_text(json.dumps(manifest, indent=2, ensure_ascii=False)+'\n')
     lines = ['# Prepared official commands — not an end-to-end validation', '',
              'Use the corresponding upstream environment. Commands are listed separately; do not run hardware stages before configuring services.', '']
@@ -249,8 +270,8 @@ def status():
                   ftf_human_data='not_collected; user requires acquisition',
                   default_local_recorder='single sensor / 10 Hz / 128px / GT diagnostics; not official reproduction input')
     result['ftf_raw_acquisition'] = 'MuJoCo input -> original Franka-Teach writers -> original process_data_robot verified; visual tracking/training not completed'
-    result['visk_profile'] = 'paper-single: one AnySkin, 15 channels; explicit three-line sensor-count patch in prepared workspace'
-    result['visk_acquisition'] = 'visk-raw records four cameras at nominal 30 Hz and state/tactile at 100 Hz; process-visk-sim runs original PKL converter and loader validation'
+    result['visk_profile'] = 'paper-single: one AnySkin, 15 channels; explicit sensor-count and user-requested two-fixed-camera patches in prepared workspace'
+    result['visk_acquisition'] = 'visk-raw records two fixed cameras at nominal 30 Hz and state/tactile at 100 Hz; process-visk-sim runs original PKL converter and loader validation'
     try:
         import torch
         result['compute'] = dict(python=platform.python_version(), torch=torch.__version__, cuda=torch.cuda.is_available())

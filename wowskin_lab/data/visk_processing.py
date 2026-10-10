@@ -28,8 +28,10 @@ def _csv(path, headers, rows):
 
 def _align_episode(raw, target):
     metadata = json.loads((raw/'metadata.json').read_text())
-    if metadata.get('schema') != 'visk_mujoco_raw_v1' or metadata.get('status') != 'success':
+    if metadata.get('schema') != 'visk_mujoco_raw_v2' or metadata.get('status') != 'success':
         raise ValueError(f'{raw}: only reviewed successful ViSk raw demonstrations are eligible')
+    if metadata.get('camera_ids') != list(CAMERA_IDS):
+        raise ValueError('Expected exactly two fixed cameras [1, 2]; preserve old four-view data separately')
     if metadata['tactile_channels'] != 15 or metadata['sensor_baseline_subtracted']:
         raise ValueError('Expected one raw 15-channel sensor; baseline subtraction belongs to upstream loader')
     with h5py.File(raw/'measurements.h5') as f:
@@ -99,8 +101,8 @@ def process_visk_sim(workspace, raw_root=None):
     if not verified['source_matches_prepared_manifest']:
         raise ValueError(f'Workspace has unexpected edits: {verified["unexpected_changes"]}')
     manifest = json.loads((workspace/'manifest.json').read_text())
-    if manifest['route'] != 'visk' or manifest.get('visk_profile') != 'paper-single':
-        raise ValueError('Prepare a new ViSk paper-single workspace first')
+    if manifest['route'] != 'visk' or manifest.get('visk_profile') != 'paper-single' or manifest.get('camera_ids') != [1, 2]:
+        raise ValueError('Prepare a new ViSk paper-single two-fixed-camera workspace first')
     task = manifest['dataset_task']
     data_root = Path(manifest['data_root'])
     raw_root = Path(raw_root).resolve() if raw_root else data_root/'raw'/task
@@ -140,7 +142,9 @@ assert sample['sensor0'].shape == (1, 15)
 assert 'sensor1' not in sample
 assert sample['actions'].shape == (1, 10, 7)
 assert all(np.isfinite(np.asarray(v)).all() for v in sample.values())
-for key in ('pixels1', 'pixels2', 'pixels51', 'pixels52'):
+assert list(cfg.suite.pixel_keys) == ['pixels1', 'pixels2']
+assert 'pixels51' not in sample and 'pixels52' not in sample
+for key in ('pixels1', 'pixels2'):
     assert tuple(sample[key].shape) == (1, 3, 128, 128)
 report = dict(sample_shapes={k:list(v.shape) for k,v in sample.items()},
               batch_size=cfg.batch_size, subsample=cfg.dataloader.bc_dataset.subsample,

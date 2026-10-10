@@ -35,12 +35,17 @@ class ViSkAcquisitionChecks(unittest.TestCase):
                 recorder.step(env.step(env.hold_action())[-1])
                 bad = recorder.finish('failure')
             self.assertTrue(bad.name.endswith('_fail'))
+            self.assertEqual(env.model.ncam, 2)
+            np.testing.assert_array_equal(env.model.cam_bodyid, [0, 0])
+            self.assertEqual(json.loads((good/"metadata.json").read_text())["camera_ids"], [1, 2])
+            self.assertFalse((good/'cam_51.avi').exists())
+            self.assertFalse((good/'cam_52.avi').exists())
             with h5py.File(good/'measurements.h5') as f:
                 times = f['timestamp'][:]
                 self.assertEqual(f['sensor_states'].shape, (241, 15))
                 np.testing.assert_allclose(np.diff(times), .01, atol=1e-10)
                 np.testing.assert_allclose(f['command_7d'][100], [.0001, -.0001, .0001, .0005, -.0006, .0007, .5])
-                self.assertEqual(f['camera_world_to_cv'].shape[1:], (4, 4, 4))
+                self.assertEqual(f['camera_world_to_cv'].shape[1:], (2, 4, 4))
                 self.assertFalse(any('object' in k or 'point' in k for k in f))
                 raw_poses, raw_tactile = f['cartesian_states'][:], f['sensor_states'][:]
             workspace = root/'workspace'
@@ -50,6 +55,10 @@ class ViSkAcquisitionChecks(unittest.TestCase):
             self.assertFalse(report['full_training_completed'])
             self.assertEqual(report['demonstrations'], 1)
             self.assertEqual(report['validation']['sample_shapes']['sensor0'], [1, 15])
+            self.assertEqual(report['validation']['sample_shapes']['pixels1'], [1, 3, 128, 128])
+            self.assertEqual(report['validation']['sample_shapes']['pixels2'], [1, 3, 128, 128])
+            self.assertNotIn('pixels51', report['validation']['sample_shapes'])
+            self.assertNotIn('pixels52', report['validation']['sample_shapes'])
             self.assertEqual(report['validation']['sample_shapes']['actions'], [1, 10, 7])
             self.assertEqual(report['validation']['batch_size'], 256)
             self.assertEqual(report['validation']['subsample'], 5)
@@ -62,7 +71,8 @@ class ViSkAcquisitionChecks(unittest.TestCase):
             manifest = json.loads((workspace/'manifest.json').read_text())
             self.assertEqual(set(manifest['configured_files']), {
                 'utils.py', 'cfgs/local_config.yaml', 'cfgs/suite/xarm_env_aa.yaml',
-                'read_data/xarm_env_aa.py', 'envs/xarm-env/xarm_env/envs/robot_env.py'})
+                'read_data/xarm_env_aa.py', 'envs/xarm-env/xarm_env/envs/robot_env.py',
+                'convert_to_pkl.py', 'process_xarm_data.py'})
             self.assertTrue(verify_workspace(workspace)['source_matches_prepared_manifest'])
             verify_reference('visk')
             with self.assertRaises(FileExistsError):

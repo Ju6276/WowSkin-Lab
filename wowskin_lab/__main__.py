@@ -76,13 +76,13 @@ def main(argv=None):
                 a == '--record-format' and i+1 < len(rest) and rest[i+1] == 'both-raw'
                 for i, a in enumerate(rest))
             record_task = 'cable_insert' if task == 'cable' and cable_layout == 'single_clip' else task
-            directory = ('data/official' if both_raw else
-                         f'data/official/ftf-robot/extracted_data/{record_task}' if ftf_raw else
-                         f'data/official/visk/raw/{record_task}' if visk_raw else f'data/raw/{record_task}')
+            directory = ('data/official_two_camera' if both_raw else
+                         f'data/official_two_camera/ftf-robot/extracted_data/{record_task}' if ftf_raw else
+                         f'data/official_two_camera/visk/raw/{record_task}' if visk_raw else f'data/raw/{record_task}')
             if any(a.split('=')[0] == '--reskin-model' for a in rest):
-                directory = 'outputs/diagnostics/reskin_preview/episodes'
+                directory = 'outputs/diagnostics/reskin_preview/two_camera/episodes'
             if any(a.split('=')[0] == '--magnetic-fit' for a in rest):
-                directory = 'outputs/diagnostics/fitted_dipole_preview/episodes'
+                directory = 'outputs/diagnostics/fitted_dipole_preview/two_camera/episodes'
             rest = ['--record-dir', str(ROOT/directory), *rest]
         rest = ['viewer' if command == 'teleop' else 'demo', *rest]
         module = 'envs.pick_cube'
