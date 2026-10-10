@@ -49,7 +49,9 @@ class FeedingChecks(unittest.TestCase):
         self.assertTrue(all(env.model.body_mass[b] == .00018 for b in env.bean_bodies))
         self.assertFalse(np.any(env.model.body_mocapid >= 0))
         self.assertFalse(np.any(env.model.eq_type == mujoco.mjtEq.mjEQ_WELD))
-        self.assertEqual(env.model.opt.solver, mujoco.mjtSolver.mjSOL_NEWTON)
+        self.assertEqual(env.model.opt.solver, mujoco.mjtSolver.mjSOL_CG)
+        self.assertEqual(env.model.opt.jacobian, mujoco.mjtJacobian.mjJAC_SPARSE)
+        self.assertEqual(env.model.opt.iterations, int(source.find('option').get('iterations')))
         a = env.gripper_control
         self.assertEqual(env.model.actuator_biastype[a], mujoco.mjtBias.mjBIAS_AFFINE)
         np.testing.assert_allclose(env.model.actuator_forcerange[a], [-100, 100])

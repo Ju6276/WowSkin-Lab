@@ -102,7 +102,7 @@ class TactileHUD:
         draw.text((16, 534), row.get("hud_timing", timing), font=self.small, fill=(171, 187, 204))
         return np.asarray(img)
 
-    def show(self, handle, row, probability=None):
+    def show(self, handle, row, probability=None, cameras=None):
         # A camera capture can outlive the viewer's final frame. The native
         # viewport/set_images accessors do not check exitrequest themselves.
         # Do not hold the viewer lock: set_images waits for its render thread.
@@ -111,10 +111,22 @@ class TactileHUD:
         viewport = handle.viewport
         if viewport is None:  # Window may close between is_running() and drawing.
             return
-        width = int(min(self.width, viewport.width*.33, viewport.height*.86*self.width/self.height))
-        width = max(1, width)
-        height = max(1, round(width*self.height/self.width))
         pixels = self.render(row, probability)
+        if cameras:
+            # Stack two actual acquisition views below the tactile panel.
+            thumb_height = self.width*3//4
+            panel = Image.new('RGB', (self.width, self.height+len(cameras)*(thumb_height+24)), (21,27,34))
+            panel.paste(Image.fromarray(pixels), (0,0))
+            draw = ImageDraw.Draw(panel)
+            for index, (label, frame) in enumerate(cameras):
+                y = self.height+index*(thumb_height+24)
+                draw.text((10,y+4), label, font=self.small, fill=(223,230,240))
+                panel.paste(Image.fromarray(frame).resize((self.width,thumb_height), Image.Resampling.LANCZOS), (0,y+24))
+            pixels = np.asarray(panel)
+        panel_height = pixels.shape[0]
+        width = int(min(self.width, viewport.width*.33, viewport.height*.96*self.width/panel_height))
+        width = max(1, width)
+        height = max(1, round(width*panel_height/self.width))
         if (height, width) != pixels.shape[:2]:
             pixels = np.asarray(Image.fromarray(pixels).resize((width, height), Image.Resampling.LANCZOS))
         rectangle = mujoco.MjrRect(viewport.left+viewport.width-width-10,

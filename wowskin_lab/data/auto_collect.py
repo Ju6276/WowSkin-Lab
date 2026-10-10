@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from wowskin_lab.core.physics import configuration
+from wowskin_lab.paths import ROOT
 from wowskin_lab.data.learning_recording import LearningSimRecorder
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv
 
@@ -23,6 +24,7 @@ def collect(output, episodes=2, seed=0, randomize=False):
         raise ValueError('episodes must be positive')
     output.mkdir(parents=True)
     cfg = configuration(seed=seed)
+    cfg["magnetic_fit"] = str(ROOT/"configs/magnetic_fit_pollen_nonslip.json")
     cfg['randomize_cube'] = bool(randomize)
     env = PandaPickCubeTactileEnv(cfg, pollen=False)
     result = dict(source='scripted_simulation_acquisition', human_demonstrations=False,

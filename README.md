@@ -28,11 +28,13 @@ python3.12 -m venv .venv
 .venv/bin/mjpython -m wowskin_lab teleop --task feeding --input spacemouse --ideal
 ```
 
-键盘测试将 `--input spacemouse` 改为 `--input keyboard`；Pico 改为 `--input pico`，连接设置见[操作说明](docs/PICK_CUBE_ZH.md)。喂食从夹住装有豆子的勺子开始。
+键盘测试将 `--input spacemouse` 改为 `--input keyboard`；Pico 改为 `--input pico`，连接设置见[操作说明](docs/PICK_CUBE_ZH.md)。喂食从夹住装有豆子的勺子开始；复位用 Newton 建立接触，遥操作优先使用稀疏 CG；若失稳，回滚该次计算并改用 Newton，窗口显示当前求解器。物理计算与窗口显示分开运行；复位时显示接触稳定过程，按 **P** 可中断退出。窗口刷新不代表物理已达到实时速度。
 
-默认使用 **MuJoCo 形变＋磁偶极子**，不是网络预测。需要之前的 Pollen 幅值拟合预览时，追加 `--magnetic-fit configs/magnetic_fit_pollen_nonslip.json`；它不是实物物理标定，方块和勺子的迁移尚未验证。
+三个任务默认使用 **MuJoCo 形变＋偶极子＋Pollen/网络拟合增益**，加载 `configs/magnetic_fit_pollen_nonslip.json`。它是仿真幅值拟合，不是实物标定；方块和勺子的迁移尚未验证。直接网络预览用 `--reskin-model outputs/reskin_forward_mapped --reskin-extrapolate`，存在超出训练范围的问题。窗口明确标注当前方法。
 
 ## 操作与录制
+
+右侧显示五点触觉和两台采集相机的实时预览；预览不启动录制。
 
 先点击窗口。SpaceMouse 推拉/倾斜控制六轴，左键夹紧、右键张开、双键保持开度。
 
@@ -40,7 +42,7 @@ python3.12 -m venv .venv
 - **B** 复位并开始录制，先保持无接触约 1 秒仿真时间。
 - **Enter / N** 保存成功 / 失败；**R** 复位；**V** 切视角；**P** 保存中断记录并退出。
 
-双格式原始记录保存在 `data/official_two_camera/`；使用幅值拟合预览时保存在 `outputs/diagnostics/fitted_dipole_preview/two_camera/episodes/`。录制完成后仍须按各官方流程预处理；FTF 视觉跟踪依赖的 CUDA 阶段尚未在 Mac 验证。
+当前默认拟合模式的双格式记录保存在 `outputs/diagnostics/fitted_dipole_preview/two_camera/episodes/`。历史原始偶极子记录仍在 `data/official_two_camera/`；不会覆盖。录制完成后仍须按各官方流程预处理；FTF 视觉跟踪依赖的 CUDA 阶段尚未在 Mac 验证。
 
 ## 独立传感器与检查
 

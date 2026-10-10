@@ -83,6 +83,17 @@ class SpaceMouse:
             raise RuntimeError(f'Expected one USB SpaceMouse, found {len(devices)}. Connect its USB data cable.')
         path, description = next(iter(devices.items()))
         self.info = {k: description.get(k) for k in ('product_string', 'vendor_id', 'product_id')}
+        # macOS otherwise may route the same relative-axis reports to the
+        # desktop pointer. Explicitly seize only this SpaceMouse while open.
+        import sys
+        if sys.platform == 'darwin':
+            import ctypes
+            backend = ctypes.CDLL(hid.__file__)
+            exclusive = backend.hid_darwin_set_open_exclusive
+            exclusive.argtypes = [ctypes.c_int]
+            exclusive.restype = None
+            exclusive(1)
+            self.info['exclusive_hid'] = True
         self.device = hid.device()
         self.device.open_path(path)
         self.thread = threading.Thread(target=self._read, name='SpaceMouse-HID', daemon=True)

@@ -154,11 +154,13 @@ def feeding_scene(cfg, layout):
     root.find('statistic').set('center', '-1.65 .0 1.25')
     root.find('statistic').set('extent', '1.2')
     # The thin local sensor requires a smaller timestep than EBiM's 1 ms.
-    # Use sparse Jacobians for its 100 free beans plus the elastic fingertips.
+    # Use sparse Jacobians for the loaded spoon, six beans and elastic fingertips.
     option = root.find('option')
     for key, value in source.find('option').attrib.items():
         if key != 'timestep':
             option.set(key, value)
+    # User-selected local solver override. Keep source assets/materials intact.
+    option.set('solver', 'CG')
     option.set('jacobian', 'sparse')
     option.set('noslip_iterations', '0')
     return ET.tostring(root, encoding='unicode')
@@ -185,6 +187,8 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
                     ET.fromstring(self.xml).find(".//body[@name='dynamic_spoon2']").iter('body')}
         self.contact_geoms = {i for i in range(self.model.ngeom) if self.model.geom_bodyid[i] in body_ids}
         self.cfg.update(task='single_arm_feeding_scene',
+                        constraint_solver='CG', reset_constraint_solver='Newton', constraint_jacobian='sparse',
+                        constraint_solver_source='Local user-requested override of EBiM Newton; source iteration limit retained',
                         ebim_revision=json.loads((ASSETS/'manifest.json').read_text())['revision'],
                         bean_count=BEAN_COUNT, robot_base_world_m=ROBOT_POSITION, head_world_m=HEAD_POSITION,
                         head_uniform_scale=HEAD_SCALE, head_height_with_neck_m=.2*HEAD_SCALE,
@@ -196,6 +200,16 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
                         source_asset_manifest=str(ASSETS/'manifest.json'))
 
     def reset(self, seed=None):
+        # Cold-start closure diverges with CG even at 50 us. Establish the
+        # original physical grasp with Newton, then use CG for teleoperation.
+        self.model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
+        self.cg_fallbacks = 0
+        try:
+            return self._reset_loaded_spoon(seed)
+        finally:
+            self.model.opt.solver = mujoco.mjtSolver.mjSOL_CG
+
+    def _reset_loaded_spoon(self, seed=None):
         super().reset(seed=seed)  # Unloaded magnetic baseline before closure.
         # Pinch the broad top/bottom of the handle, not its thin side edges.
         self.target_rotation = self.target_rotation@rotation_matrix([np.pi/2, 0., 0.])
@@ -244,6 +258,34 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         self.data.time = self.zero_time = 0.
         self.last_row = None
         return self.observation(), {'uncalibrated': True}
+
+    def sample(self, controller=None):
+        if self.model.opt.solver != mujoco.mjtSolver.mjSOL_CG:
+            return super().sample(controller)
+        if not hasattr(self, '_sample_backup'):
+            self._sample_backup = mujoco.MjData(self.model)
+        mujoco.mj_copyData(self._sample_backup, self.model, self.data)
+        names = ('head_force_n', 'head_net_force', 'head_interval_peak_n',
+                 'head_peak_n', 'head_contact_impulse_ns', 'filtered', 'delay')
+        saved = {name: copy.deepcopy(getattr(self, name)) for name in names}
+        rng = copy.deepcopy(self.rng.bit_generator.state)
+        try:
+            return super().sample(controller)
+        except RuntimeError as error:
+            if not any(message in str(error) for message in ('MuJoCo instability/warning', 'FEM invalid')):
+                raise
+            # Restore the full integration/solver state before retrying. The
+            # Cartesian action was already applied by step(): do NOT apply it
+            # twice. Discard failed force peaks, filtering and random draws.
+            mujoco.mj_copyData(self.data, self.model, self._sample_backup)
+            for name, value in saved.items():
+                setattr(self, name, value)
+            self.rng.bit_generator.state = rng
+            self.model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
+            self.cg_fallbacks += 1
+            print('CG unstable: restored last sample boundary; retrying with Newton. '
+                  'Newton stays active until reset.', flush=True)
+            return super().sample(controller)
 
     def after_physics_step(self):
         """Sum contact force magnitudes on head, peak over every physics step.
@@ -303,6 +345,8 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         row['ik_weighted_condition'] = float(singular[0]/max(singular[-1], 1e-15))
         row['ik_min_singular_value'] = float(singular[-1])
         row['joint_limit_margin_deg'] = float(np.rad2deg(np.minimum(q-bounds[:, 0], bounds[:, 1]-q)).min())
+        row['constraint_solver'] = 'CG' if self.model.opt.solver == mujoco.mjtSolver.mjSOL_CG else 'Newton fallback'
+        row['cg_fallbacks'] = self.cg_fallbacks
         row['task_status'] = 'delivery only; local rigid head contact metric; outcome manually labelled'
         self.last_row = row
         return self.observation(), 0., False, False, row

@@ -47,11 +47,11 @@ V 切换近景/全景，Esc 恢复全景；鼠标左拖旋转、右拖平移、�
 
 原偶极子与拟合偶极子使用 U1中心、U2上、U3右、U4下、U5左的 PCB 参考顺序。网络预览使用 CH1中心、CH2左、CH3右、CH4上、CH5下的候选分组。实物对应与轴向仍未全部验证。
 
-`--magnetic-fit configs/magnetic_fit_pollen_nonslip.json` 启用拟合偶极子；`--reskin-model outputs/reskin_forward_mapped --reskin-extrapolate` 启用网络预览，两个选项互斥。详见 [模型与标定](MODEL_CALIBRATION_ZH.md)。
+三个任务默认启用 `configs/magnetic_fit_pollen_nonslip.json` 的拟合偶极子；`--magnetic-fit` 可显式指定其他拟合文件。`--reskin-model outputs/reskin_forward_mapped --reskin-extrapolate` 启用网络预览，两个选项互斥。详见 [模型与标定](MODEL_CALIBRATION_ZH.md)。
 
 ## 保存了哪些数据
 
-使用双格式录制：线材/喂食默认开启，方块需 `--record-format both-raw`。
+线材/喂食默认配置双格式导出，方块需 `--record-format both-raw`。启动时都不录制，按 B 才开始。
 
 1. B 复位并开始一段示教，保持无接触约 1 秒仿真时间。
 2. 遥操作完成任务。
@@ -63,7 +63,7 @@ Enter 是操作者标记，线材/喂食没有自动成功评分。未经审核�
 - FTF：官方 Franka-Teach 写出的双路视频、状态/动作 PKL、触觉 H5 与元数据。
 - 两套数据通过 `paired_recording_id` 关联；状态/触觉为 100 Hz 仿真时钟，相机约 30 Hz。
 
-默认根目录为 `data/official_two_camera/`，其下 `visk/raw/<任务>/` 与 `ftf-robot/extracted_data/<任务>/` 分开保存。`--record-dir` 可指定另一根目录。启用拟合或网络预览时，默认改用 `outputs/diagnostics/fitted_dipole_preview/two_camera/episodes/` 或 `reskin_preview/two_camera/episodes/`，其下仍按任务分开。
+当前默认拟合模式的根目录为 `outputs/diagnostics/fitted_dipole_preview/two_camera/episodes/`，其下 `visk/raw/<任务>/` 与 `ftf-robot/extracted_data/<任务>/` 分开保存。`--record-dir` 可指定另一根目录。直接网络预览使用 `outputs/diagnostics/reskin_preview/two_camera/episodes/`，其下也按任务分开。
 
 全会话数值诊断在 `outputs/<任务>/teleop_*/`，不能替代包含图像的正式示教。FTF 还需要官方视觉点标注与跟踪，录制后处理见 [学习工作流](LEARNING_WORKFLOWS_ZH.md)。
 

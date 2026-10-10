@@ -46,6 +46,8 @@ def main(argv=None):
         from .learning.official import main as official
         return official(rest)
     if command in ('teleop', 'pick-demo'):
+        if not any(a.split('=')[0] in ('--magnetic-fit', '--reskin-model') for a in rest):
+            rest = ['--magnetic-fit', str(ROOT/'configs/magnetic_fit_pollen_nonslip.json'), *rest]
         task = 'pick_cube'
         cable_layout = 'routing'
         for i, value in enumerate(rest):

@@ -85,6 +85,14 @@ class FTFSimRecorder:
     def __exit__(self, *exc):
         self.close()
 
+    def _advance_hold(self):
+        # Keep the viewer responsive during official pre/post-roll; rendering
+        # and writers remain on their owning thread, and all samples are real.
+        run = getattr(self.env, '_viewer_run', None)
+        if run is None:
+            return self.env.step(self.env.hold_action())
+        return run(self.env.step, self.env.hold_action())
+
     def _field(self):
         # Restore the baseline to the measured (filtered/noisy/delayed) delta.
         # This is a simulated raw field in uT, not a force or ADC conversion.
@@ -106,7 +114,7 @@ class FTFSimRecorder:
         # Fill history with actual simulation samples, never duplicated padding.
         self.history.clear()
         for _ in range(40):
-            self.env.step(self.env.hold_action())
+            self._advance_hold()
             self.history.append(self._field())
         self.directory.mkdir(parents=True, exist_ok=True)
         ids = [int(match.group(1)) for p in self.directory.glob('demonstration_*')
@@ -160,7 +168,7 @@ class FTFSimRecorder:
 
     def _idle_roll(self, count):
         for _ in range(count):
-            self.env.step(self.env.hold_action())
+            self._advance_hold()
             self._capture(False)
 
     def _capture(self, start_teleop, force_camera=False):
@@ -238,7 +246,7 @@ class FTFSimRecorder:
                     raise RuntimeError('Official recorder did not reach its receive boundary')
             self.collector.run_event.clear()
             # A final actual sample unblocks the original blocking receivers.
-            self.env.step(self.env.hold_action())
+            self._advance_hold()
             self._capture(False, force_camera=True)
             for thread in self.workers:
                 thread.join(timeout=10)

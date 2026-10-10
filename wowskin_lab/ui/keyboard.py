@@ -58,6 +58,11 @@ class KeyState:
             self._held.clear()
             self._commands.clear()
 
+    def peek(self):
+        """Observe pending commands without consuming key-down events."""
+        with self._lock:
+            return KeySnapshot(tuple(self._commands), frozenset(self._held))
+
     def sample(self):
         with self._lock:
             result = KeySnapshot(tuple(self._commands), frozenset(self._held))

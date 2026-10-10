@@ -297,6 +297,9 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         self.joint_target = d.qpos[self.arm_q].copy()
 
     def control(self, mode=None):
+        progress = getattr(self, '_viewer_progress', None)
+        if progress is not None:
+            progress()
         d, m = self.data, self.model
         torque = 600*(self.joint_target-d.qpos[self.arm_q])-45*d.qvel[self.arm_v]+d.qfrc_bias[self.arm_v]
         limits = m.actuator_ctrlrange[self.arm_controls]
@@ -577,6 +580,8 @@ def demo(args):
 def viewer(args):
     import copy
     import mujoco.viewer
+    from wowskin_lab.ui.physics_worker import PhysicsWorker
+    from wowskin_lab.ui.camera_preview import CameraPreview
     cfg = response_configuration(args)
     cfg['randomize_cube'] = args.randomize
     cable_task = getattr(args, 'task', 'pick_cube') == 'cable'
@@ -659,11 +664,15 @@ def viewer(args):
     print(f"{title} 7D: HOLD WASD/arrows view-relative XY, E/Q Z | I/K local Rx, L/J Ry, U/O Rz | release to stop | X close Z open C hold | {grip_help} | T tug | R reset | V view | ,/. display scale | Esc overview | P exit", flush=True)
     if recorder:
         print('Recording: B new/reset or stop (unreviewed) | Enter save SUCCESS | N save FAILURE | R interrupts | P save interrupted and exit', flush=True)
-    with (mouse or nullcontext()), (pico or nullcontext()), (recorder or nullcontext()), mujoco.viewer.launch_passive(env.model, env.data, key_callback=keyboard.native_callback,
-                                    show_left_ui=False, show_right_ui=False) as handle, keyboard:
+    display_model, display_data = PhysicsWorker.display(env)
+    with (mouse or nullcontext()), (pico or nullcontext()), (recorder or nullcontext()), mujoco.viewer.launch_passive(display_model, display_data, key_callback=keyboard.native_callback,
+                                    show_left_ui=False, show_right_ui=False) as handle, keyboard, PhysicsWorker(
+                                        env, handle, keyboard, display_model, display_data,
+                                        on_abort=getattr(recorder, 'abort', None)) as physics, CameraPreview(display_model, display_data, hud) as previews:
+        physics.on_present = previews.show
         if mouse:
             env.cfg['spacemouse']['device'] = mouse.info
-            print(f"SpaceMouse: {mouse.info['product_string']} | push/tilt in camera frame | left close, right open | B/Enter/N record | click MuJoCo window to control", flush=True)
+            print(f"SpaceMouse: {mouse.info['product_string']} | exclusive HID={mouse.info.get('exclusive_hid', False)} | push/tilt in camera frame | left close, right open | B/Enter/N record | click MuJoCo window to control", flush=True)
         def apply_camera():
             cam = task_camera(env, close, operator=bool(pico))
             apply_free_camera(handle, cam)
@@ -701,7 +710,7 @@ def viewer(args):
                     if recorder.active:
                         recorder.finish('success' if code == ENTER else ('failure' if code == ord('N') else 'unreviewed'))
                     elif code == ord('B'):
-                        env.reset()
+                        physics.run(env.reset)
                         automatic, fault, was_moving = False, '', False
                         keyboard.clear()
                         held = frozenset()
@@ -722,7 +731,7 @@ def viewer(args):
                         recorder.finish('interrupted')
                     automatic = not automatic
                     if automatic:
-                        env.reset()
+                        physics.run(env.reset)
                         fault = ""
                         keyboard.clear()
                         held, was_moving = frozenset(), False
@@ -730,7 +739,7 @@ def viewer(args):
                     if recorder and code in (ord('R'), BACKSPACE):
                         recorder.finish('interrupted')
                     hud.key(code)
-                    key_command(env, code)
+                    physics.run(key_command, env, code)
                     if code in MOTION_KEYS or code in map(ord, "XZCR") or code == BACKSPACE:
                         if automatic:
                             hold_current_pose(env)
@@ -772,9 +781,8 @@ def viewer(args):
                         fallback_motion[:3] = view_translation(fallback_motion[:3], camera_azimuth)
                         fallback_motion[6] = env.gripper_fraction(target=True)
                         action = fallback_motion
-                    physics_started = time.perf_counter()
-                    row = env.step(action)[-1]
-                    row['physics_and_sensor_wall_s'] = time.perf_counter()-physics_started
+                    row = physics.run(env.step, action)[-1]
+                    row['physics_and_sensor_wall_s'] = physics.last_operation_wall_s
                     row['total_contacts'] = int(env.data.ncon)
                     row['constraint_rows'] = int(env.data.nefc)
                     if mouse:
@@ -819,6 +827,10 @@ def viewer(args):
                          if cable_task else f"{row['lift_m']*1000:.1f} mm / {env.success}"), " ".join(f"{v:.3f}" for v in env.target_xyz),
                         ("PAUSED: physics invalid | R reset | P save/exit" if fault else
                          (env.phase if automatic else ("Moving / rotating" if was_moving else "Manual hold"))+" | uncalibrated")]
+                labels += ['Magnetic response']
+                text += [('Forward MLP (experimental)' if env.cfg.get('reskin_model') else
+                          'Dipole + Pollen/network fitted gains' if env.cfg.get('magnetic_fit') else
+                          'Dipole (unfitted)')]
                 labels += ['Simulation speed']
                 text += [f'{realtime_factor:.2f}x real time | {loop_hz:.1f} updates/s | keyboard {keyboard_speed*1000:.0f} mm/s sim']
                 if mouse:
@@ -840,9 +852,10 @@ def viewer(args):
                 if source_gripper:
                     text[3] = ('Left close | right open' if mouse else 'X close | Z open | C hold')+(' | robosuite Panda servo' if env.cfg['gripper_control_mode'] == 'panda_robosuite_position' else ' | Menagerie Panda servo')
                 if feeding_task:
-                    labels += ['Head load / episode peak [N]', 'IK condition / joint margin']
+                    labels += ['Head load / episode peak [N]', 'IK condition / joint margin', 'Constraint solver']
                     text += [f"{row['head_contact_force_n']:.3f} / {row['head_peak_force_n']:.3f} | local rigid proxy",
-                             f"{row['ik_weighted_condition']:.2f} / {row['joint_limit_margin_deg']:.1f} deg | rotation weight 0.2 m"]
+                             f"{row['ik_weighted_condition']:.2f} / {row['joint_limit_margin_deg']:.1f} deg | rotation weight 0.2 m",
+                             row['constraint_solver']]
                 labels += ['Physics + sensor cost']
                 text += [f"{row.get('physics_and_sensor_wall_s', 0.)*1000:.1f} ms / 10 ms sim | {row.get('total_contacts', 0)} contacts, {row.get('constraint_rows', 0)} constraints"]
                 if fault:
@@ -854,16 +867,16 @@ def viewer(args):
                     break
                 handle.set_texts([(mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT,
                                    "\n".join(labels), "\n".join(text))])
-                hud.show(handle, row)
-            before_sync = env.data.time
+                previews.show(handle, row)
+            before_sync = display_data.time
             if style:
                 style.sync(handle)
             else:
                 handle.sync()
             # MuJoCo's built-in Backspace resets to qpos0, bypassing our
             # controller and baseline. Restore the task reset before stepping.
-            if env.data.time < before_sync-1e-9:
-                env.reset()
+            if display_data.time < before_sync-1e-9:
+                physics.run(env.reset)
                 automatic, fault = False, ""
                 if mouse_controller:
                     mouse_controller.reset()
