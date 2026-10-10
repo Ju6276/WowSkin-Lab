@@ -12,7 +12,7 @@ python3.12 -m venv .venv
 .venv/bin/python scripts/setup_upstream.py --only franka
 ```
 
-已安装的本机环境可直接启动。官方算法源码另用 `scripts/setup_upstream.py --only visk ftf` 下载，训练依赖和数据处理见[学习流程](docs/LEARNING_WORKFLOWS_ZH.md)。采集数据、训练权重、虚拟环境和下载的上游仓库不纳入 Git。
+已安装的本机环境可直接启动。官方算法源码另用 `scripts/setup_upstream.py --only visk ftf` 下载，训练依赖和数据处理见[学习流程](docs/LEARNING_WORKFLOWS_ZH.md)。用户采集数据、本地训练权重、虚拟环境和下载的上游仓库不纳入 Git；仓库保留有来源说明的公开标定样本与参考文件。
 
 ## 启动场景
 
