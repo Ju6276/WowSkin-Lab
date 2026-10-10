@@ -163,3 +163,11 @@ python collect_data.py collect_img=true collect_state=true collect_reskin=true d
 ```bash
 .venv/bin/python -m wowskin_lab official verify outputs/official/ftf-robot
 ```
+
+## 官方相机布局
+
+**ViSk：4 路相机，3 台固定外部相机＋1 台夹爪相机。** [论文 III-A / 图 2](https://arxiv.org/html/2410.17246v2#S3.SS1) 写明四视角、30 Hz；图 2 左侧显示固定相机位于工作空间左右侧与上方，第四台装在夹爪附近，随末端运动。图中编号 5 是触觉，不是第五台相机。公开训练配置使用 `pixels1`、`pixels2`、`pixels51`、`pixels52`，这些是数据键，不是图中标号。
+
+**FTF：2 台固定、经过标定的 RealSense。** [论文 §3.1 / §3.2.1](https://arxiv.org/html/2506.01944v1#S3.SS1) 描述两台相机从不同视角拍摄手和操作物体，利用双视角三角化恢复三维点。人手采集与机器人部署沿用同一相机设置；没有腕部相机。论文正文没有给出可直接照抄的 XYZ / RPY 安装坐标，不能自行指定前方/侧方为作者精确布局。
+
+**本地仿真：** ViSk 保存 `lab_front`、`lab_side`、`lab_overhead`、`lab_wrist` 四路；FTF 保存前两路固定视角。安装数量与固定/随动关系按上述配置组织，具体虚拟相机外参是本地场景设置，尚未声称复刻论文实物外参。定义在 [cameras.py](../wowskin_lab/data/cameras.py)。
