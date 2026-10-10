@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/ARISE-Initiative/robosuite",
+  "revision": "5ce6643f3092639d08f7b0f90ed1c6a84f50552c",
+  "source_url": "https://raw.githubusercontent.com/ARISE-Initiative/robosuite/5ce6643f3092639d08f7b0f90ed1c6a84f50552c/robosuite/models/assets/grippers/panda_gripper.xml",
+  "scope": "Gripper actuator and finger joint dynamics only; local geometry, coordinates and travel bounds retained."
+}

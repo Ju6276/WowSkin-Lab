@@ -1,0 +1,29 @@
+{
+  "revision": "fd04a700eca70f3618a8b25ce8458c12276253c3",
+  "files": {
+    "magnet.py": {
+      "url": "https://raw.githubusercontent.com/rohankotanu/py3DCal/fd04a700eca70f3618a8b25ce8458c12276253c3/py3DCal/model_training/models/magnet.py",
+      "sha256": "d9c913b14c3439b3966d754ecdcf4ca811c6509e08e0b4c6cd34a028d6569a83"
+    },
+    "ReSkin_dataset.py": {
+      "url": "https://raw.githubusercontent.com/rohankotanu/py3DCal/fd04a700eca70f3618a8b25ce8458c12276253c3/py3DCal/model_training/datasets/ReSkin_dataset.py",
+      "sha256": "c5b1d346b4a9b82ac3b441610addbdda5400c8e8474a622aa69118fe874ac9e9"
+    },
+    "reskin_prediction.py": {
+      "url": "https://raw.githubusercontent.com/rohankotanu/py3DCal/fd04a700eca70f3618a8b25ce8458c12276253c3/py3DCal/model_training/lib/reskin_prediction.py",
+      "sha256": "f88f606e350ce9fba0b17cbbda1d68a7cc60208f1f7dc520f94c46f5fea82fc8"
+    },
+    "train_model.py": {
+      "url": "https://raw.githubusercontent.com/rohankotanu/py3DCal/fd04a700eca70f3618a8b25ce8458c12276253c3/py3DCal/model_training/lib/train_model.py",
+      "sha256": "bea90a2d94a607f25518f419eaf87d8a4127d33f98342a060e12ec40fb103cd0"
+    },
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/rohankotanu/py3DCal/fd04a700eca70f3618a8b25ce8458c12276253c3/LICENSE",
+      "sha256": "0fde658db833e8f5bd9e2c073f6e8458537bed006f7a9482b0c286a749915453"
+    },
+    "reskin_pretrained_weights.pth": {
+      "url": "https://zenodo.org/records/18462608/files/reskin_pretrained_weights.pth?download=1",
+      "sha256": "6500520f28042575cde2f0242abc20b1a5e874a0fcfd37022da2654399428584"
+    }
+  }
+}

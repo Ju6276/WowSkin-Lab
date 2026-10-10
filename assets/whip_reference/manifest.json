@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/MosesAndLily/whip-project-targeting",
+  "revision": "8025f9f156bf3cf591afbedca18eaa03e3846d4a",
+  "files": {
+    "3D_model_w_whip.xml": {
+      "url": "https://raw.githubusercontent.com/MosesAndLily/whip-project-targeting/8025f9f156bf3cf591afbedca18eaa03e3846d4a/models/3D_model_w_whip.xml",
+      "sha256": "b65782c4540f3fb9ba8f0122de1fc052eb115ff3f23b2a49a1f20d6621e679c9"
+    },
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/MosesAndLily/whip-project-targeting/8025f9f156bf3cf591afbedca18eaa03e3846d4a/LICENSE",
+      "sha256": "07c06a5d01e01e01591d51f3224543e8c2c07ce02ca59e92bcc9840eabb12d2f"
+    }
+  }
+}

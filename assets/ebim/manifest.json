@@ -1,0 +1,57 @@
+{
+  "repository": "https://github.com/EBiM-Benchmark/benchmark",
+  "revision": "161db49e9eafd34be31e5bdada72d8e2f796c16a",
+  "files": {
+    "source_scene.xml": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/duo_full_scene_grasp.xml",
+      "bytes": 139152,
+      "sha256": "ad1c698b278c85185c5445f97c1710effae73e4fdddb1a9aa43d03662b399808"
+    },
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/LICENSE",
+      "bytes": 11341,
+      "sha256": "304dca93c700b4b89478144573804fbec55497dbb11bf27b741d880ba06a3249"
+    },
+    "repository_LICENSE": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/LICENSE",
+      "bytes": 11435,
+      "sha256": "ab2cd053f20ef36b0aefbd7af45cd31c96f314d586c717f62791d6f636014026"
+    },
+    "NOTICE": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/NOTICE",
+      "bytes": 1523,
+      "sha256": "2c08fc3d938d6d623897deaf4fc421791e04a002c5ddbc6ff2574ecfb1a9dcf1"
+    },
+    "license_notes.md": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/LICENSES/README.md",
+      "bytes": 3369,
+      "sha256": "cfdb30410095d83fec1176ca9ec8e846d648243127c8b17f24ff8791a885bae5"
+    },
+    "round_peg.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/round_peg.stl",
+      "bytes": 129684,
+      "sha256": "29d8169aaf13374e7f3ebcbba5f85ef95592408498315686483a9c62b87230e7"
+    },
+    "base_connector.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/base_connector.stl",
+      "bytes": 148884,
+      "sha256": "ed69b451f3aa19f5362bbc9ba445501b404e6017d867188a12f8ec43ac965562"
+    },
+    "wire_harness.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/wire_harness.stl",
+      "bytes": 2912884,
+      "sha256": "6f14730e3dafd7978382242567adb51d147dbe031761be0fe4321e3999e5049d"
+    },
+    "C-Clip.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/C-Clip.stl",
+      "bytes": 199584,
+      "sha256": "13657e0bef90a5400b3297e40b534514a973c894743f1a0cd94c003829ba5436"
+    },
+    "board_top_texture.png": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/board_top_texture.png",
+      "bytes": 103428,
+      "sha256": "7af4a84d6c8f50a30b4cb7e7d1a37c51088de6b9d0a202e23b8e10dd8ada49d2"
+    }
+  },
+  "status": "Pinned upstream originals; local single-arm scene is a separate derivative."
+}

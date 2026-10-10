@@ -1,0 +1,16 @@
+{
+  "visk": {
+    "url": "https://github.com/raunaqbhirangi/visuoskin.git",
+    "revision": "66519d2ffc09df7df33f1f0807c88f29f849be23",
+    "archived_patch": "patches/visk.patch"
+  },
+  "ftf": {
+    "url": "https://github.com/feel-the-force-ftf/feel-the-force.git",
+    "revision": "954830f94e59e47c1668ad41c36b52626da975d0",
+    "archived_patch": "patches/ftf.patch"
+  },
+  "franka": {
+    "url": "https://github.com/Ju6276/franka_xbox",
+    "revision": "a43327ad8446642acd8d64b6c20829fd135a9f28"
+  }
+}

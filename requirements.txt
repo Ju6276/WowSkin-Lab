@@ -1,0 +1,10 @@
+mujoco==3.5.0
+numpy==2.0.2
+matplotlib==3.9.4
+torch==2.6.0
+imageio==2.37.2
+safetensors==0.8.0
+pyobjc-framework-Cocoa==12.2.2; sys_platform == "darwin"
+
+pygame==2.6.1  # Original WowSkin glyph rasterization, offscreen in MuJoCo
+hidapi==0.15.0  # USB 3Dconnexion SpaceMouse, no global keyboard listener

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WowSkin-Lab · Pico</title>
+<style>
+body{background:#111b28;color:#eaf0f6;font:22px system-ui;max-width:920px;margin:40px auto;padding:24px}
+button{font:inherit;background:#91e1cb;border:0;border-radius:10px;padding:20px 32px;cursor:pointer}
+img{width:100%;max-width:640px;background:#263545;border-radius:12px}p{line-height:1.6}#status{color:#91e1cb;white-space:pre-wrap}
+</style>
+<h1>WowSkin-Lab · Pico 遥操作</h1>
+<p>选择头显位置，进入后先松开右握键即可操作。两种模式保持相同的操纵方向。<br>
+右手握键：按住移动和旋转，松开停止。右手扳机：握键按住时调节夹爪。<br>
+左手 X：开始／结束录制；Y：保存成功；按下左摇杆：保存失败。录制操作前先松开右手握键。</p>
+<p><label>头显位置 <select id="mode" style="font:inherit;padding:14px"><option value="worn">佩戴模式：戴在头上</option><option value="desk">对面模式：摄像头朝向自己</option></select></label></p>
+<p>右手 B 可切换两种模式；松开握键后切换。A 可选：手柄水平指向屏幕，重新校准。</p>
+<button id="enter">进入遥操作 / Enter VR</button>
+<p id="status">正在检查 WebXR…</p><img id="preview" alt="MuJoCo 实时画面">
+<script>
+'use strict';
+let token='__TOKEN__';
+const statusEl=document.querySelector('#status'), button=document.querySelector('#enter');
+let session=null, space=null, sessionId='', seq=0, sending=false, lastSend=0, serverStatus={};
+let gl, program, texture, viewCanvas, ctx, textureDirty=true, lastPanel=0, lastPanelMode='', lastNetworkOK=0;
+const modeSelect=document.querySelector('#mode');
+let mode=localStorage.getItem('pico-mode')||'worn', previousB=false;
+if(!['worn','desk'].includes(mode))mode='worn';
+modeSelect.value=mode;
+modeSelect.onchange=()=>{mode=modeSelect.value;localStorage.setItem('pico-mode',mode);};
+const image=document.querySelector('#preview');
+image.onload=()=>{textureDirty=true;};
+setInterval(()=>{
+  image.hidden=mode==='desk';
+  if(mode==='desk')return; // Keep controller XR frames, but stop requesting robot pictures.
+  if(!image.dataset.loading){image.dataset.loading='1'; image.src='/preview.jpg?t='+Date.now();}
+},180);
+image.addEventListener('load',()=>delete image.dataset.loading);
+image.addEventListener('error',()=>delete image.dataset.loading);
+function report(message){statusEl.textContent=message;}
+function pose(t){return {p:[t.position.x,t.position.y,t.position.z],q:[t.orientation.x,t.orientation.y,t.orientation.z,t.orientation.w]};}
+function hand(source,frame){
+  if(!source.gripSpace || !source.gamepad) return null;
+  const p=frame.getPose(source.gripSpace,space);
+  if(!p || p.emulatedPosition || source.gamepad.mapping!=='xr-standard') return null;
+  const ray=frame.getPose(source.targetRaySpace,space), m=ray?.transform.matrix;
+  return {...pose(p.transform),...(m?{aim:[-m[8],-m[9],-m[10]]}:{}),buttons:Array.from(source.gamepad.buttons,b=>b.value),
+    mapping:source.gamepad.mapping,profiles:Array.from(source.profiles)};
+}
+async function transmit(frame){
+  if(sending) return; // Never queue old poses behind a slow connection.
+  sending=true;
+  const abort=new AbortController(), timeout=setTimeout(()=>abort.abort(),500);
+  try{
+    const reply=await fetch('/input',{method:'POST',headers:{'Content-Type':'application/json','X-Pico-Token':token},
+      body:JSON.stringify(frame),signal:abort.signal});
+    if(reply.status===403){
+      const bootstrap=await fetch('/connection',{cache:'no-store',signal:abort.signal});
+      if(!bootstrap.ok)throw Error('请刷新当前页面，再进入遥操作');
+      const connection=await bootstrap.json();
+      if(typeof connection.token!=='string')throw Error('连接信息无效，请刷新页面');
+      token=connection.token;sessionId=crypto.randomUUID();seq=0;
+      report('服务已重连。请松开右握键，再握住继续。');
+      return; // Discard this old pose; the next XR frame starts a fresh session.
+    }
+    serverStatus=await reply.json();
+    if(!reply.ok) throw Error(serverStatus.error||reply.status);
+    lastNetworkOK=performance.now();
+    report((mode==='desk'?'对面模式':'佩戴模式')+' | '+serverStatus.control+'\n'+(serverStatus.recording?'● RECORDING':'Not recording'));
+  }catch(error){report('连接中断 / '+error.message);}
+  finally{clearTimeout(timeout);sending=false;}
+}
+function inactive(){
+  // Timeout also stops control if this notification cannot be sent.
+  transmit({session:sessionId,seq:seq++,client_ms:performance.now(),mode,active:false,head:null,left:null,right:null});
+}
+function shader(type,code){
+  const s=gl.createShader(type);gl.shaderSource(s,code);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;
+}
+function initGL(){
+  const canvas=document.createElement('canvas');
+  gl=canvas.getContext('webgl',{xrCompatible:true,alpha:false});
+  if(!gl)throw Error('WebGL unavailable');
+  program=gl.createProgram();
+  gl.attachShader(program,shader(gl.VERTEX_SHADER,'attribute vec2 a;varying vec2 uv;void main(){uv=vec2((a.x+1.)/2.,(1.-a.y)/2.);gl_Position=vec4(a.x*.86,a.y*.58,0.,1.);}'));
+  gl.attachShader(program,shader(gl.FRAGMENT_SHADER,'precision mediump float;varying vec2 uv;uniform sampler2D picture;void main(){gl_FragColor=texture2D(picture,uv);}'));
+  gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));
+  gl.useProgram(program);
+  const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  const location=gl.getAttribLocation(program,'a');gl.enableVertexAttribArray(location);gl.vertexAttribPointer(location,2,gl.FLOAT,false,0,0);
+  texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  viewCanvas=document.createElement('canvas');viewCanvas.width=1024;viewCanvas.height=768;ctx=viewCanvas.getContext('2d');
+}
+function panel(now){
+  if(mode===lastPanelMode && !textureDirty && now-lastPanel<(mode==='desk'?1000:200))return;
+  lastPanel=now;lastPanelMode=mode;textureDirty=false;
+  ctx.fillStyle='#111b28';ctx.fillRect(0,0,1024,768);
+  if(mode==='worn' && image.complete && image.naturalWidth)ctx.drawImage(image,112,56,800,600);
+  if(mode==='desk'){
+    ctx.fillStyle='#91e1cb';ctx.font='32px sans-serif';
+    ctx.fillText('DESK MODE: use the Mac screen',170,320);
+    ctx.font='24px sans-serif';ctx.fillText('Robot video paused. Controller tracking stays active.',170,370);
+  }
+  ctx.fillStyle=serverStatus.recording?'#ffb38a':'#91e1cb';ctx.font='26px sans-serif';
+  ctx.fillText('WowSkin-Lab | '+(mode==='desk'?'DESK / facing you':'WORN / on your head')+' | '+(serverStatus.recording?'REC':'Idle'),28,35);
+  ctx.font='22px sans-serif';ctx.fillStyle='#ffffff';
+  ctx.fillText(performance.now()-lastNetworkOK>500?'USB connection paused':(serverStatus.control||'Release right grip to arm'),28,690);
+  ctx.fillText('R B: switch mode | R grip: move | R trigger: gripper | L X/Y: record/save',28,726);
+  gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,viewCanvas);
+}
+function onFrame(now,frame){
+  if(!session)return;
+  session.requestAnimationFrame(onFrame);
+  const viewer=frame.getViewerPose(space);
+  if(now-lastSend>=16 && !sending){
+    lastSend=now;
+    const data={session:sessionId,seq:seq++,client_ms:performance.now(),active:session.visibilityState==='visible' && !!viewer,
+      head:viewer?pose(viewer.transform):null,left:null,right:null};
+    for(const source of session.inputSources)if(source.handedness==='left'||source.handedness==='right')data[source.handedness]=hand(source,frame);
+    const buttons=data.right?.buttons, b=!!buttons && buttons[5]>.5;
+    if(b && !previousB && buttons[1]<.5){mode=mode==='worn'?'desk':'worn';modeSelect.value=mode;localStorage.setItem('pico-mode',mode);}
+    previousB=b;data.mode=mode;
+    transmit(data);
+  }
+  if(!viewer)return;
+  const layer=session.renderState.baseLayer;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,layer.framebuffer);gl.clearColor(.04,.07,.11,1);gl.clear(gl.COLOR_BUFFER_BIT);
+  panel(now);
+  for(const view of viewer.views){const v=layer.getViewport(view);gl.viewport(v.x,v.y,v.width,v.height);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);}
+}
+button.onclick=async()=>{
+  button.disabled=true;
+  try{
+    if(session){await session.end();return;}
+    // requestSession must remain directly within the user's click gesture.
+    session=await navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local']});
+    sessionId=crypto.randomUUID();seq=0;initGL();await gl.makeXRCompatible();
+    session.updateRenderState({baseLayer:new XRWebGLLayer(session,gl)});
+    space=await session.requestReferenceSpace('local');
+    space.addEventListener('reset',()=>{sessionId=crypto.randomUUID();seq=0;});
+    session.addEventListener('visibilitychange',()=>{if(session.visibilityState!=='visible')inactive();});
+    session.addEventListener('end',()=>{inactive();session=null;button.disabled=false;button.textContent='进入遥操作 / Enter VR';report('VR 已退出');});
+    button.textContent='退出遥操作 / Exit VR';button.disabled=false;session.requestAnimationFrame(onFrame);
+  }catch(error){report(error.name+': '+error.message);if(session){await session.end().catch(()=>{});session=null;}button.disabled=false;}
+};
+window.addEventListener('pagehide',inactive);
+(async()=>{try{const ok=navigator.xr && await navigator.xr.isSessionSupported('immersive-vr');button.disabled=!ok;
+  report(ok?'WebXR 已就绪。选择头显位置，点击进入后先松开右手握键。':'此浏览器没有 immersive-vr。请使用 PICO 浏览器，通过 USB 打开 localhost 地址。');
+}catch(error){report(error.message);}})();
+</script></html>

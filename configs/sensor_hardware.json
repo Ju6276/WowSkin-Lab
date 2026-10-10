@@ -1,0 +1,19 @@
+{
+  "geometry": "wowskin_base_and_upper_silicone_sleeve",
+  "base_height_m": 0.0115,
+  "total_height_m": 0.0135,
+  "skin_thickness_m": 0.002,
+  "dimension_source": "User approximate dimensions: printed base 11.5 mm, fitted total 13.5 mm; planar contour remains OnRobot reference scaled to 42.2 x 43.6 mm.",
+  "skin_thickness_source": "Top buildup inferred from 13.5 minus 11.5 mm, assuming the cap seats on the base; not a measured sleeve wall thickness.",
+  "sleeve_overlap_m": 0.002,
+  "sleeve_wall_m": 0.0005,
+  "sleeve_status": "User confirms sleeve covers upper rim only. Overlap 2 mm and per-side envelope growth 0.5 mm are provisional visualization/mesh parameters, not measured; inner sleeve nodes are fixed to base (no slip/detachment model).",
+  "internal_layers_status": "Base height updated from user; chip depth, elastic properties, magnetization and sleeve side dimensions remain uncalibrated.",
+  "skin_rgba": ".46 .40 .36 1",
+  "timestep_s": 2e-05,
+  "timestep_source": "Shared sensor integration step: 20 us for thin sleeve FEM stability; sample rate remains 100 Hz.",
+  "ground_z_m": 0.0,
+  "contour_source": "OnRobot.stl projected hull, resampled and scaled to provisional WowSkin image bounds; mount internals not imported",
+  "width_m": 0.0422,
+  "length_m": 0.0436
+}

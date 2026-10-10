@@ -1,0 +1,21 @@
+{
+  "source": "assets/ebim_feeding/assets/head/head_skin.obj",
+  "source_sha256": "6e01cb1c2957781ac085d515c5322419b7b4856cf340e2732fd4285bc2c80b51",
+  "output_sha256": "c8486884adbc6f2f01fc63f510d08472e61318825b39602853e718592fa0311c",
+  "description": "Local elliptical posterior cap lofted from the 72-vertex source skull rim; not official anatomy",
+  "boundary_vertices": 72,
+  "rings": 24,
+  "centre_m": [
+    -1.9765000000004918e-06,
+    0.014014303,
+    0.055833415000000004
+  ],
+  "posterior_depth_m": 0.0465749435,
+  "skin_rgba": [
+    0.8705882352941177,
+    0.7176470588235294,
+    0.6470588235294118,
+    1.0
+  ],
+  "boundary_match_max_m": 3.469446951953614e-18
+}

@@ -1,0 +1,5 @@
+{
+  "source": "outputs/cable/teleop_20261009_220519/episode.npz",
+  "source_sha256": "a548c127b9e3f23e758891adc344b244c5afea31b03b38c4f33e6dd0f8af312d",
+  "description": "User keyboard commands before silicone FEM inversion. Episode 1 descends during one-sided contact; episode 3 moves along the cable during one-sided contact. Replay the moving-state transitions and target lead limits as in manual_action. These are regression inputs, not successful demonstrations."
+}

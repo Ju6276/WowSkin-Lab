@@ -1,0 +1,22 @@
+{
+  "source_image": "wowskin_product_003.png",
+  "source_url": "https://cdn.shopify.com/s/files/1/0719/7982/7417/files/003_b13f6e19-e4d5-428b-8f95-d66ee3ce987b.png?v=1735578255",
+  "manufacturer_image_axes_mm": {
+    "X": 43.6,
+    "Y": 11.4,
+    "Z": 42.2
+  },
+  "simulation_axes_mm": {
+    "width_x": 42.2,
+    "length_y": 43.6,
+    "height_z": 11.4
+  },
+  "scope": "Bounding dimensions of depicted manufacturer component. Whether soft skin is included is unconfirmed; do not equate this with measured assembled sensor thickness.",
+  "approximate": [
+    "rounded contour between extrema",
+    "skin thickness",
+    "sensor depth",
+    "internal mounting boundaries"
+  ],
+  "not_found": "downloadable manufacturer STEP/STL"
+}

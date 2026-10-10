@@ -1,0 +1,43 @@
+[
+  {
+    "file": "assets/cad/anyskin/onrobot/OnRobot.stl",
+    "sha256": "cd4c4757c4d3bc7126a1666f84ed3783e1d5f7959806b5603ab0605e9c782925",
+    "origin": "user download from official AnySkin CAD folder",
+    "source_folder": "https://drive.google.com/drive/folders/1JOb_r0cT0t0BLju4XC6zboPppiXv8LDE",
+    "units": "STL unitless; metre interpretation consistent with product scale",
+    "used_in_physics": true,
+    "usage": "Projected exterior contour only; full STL reserved for geometry inspection, not imported as WowSkin elastic model"
+  },
+  {
+    "file": "assets/cad/anyskin/franka/Franka_pair.stl",
+    "sha256": "6989652b002fbaf4ea0a694e3e05ea89f1e41b32652fdbbccff29378e013f045",
+    "origin": "user download from official AnySkin CAD folder",
+    "source_folder": "https://drive.google.com/drive/folders/1JOb_r0cT0t0BLju4XC6zboPppiXv8LDE",
+    "units": "STL unitless; metre interpretation consistent with product scale",
+    "used_in_physics": false
+  },
+  {
+    "file": "assets/cad/anyskin/leap/LEAP.stl",
+    "sha256": "170728312e860c25139df86e30bf9b1e7f9738c26781d179d1c83025d5b00066",
+    "origin": "user download from official AnySkin CAD folder",
+    "source_folder": "https://drive.google.com/drive/folders/1JOb_r0cT0t0BLju4XC6zboPppiXv8LDE",
+    "units": "STL unitless; metre interpretation consistent with product scale",
+    "used_in_physics": false
+  },
+  {
+    "file": "assets/cad/anyskin/xarm/xArm_pair.stl",
+    "sha256": "1f061e692ffdee938b85bfc27368146a75497ba37c8f8860af8c62c2cf687b08",
+    "origin": "user download from official AnySkin CAD folder",
+    "source_folder": "https://drive.google.com/drive/folders/1JOb_r0cT0t0BLju4XC6zboPppiXv8LDE",
+    "units": "STL unitless; metre interpretation consistent with product scale",
+    "used_in_physics": false
+  },
+  {
+    "file": "assets/cad/anyskin/xarm/xArm_pair_thin.stl",
+    "sha256": "03fa697be82c858e3b91ec2e2d1f77175795ee9d12d91d9e07d1c8cd61e48121",
+    "origin": "user download from official AnySkin CAD folder",
+    "source_folder": "https://drive.google.com/drive/folders/1JOb_r0cT0t0BLju4XC6zboPppiXv8LDE",
+    "units": "STL unitless; metre interpretation consistent with product scale",
+    "used_in_physics": false
+  }
+]

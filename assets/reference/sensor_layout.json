@@ -1,0 +1,91 @@
+{
+  "source": "https://raw.githubusercontent.com/raunaqbhirangi/reskin_sensor/b82de2a9e9300af3062b3d635a85a2365af14a98/circuits/5X_ReSkin.Zip",
+  "coordinate_source": "ReSkin PCB pick-and-place Mid X/Y, centered on U1; Z=0 denotes the reference chip plane. Simulation height is set separately by config. WowSkin PCB version, pose, channel mapping and magnetic axes remain unverified.",
+  "sensors": [
+    {
+      "name": "U1",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_deg": 0.0
+    },
+    {
+      "name": "U2",
+      "position_m": [
+        0.0,
+        0.007000011399999991,
+        0.0
+      ],
+      "rotation_deg": 180.0
+    },
+    {
+      "name": "U3",
+      "position_m": [
+        0.007000011400000006,
+        0.0,
+        0.0
+      ],
+      "rotation_deg": 360.0
+    },
+    {
+      "name": "U4",
+      "position_m": [
+        0.0,
+        -0.006999986000000007,
+        0.0
+      ],
+      "rotation_deg": 90.0
+    },
+    {
+      "name": "U5",
+      "position_m": [
+        -0.006999985999999993,
+        5.079999999999529e-05,
+        0.0
+      ],
+      "rotation_deg": 270.0
+    }
+  ],
+  "wowskin_visualizer": {
+    "source": "https://github.com/WowRobo-Robotics/WowSkin/blob/main/wowskin_viz.py",
+    "display_channel_order": [
+      "center",
+      "left",
+      "right",
+      "up",
+      "down"
+    ],
+    "positions_pixels": [
+      [
+        201,
+        238
+      ],
+      [
+        126,
+        238
+      ],
+      [
+        275,
+        238
+      ],
+      [
+        201,
+        163
+      ],
+      [
+        201,
+        312
+      ]
+    ],
+    "xy_display_rotations_deg": [
+      -90,
+      -90,
+      180,
+      90,
+      0
+    ],
+    "note": "Display coordinates, not millimetres; correspondence with U1-U5 not verified."
+  }
+}

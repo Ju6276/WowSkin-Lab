@@ -1,0 +1,50 @@
+{
+  "schema": "wowskin_sim_magnetic_gain_v1",
+  "status": "SIMULATION AMPLITUDE FIT; not real sensor or material calibration",
+  "method": "Positive zero-intercept chip gains fitted to unpaired norm quantiles of local dipole and Pollen->local MagNet->existing forward MLP.",
+  "selected": "per_chip",
+  "gain_order": [
+    "U1_center",
+    "U2_up",
+    "U3_right",
+    "U4_down",
+    "U5_left"
+  ],
+  "gains": [
+    54.525022840045516,
+    15.869761272729257,
+    50.256142909306746,
+    65.21726781873059,
+    27.87492847368912
+  ],
+  "candidate_order_gains": [
+    54.525022840045516,
+    27.87492847368912,
+    50.256142909306746,
+    15.869761272729257,
+    65.21726781873059
+  ],
+  "fit_magnetization_a_per_m": 4000.0,
+  "quantiles": [
+    0.1,
+    0.25,
+    0.5,
+    0.75,
+    0.9
+  ],
+  "application": "Scale dipole field and baseline before filtering and additive noise. No changes to forces, stiffness, friction, controller or timestep.",
+  "split": "Pollen whole pulls 0/1 train, 2 validation, 3 test; manual simulation first 50% train, next 25% validation, final 25% test, no shuffled frames.",
+  "selection": "Both candidates fit training only; choose by validation norm-quantile RMSE. No refit on held-out frames.",
+  "source_sha256": {
+    "assets/pollen/data/cable.csv": "d0936a910802d360dd318276484289ff347be1f03960142646ddd6432bd19d0d",
+    "outputs/reskin_forward_mapped/model.safetensors": "ce09d7e2a28945af1ab9940ae284c05f0e04987393f203b257064aa656b69528",
+    "outputs/reskin_inverse_mapped/model.safetensors": "7a567226cc475c4d15c4a35283a7206d6a6982a63bfb35ea3b3f31abaf57e667",
+    "outputs/cable/teleop_20261010_010635/episode.npz": "25a32daa1bcf558d1eb928a3014c9b6fa0fca15d69c31c2c9efe4ec46d78209e"
+  },
+  "limitations": [
+    "Pollen slip=0 is not contact/force ground truth; >=50 uT signal gate is a heuristic.",
+    "Inverse xyz is a pseudo-label; forward MLP is extrapolated at shallow depths.",
+    "Unpaired norm statistics cannot identify vector axes, contact-response timing or physical magnetization.",
+    "Fitted on cable only; spoon/cube are unvalidated cross-task transfers."
+  ]
+}

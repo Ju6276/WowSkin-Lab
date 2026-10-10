@@ -1,0 +1,59 @@
+[
+  {
+    "file": "reskin_pick_place.txt",
+    "source": "https://raw.githubusercontent.com/raunaqbhirangi/reskin_sensor/b82de2a9e9300af3062b3d635a85a2365af14a98/circuits/5X_ReSkin.Zip",
+    "sha256": "4d7d239cdd8fdee8067216787c6eaae8ef6977456ae7d34120414db31bc2092b"
+  },
+  {
+    "file": "../cad/anyskin/xarm/xArm_pair.stl",
+    "source": "https://drive.google.com/uc?export=download&id=1rC3VWrKrsgjK73QhjQZoK0v2TeBnKBYS",
+    "sha256": "1f061e692ffdee938b85bfc27368146a75497ba37c8f8860af8c62c2cf687b08",
+    "used_in_physics": false
+  },
+  {
+    "file": "../cad/anyskin/franka/Franka_pair.stl",
+    "source": "https://drive.google.com/uc?export=download&id=1R-fJem4mVS_uGOrscWhgpN_jYavVzlCZ",
+    "sha256": "6989652b002fbaf4ea0a694e3e05ea89f1e41b32652fdbbccff29378e013f045",
+    "used_in_physics": false
+  },
+  {
+    "file": "wowskin_product_001.png",
+    "source": "https://cdn.shopify.com/s/files/1/0719/7982/7417/files/001.png?v=1735578255",
+    "sha256": "2595b51e9b0895fe9e73678f8dad1fe339d804b70de1204ee6fc1bd293732fdd",
+    "usage": "manufacturer product photo for identifying the standard-version outline; no dimensional specification"
+  },
+  {
+    "file": "wowskin_product_002.png",
+    "source": "https://cdn.shopify.com/s/files/1/0719/7982/7417/files/002.png?v=1735578255",
+    "sha256": "4cfe5cd0c313355a74c7c3644cc47ee82f8d0025dbc053552b546994c4d5ff7b",
+    "usage": "manufacturer product photo for identifying the standard-version outline; no dimensional specification"
+  },
+  {
+    "file": "wowskin_product_004.png",
+    "source": "https://cdn.shopify.com/s/files/1/0719/7982/7417/files/004.png?v=1735578255",
+    "sha256": "db342145ef7bef0a4d62cf57480b666ff10e6f875cad9732c387baff3230db3c",
+    "usage": "manufacturer product photo for identifying the standard-version outline; no dimensional specification"
+  },
+  {
+    "file": "wowskin_product_003.png",
+    "source": "https://cdn.shopify.com/s/files/1/0719/7982/7417/files/003_b13f6e19-e4d5-428b-8f95-d66ee3ce987b.png?v=1735578255",
+    "sha256": "e2511e77d8dfea91f589c1f69beef9b3867b12f78aaef275672b2e2bdee75c90"
+  },
+  {
+    "file": "wowskin_product_005.png",
+    "source": "https://cdn.shopify.com/s/files/1/0719/7982/7417/files/005_9823423b-0d3f-4d60-ab30-c6534e48ec00.png?v=1735579108",
+    "sha256": "20418430d1a897b46c8c1c4643843933839d85867addfbd87b005d0f2a3f6ef2"
+  },
+  {
+    "file": "wowskin_product_006.png",
+    "source": "https://cdn.shopify.com/s/files/1/0719/7982/7417/files/006.png?v=1735579108",
+    "sha256": "4109c30a7f995106f4af1b7b6877fc821365adb639bd7949924614134634e9de"
+  },
+  {
+    "file": "../cad/anyskin/onrobot/OnRobot.stl",
+    "source": "https://drive.google.com/uc?export=download&id=1VPt26Pr5P2UIHDrzJ-acgpbNY4_Snlcv",
+    "sha256": "cd4c4757c4d3bc7126a1666f84ed3783e1d5f7959806b5603ab0605e9c782925",
+    "used_in_physics": true,
+    "usage": "Projected contour reference only"
+  }
+]

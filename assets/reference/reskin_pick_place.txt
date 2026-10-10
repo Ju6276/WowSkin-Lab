@@ -1,0 +1,20 @@
+Designator Footprint               Mid X         Mid Y         Ref X         Ref Y         Pad X         Pad Y TB      Rotation Comment        
+
+U5         PCB-vtpgibksv2259vlcsnnr-1   2283.465mil   3155.543mil   2285.465mil   3155.543mil   2348.425mil   3126.016mil  T        270.00 Melexis MLX90393ELW-ABA-011-SP
+U3         PCB-vtpgibksv2259vlcsnnr-1   2834.646mil   3153.543mil   2834.646mil   3155.543mil   2864.173mil   3218.504mil  T        360.00 Melexis MLX90393ELW-ABA-011-SP
+U1         PCB-vtpgibksv2259vlcsnnr-1   2559.055mil   3153.543mil   2559.055mil   3155.543mil   2588.583mil   3218.504mil  T          0.00 Melexis MLX90393ELW-ABA-011-SP
+U4         PCB-vtpgibksv2259vlcsnnr-1   2559.055mil   2877.953mil   2557.055mil   2877.953mil   2494.095mil    2907.48mil  T         90.00 Melexis MLX90393ELW-ABA-011-SP
+U2         PCB-vtpgibksv2259vlcsnnr-1   2559.055mil   3429.134mil   2559.055mil   3427.134mil   2529.528mil   3364.173mil  T        180.00 Melexis MLX90393ELW-ABA-011-SP
+R_2        RESC1005X40X25ML05T10   2669.291mil   2704.724mil   2669.291mil   2704.724mil    2650.59mil   2704.724mil  T        360.00 Yageo / Phycomp RC0402FR-1310KL
+R_1        RESC1005X40X25ML05T10   2559.055mil   2704.724mil   2559.055mil   2704.724mil   2577.756mil   2704.724mil  T        180.00 Yageo / Phycomp RC0402FR-1310KL
+C_2        PCB-aql9kooci28f084cpaqc-1   2437.005mil   3439.011mil   2437.008mil   3439.008mil   2437.005mil   3419.326mil  T         90.00 Cap            
+C_1        PCB-aql9kooci28f084cpaqc-1   2677.169mil   3143.729mil   2677.165mil   3143.732mil   2677.169mil   3163.414mil  T        270.00 Cap            
+C_5        PCB-aql9kooci28f084cpaqc-1   2283.461mil   3029.556mil   2283.465mil   3029.559mil   2303.146mil   3029.556mil  T        180.00 Cap            
+C_4        PCB-aql9kooci28f084cpaqc-1   2570.869mil   3033.499mil   2570.866mil   3033.496mil   2551.184mil   3033.499mil  T        360.00 Cap            
+C_3        PCB-aql9kooci28f084cpaqc-1   2821.854mil   3029.531mil    2821.85mil   3029.528mil   2802.169mil   3029.531mil  T        360.00 Cap            
+C_6        0402C             2418.976mil   2681.102mil   2418.976mil   2681.102mil   2438.976mil   2681.102mil  T        180.00 0.1uF          
+C_7        0402C             2418.976mil   2724.409mil   2418.976mil   2724.409mil   2438.976mil   2724.409mil  T        180.00 0.1uF          
+C_8        0402C             2418.976mil   2767.716mil   2418.976mil   2767.716mil   2438.976mil   2767.716mil  T        180.00 0.1uF          
+C_9        0402C             2418.976mil   2811.023mil   2418.976mil   2811.023mil   2438.976mil   2811.023mil  T        180.00 0.1uF          
+J1         PCB-r7r2kvb5ystky2su6aiq-1   2561.024mil   2540.354mil   2561.024mil   2543.307mil   2501.968mil   2614.173mil  T          0.00 SM04B-SRSS-TB(LF)(SN)
+

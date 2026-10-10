@@ -1,0 +1,26 @@
+.venv/
+.venv-*/
+.python/
+.tools/
+__pycache__/
+outputs/
+MUJOCO_LOG.TXT
+.DS_Store
+assets/pollen/
+third_party/franka_xbox/
+third_party/visuoskin/
+third_party/feel-the-force/
+third_party/official/
+/data/
+*.egg-info/
+
+# Downloaded dependencies, local credentials and build products
+third_party/dependencies/
+.env
+.env.*
+!.env.example
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
