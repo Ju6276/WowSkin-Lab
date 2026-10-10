@@ -9,7 +9,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import mujoco
-from wowskin_lab.data.cameras import add_camera
+from wowskin_lab.data.cameras import add_recording_cameras
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv
 
 
@@ -22,10 +22,13 @@ def main():
     # Add only the two historical local observation views for this preview.
     # No extra cameras are added to the actual recording environment.
     xml = ET.fromstring(env.xml)
-    add_camera(xml.find('worldbody'), 'previous_overhead', [.10, -.35, .50], [.4, 0, .14])
     hand = xml.find(".//body[@name='hand']")
     z = float(env.model.site_pos[env.tcp_site, 2])
-    add_camera(hand, 'previous_wrist', [.10, 0., .075], [0., 0., z+.08], 90)
+    for parent in xml.iter():
+        for child in list(parent):
+            if child.tag == 'camera':
+                parent.remove(child)
+    add_recording_cameras(xml.find('worldbody'), hand, z, profile='previous_four_view')
     model = mujoco.MjModel.from_xml_string(ET.tostring(xml, encoding='unicode'))
     data = mujoco.MjData(model)
     data.qpos[:] = env.data.qpos
@@ -33,14 +36,14 @@ def main():
     mujoco.mj_forward(model, data)
     images = {}
     with mujoco.Renderer(model, height=480, width=640) as renderer:
-        for name in ('lab_front', 'lab_side', 'previous_overhead', 'previous_wrist'):
+        for name in ('lab_front', 'lab_side', 'lab_overhead', 'lab_wrist'):
             renderer.update_scene(data, camera=name)
             images[name] = renderer.render().copy()
     fig, axes = plt.subplots(3, 2, figsize=(12, 13), facecolor='white')
     entries = [('lab_front', 'Previous ViSk / pixels1: fixed view A'),
                ('lab_side', 'Previous ViSk / pixels2: fixed view B'),
-               ('previous_overhead', 'Previous ViSk / pixels51: overhead'),
-               ('previous_wrist', 'Previous ViSk / pixels52: wrist'),
+               ('lab_overhead', 'Previous ViSk / pixels51: overhead'),
+               ('lab_wrist', 'Previous ViSk / pixels52: wrist'),
                ('lab_front', 'Now ViSk + FTF / pixels1: fixed view A'),
                ('lab_side', 'Now ViSk + FTF / pixels2: fixed view B')]
     for ax, (name, title) in zip(axes.flat, entries):

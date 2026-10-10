@@ -176,3 +176,13 @@ python collect_data.py collect_img=true collect_state=true collect_reskin=true d
 **本地仿真：** 按当前用户配置只保留 `lab_front`、`lab_side` 两台固定相机；ViSk 和 FTF 使用同一对相机、相同内外参与 30 Hz 采样时钟。不再录制顶部或腕部相机。ViSk 相机数量与论文四视角不同；其他策略、损失和动作配置保留。`published-default` 保留原四视角配置用于对照，不用于当前双相机采集。定义在 [cameras.py](../wowskin_lab/data/cameras.py)。
 
 新数据写入 `data/official_two_camera/`，旧 `data/official/` 和工作目录保持原样。ViSk 原始格式升级为 `visk_mujoco_raw_v2`；处理器检查相机 ID 为 `[1, 2]`，拒绝把旧四视角记录混入新数据。
+
+## 四路配置存档与 FTF 扩展
+
+[configs/cameras.json](../configs/cameras.json) 保存 `two_fixed` 和 `previous_four_view`。此前四路是 `pixels1`、`pixels2`、`pixels51`、`pixels52`：前两个固定斜视角、固定顶部视角、随夹爪移动的腕部视角。文件记录 ID、父坐标系、米单位位置、朝向目标、视场角、640×480 分辨率、30 Hz、内参生成规则及喂食场景的位置覆盖。腕部相机朝向相对 TCP 定义，世界外参必须逐帧更新。这是本地仿真配置，并非论文精确外参。
+
+当前采集默认仍为 `two_fixed`。四路配置供预览和后续扩展使用；`.venv/bin/python scripts/preview_cameras.py` 从该配置生成对照图，不能把它当作四路 FTF 已接通。
+
+FTF 的 `convert_to_pkl_human.py` 有 `--camera` 多 ID 参数，`utils.triangulate_points` 支持两个以上视角。原版相机键映射包括 1、2、3、4、51，未包含本项目的 52；机器人转换器当前直接使用 `[1, 2]`，本地记录器也只记录 1、2。完整扩展四路还需统一记录、预处理、语义点标注/跟踪、相机键与内外参，并验证后续加载器。额外图像不会自动变成 FTF 的视觉输入；FTF 策略使用提取的三维点轨迹。
+
+四台固定相机可继续使用固定投影矩阵；此前三固定＋一腕部布局则需要让跟踪和三角化使用逐帧腕部投影矩阵，不能给移动相机套用整段不变的外参。当前未实施这一扩展，不修改原版上游 checkout。

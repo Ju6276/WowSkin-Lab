@@ -17,7 +17,7 @@ from wowskin_lab.paths import ROOT
 from wowskin_lab.core.physics import configuration
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, pick_scene, rotation_matrix
 from wowskin_lab.envs.franka import mount_reference
-from wowskin_lab.data.cameras import add_camera
+from wowskin_lab.data.cameras import add_camera, camera_profile
 
 ASSETS = ROOT/'assets/ebim_feeding'
 TABLE_TOP = 1.08485019
@@ -149,8 +149,8 @@ def feeding_scene(cfg, layout):
     # views and are saved with intrinsics/extrinsics by the existing recorders.
     for e in source.findall('worldbody/light'):
         world.append(copy.deepcopy(e))
-    add_camera(world, 'lab_front', [-2.45, -.75, 1.90], [-1.73, .12, 1.19])
-    add_camera(world, 'lab_side', [-.80, -.05, 1.70], [-1.74, .12, 1.18])
+    for camera in camera_profile(scene='feeding'):
+        add_camera(world, camera['name'], camera['position_m'], camera['target_m'], camera['fovy_deg'])
     root.find('statistic').set('center', '-1.65 .0 1.25')
     root.find('statistic').set('extent', '1.2')
     # The thin local sensor requires a smaller timestep than EBiM's 1 ms.

@@ -1,0 +1,226 @@
+{
+  "schema": "wowskin_camera_profiles_v1",
+  "source": "Local camera definitions before the two-camera change, git commit 03e8439; not official paper extrinsics",
+  "position_unit": "m",
+  "angle_unit": "degrees",
+  "image_size_wh": [
+    640,
+    480
+  ],
+  "fps": 30,
+  "intrinsic_convention": "MuJoCo pinhole; fx=fy=height/(2*tan(fovy/2)); cx=(width-1)/2, cy=(height-1)/2",
+  "orientation_convention": "camera +Z points from target to position, +X=cross(world/local +Z, camera +Z), +Y=cross(camera +Z,+X)",
+  "default_profile": "two_fixed",
+  "profiles": {
+    "two_fixed": {
+      "camera_ids": [
+        1,
+        2
+      ],
+      "fixed_camera_ids": [
+        1,
+        2
+      ]
+    },
+    "previous_four_view": {
+      "camera_ids": [
+        1,
+        2,
+        51,
+        52
+      ],
+      "fixed_camera_ids": [
+        1,
+        2,
+        51
+      ],
+      "moving_camera_ids": [
+        52
+      ],
+      "status": "Saved previous local rig; FTF four-view training not integrated"
+    }
+  },
+  "cameras": [
+    {
+      "id": 1,
+      "pixel_key": "pixels1",
+      "name": "lab_front",
+      "parent": "world",
+      "position_m": [
+        0.65,
+        -0.4,
+        0.42
+      ],
+      "target_m": [
+        0.4,
+        0,
+        0.17
+      ],
+      "fovy_deg": 55,
+      "intrinsic_640x480": [
+        [
+          461.03571047307986,
+          0,
+          319.5
+        ],
+        [
+          0,
+          461.03571047307986,
+          239.5
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "id": 2,
+      "pixel_key": "pixels2",
+      "name": "lab_side",
+      "parent": "world",
+      "position_m": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "target_m": [
+        0.4,
+        0,
+        0.17
+      ],
+      "fovy_deg": 55,
+      "intrinsic_640x480": [
+        [
+          461.03571047307986,
+          0,
+          319.5
+        ],
+        [
+          0,
+          461.03571047307986,
+          239.5
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "id": 51,
+      "pixel_key": "pixels51",
+      "name": "lab_overhead",
+      "parent": "world",
+      "position_m": [
+        0.1,
+        -0.35,
+        0.5
+      ],
+      "target_m": [
+        0.4,
+        0,
+        0.14
+      ],
+      "fovy_deg": 55,
+      "intrinsic_640x480": [
+        [
+          461.03571047307986,
+          0,
+          319.5
+        ],
+        [
+          0,
+          461.03571047307986,
+          239.5
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "id": 52,
+      "pixel_key": "pixels52",
+      "name": "lab_wrist",
+      "parent": "hand",
+      "position_m": [
+        0.1,
+        0,
+        0.075
+      ],
+      "target_tcp_offset_m": [
+        0,
+        0,
+        0.08
+      ],
+      "fovy_deg": 90,
+      "extrinsics": "time-varying; compose hand world pose with camera local pose every frame",
+      "intrinsic_640x480": [
+        [
+          240.00000000000003,
+          0,
+          319.5
+        ],
+        [
+          0,
+          240.00000000000003,
+          239.5
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ]
+    }
+  ],
+  "scene_overrides": {
+    "feeding": {
+      "1": {
+        "position_m": [
+          -2.45,
+          -0.75,
+          1.9
+        ],
+        "target_m": [
+          -1.73,
+          0.12,
+          1.19
+        ]
+      },
+      "2": {
+        "position_m": [
+          -0.8,
+          -0.05,
+          1.7
+        ],
+        "target_m": [
+          -1.74,
+          0.12,
+          1.18
+        ]
+      },
+      "51": {
+        "position_m": [
+          -1.75,
+          0.04,
+          2.15
+        ],
+        "target_m": [
+          -1.75,
+          0.05,
+          1.1
+        ]
+      }
+    }
+  },
+  "notes": [
+    "Cube and cable use the base coordinates; feeding uses the recorded world-coordinate overrides.",
+    "Profiles preserve prior camera geometry; selecting previous_four_view here does not change the FTF recorder or training pipeline."
+  ]
+}

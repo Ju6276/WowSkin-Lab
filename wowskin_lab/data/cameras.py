@@ -1,5 +1,7 @@
 """MuJoCo camera and point observations; all images are RGB, never viewer HUDs."""
 import itertools
+import json
+from wowskin_lab.paths import ROOT
 import xml.etree.ElementTree as ET
 
 import mujoco
@@ -21,9 +23,27 @@ def add_camera(parent, name, position, target, fovy=55):
                   xyaxes=' '.join(map(str, np.r_[x, y])), fovy=str(fovy))
 
 
-def add_recording_cameras(world, hand, tcp_z):
-    add_camera(world, CAMERAS['pixels1'], [.65, -.40, .42], [.4, 0, .17])
-    add_camera(world, CAMERAS['pixels2'], [.55, .40, .35], [.4, 0, .17])
+def camera_profile(profile='two_fixed', scene='pick_cube', tcp_z=0.):
+    """Resolve the versioned local rig, including scene and wrist coordinates."""
+    definition = json.loads((ROOT/'configs/cameras.json').read_text())
+    ids = definition['profiles'][profile]['camera_ids']
+    overrides = definition.get('scene_overrides', {}).get(scene, {})
+    result = []
+    for source in definition['cameras']:
+        if source['id'] not in ids:
+            continue
+        camera = dict(source)
+        camera.update(overrides.get(str(camera['id']), {}))
+        if 'target_tcp_offset_m' in camera:
+            camera['target_m'] = (np.asarray(camera['target_tcp_offset_m'])+[0., 0., tcp_z]).tolist()
+        result.append(camera)
+    return result
+
+
+def add_recording_cameras(world, hand, tcp_z, profile='two_fixed', scene='pick_cube'):
+    for camera in camera_profile(profile, scene, tcp_z):
+        parent = world if camera['parent'] == 'world' else hand
+        add_camera(parent, camera['name'], camera['position_m'], camera['target_m'], camera['fovy_deg'])
 
 
 
