@@ -6,7 +6,7 @@ Decorative markings, rails and background assets are non-colliding.
 import xml.etree.ElementTree as ET
 
 
-def industrial_workcell(root):
+def industrial_workcell(root, pick_place=None):
     asset, world, visual = root.find('asset'), root.find('worldbody'), root.find('visual')
     def material(name, color, **kwargs):
         ET.SubElement(asset, 'material', name=name, rgba=color, **kwargs)
@@ -72,11 +72,14 @@ def industrial_workcell(root):
         for y in (-.21,.21):
             geom(f'hole_{x}_{y}',[x,y,.10015],[.0018,.00015],'cell_graphite',type='cylinder')
     # Flush visual guides: no artificial barriers or object attachment.
-    for name,center,material_name in [('pick',(.40,0.),'cell_amber'),('place',(.49,.135),'cell_green')]:
-        x,y=center
+    from wowskin_lab.envs.task_evaluation import task_config
+    score = pick_place or task_config('pick_cube')
+    for name, region, material_name in [('pick','source','cell_amber'),('place','target','cell_green')]:
+        x, y = score[f'{region}_center_xy_m']
+        half, edge = score[f'{region}_half_width_m'], score['marking_half_width_m']
         for sign in (-1,1):
-            geom(f'{name}_x{sign}',[x+sign*.040,y,.1002],[.0012,.0412,.0002],material_name)
-            geom(f'{name}_y{sign}',[x,y+sign*.040,.1002],[.0412,.0012,.0002],material_name)
+            geom(f'{name}_x{sign}',[x+sign*half,y,.1002],[edge,half+edge,.0002],material_name)
+            geom(f'{name}_y{sign}',[x,y+sign*half,.1002],[half+edge,edge,.0002],material_name)
     # Rear guard frame and workshop equipment form the background, not obstacles.
     for y in (-.48,.48):
         geom('guard_post_'+str(y),[-.25,y,.32],[.02,.02,.46])

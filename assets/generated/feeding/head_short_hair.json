@@ -1,0 +1,12 @@
+{
+  "source": "assets/ebim_feeding/assets/head/head_skin.obj",
+  "source_sha256": "6e01cb1c2957781ac085d515c5322419b7b4856cf340e2732fd4285bc2c80b51",
+  "purpose": "Local scalp-fitted short hair covering source/completion color seam; visual only",
+  "thickness_m": [
+    0.00035,
+    0.0007
+  ],
+  "collision": false,
+  "seed": 17,
+  "mesh_sha256": "321d92d7c52634a57b6acafbfdd6bc852a338d421be602d60574d446d2253a07"
+}

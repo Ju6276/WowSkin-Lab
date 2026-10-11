@@ -1,188 +1,163 @@
-# ViSk / FTF 学习工作流
+# ViSk 与 FTF：从当前采集开始
 
-更新：2026-10-09。目标是执行官方完整方法：ViSk 按论文单块 AnySkin/15 维；FTF 保留机器人分支和人手主线。代码模型、损失、归一化、动作块不使用历史简化补丁，物体点由视觉跟踪获得。
+采集入口见 [README](../README.md)。三个任务共享一套 LeRobot v2.1＋100 Hz raw 数值附件，不需要同时开两套录制器。当前 cube 示范保留在 `data/episodes/pick_cube/`；旧试验和策略权重已移出项目。以下训练命令需采集完成后手动运行。
 
-## 当前进度与 Mac 支持
+## 当前采集内容
 
-| 环节 | 本机状态 |
-| --- | --- |
-| 仿真遥操作、自动采集、视频/状态/触觉同步 | 已运行；两段自动抓起/放回成功 |
-| ViSk 原版 PKL / 加载器 / CPU 训练 | 已完成一次更新，loss 14.711，checkpoint 已保存；退出时资源回收卡住，经清理退出，兼容问题尚未修复 |
-| FTF 原版视频对齐、初始 PKL | 已运行；初始文件还不能训练 |
-| FTF 官方点标注 notebook | 已配置并通过执行检查；**还未实际点击并保存标注点** |
-| FTF DIFT＋CoTracker 完整跟踪 | 未运行；固定版调用 CUDA/xformers，当前 Mac 不能原样执行 |
-| FTF 最终数据训练、两种策略闭环 | 未验证；不能将缺少数据等同于算法不能在 CPU 运行 |
-| FTF 人手采集、真实 sensor 标定 | 未完成 |
+- 相机：固定 `1/2`＋腕部 `52`，三路 640×480、30 Hz RGB-D。深度无损保存，腕部外参逐帧保存；配置见 [cameras.json](../configs/cameras.json)。
+- 机器人：基座系 TCP 位姿、实际下发目标、七关节位置／速度、TCP 线／角速度。
+- 夹爪：连续实测闭合比例与连续目标分开保存，0 开、1 闭；另外保留物理驱动关节及单位。Panda、Robotiq 使用相同语义。
+- 触觉：单块五芯片 XYZ，共 15 路磁场；raw 保存基线和质量字段。拟合偶极子没有完成真机标定。
+- instruction、时间戳、相机标定、控制参数、任务自动评分和人工保存结果。
 
-这些是 Python 项目，不按“有没有 Mac 安装包”划分。Notebook/预处理已在 Mac 验证；阻塞完整 FTF 的是当前视觉流水线的 CUDA 依赖。单独组件的 CPU/MPS 移植尚未验证，不替换模型来冒充原版。用户暂时没有 CUDA 机器，先完成本机部分。
+B 复位后开始录制；绿色 SUCCESS 不会自动停录，Enter 保存成功，N 保存失败。自动评分和人工标签分别保存。成功区域只是操作者辅助图形，不进入相机或策略输入。保存成功后图像只留在 LeRobot，raw 的 H5 是 100 Hz 数值附件，不是第三套数据集。控制或相机配置不同不能追加到同一数据集。
 
-日常操作见 [遥操作与采集](PICK_CUBE_ZH.md)。ViSk 本机训练产物保存在 `outputs/diagnostics/visk_original_cpu_20261009/`；目前不宣称论文成功率或完整复现。
+夹爪宽度的统一约定：后续宽度字段对齐真机驱动的反馈／命令语义。`gripper_width_m` 表示当前反馈开口，`gripper_target_width_m` 表示实际下发的目标开口；均为米，分别属于 state 和 action。Franka 真机对应 `GripperState.width`，仿真从关节反馈转换到同等零位、量程和单位；不把指腹形变后的表面最短距离作为采集要求或策略输入。[Franka 官方字段说明](https://frankarobotics.github.io/libfranka/0.15.0/structfranka_1_1GripperState.html)。Robotiq 按其驱动反馈与机构转换建立相同语义，不能把转轴角度比例直接当宽度。
 
-## 源码与环境
+这是已明确的采集约定，**当前代码仍保存闭合比例和原始驱动关节，尚未增加上述米制宽度字段**。没有更改现有 episode。需要比例的算法在导出时转换，并保留实测状态与目标指令的区别。
 
-- ViSk：`third_party/official/visuoskin`，`66519d2ffc09df7df33f1f0807c88f29f849be23`。
-- FTF：`third_party/official/feel-the-force`，`954830f94e59e47c1668ad41c36b52626da975d0`。
-- FTF 内的 Franka-Teach、DIFT、CoTracker 均保留主仓库记录的子模块版本，没有切换到最新 main。
+## ViSk：导出与训练
+
+以下命令在新采集成功后运行，输出目录必须不存在：
 
 ```bash
-.venv/bin/python scripts/setup_upstream.py
-.venv/bin/python -m wowskin_lab official status
+.venv-reduced/bin/python -m wowskin_lab dataset-export data/episodes/pick_cube --format visk --output data/exports/visk_cube
+.venv-reduced/bin/python -m wowskin_lab official prepare visk \
+  --workspace data/exports/visk_cube/workspace --data-root data/exports/visk_cube --task pick_cube
+.venv-reduced/bin/python -m wowskin_lab official process-visk-sim \
+  --workspace data/exports/visk_cube/workspace
 ```
 
-官方环境分别以 ViSk `env.yml`（Python 3.11 / PyTorch 2.1 / CUDA 11.8）和 FTF `conda_env.yaml`（Python 3.10 / CUDA 依赖）为准。当前 Mac 是 Apple Silicon，已确认 `torch.cuda.is_available() == False`。FTF 的 `correspondence.py` 直接调用 `.cuda()`，DIFT 启用 xformers；不能把 CPU 简化替代说成官方流程已完成。
+`--episodes capture_000000 capture_000002` 可选择演示。喂食任务换成 `feeding`，线材换成 `cable` 或 `cable_insert`。不同控制配置的数据须分别导出，不与默认 cube 数据混合。
 
-## 三条路线
+ViSk 原转换器生成 `processed_data_pkl_aa/pick_cube.pkl`，其中含图像、位姿、夹爪状态、触觉及统计量。本地桥接器按真实时间戳对齐，并用录制起止事件截取片段。原加载器继续执行采样、基线扣除、归一化和动作块构造。腕部图像沿用官方转换器裁掉右侧 20% 再缩放的规则，在线输入也执行同一裁剪。
 
-**ViSk**：原始 XArm 数据用 `process_xarm_data.py`；本项目 MuJoCo 数据用明确记录的采集格式桥接器，两者随后都进入原版 `convert_to_pkl.py` → `train_bc.py`。README 的 `process_data.py` 与实际文件名不同，以代码为准。保持 batch 256、动作块 10、subsample 5、训练 10000 步；部署 `eval.py` 仍是 XArm 接口，尚未接入 MuJoCo 闭环。
+当前训练观测是 `pixels1/2/52`＋`sensor0`，输出为 10 步×7 维动作块。七维是基座系平移增量、末端局部旋转增量、夹爪绝对闭合指令。当前 `aux_keys=[sensor0]` 不编码本体状态；状态仍被保存，并用于构造运动标签。深度、语言和关节速度暂不作为原版 ViSk 的输入。
 
-[论文 IV-A](https://arxiv.org/html/2410.17246v2#S4.SS1) 明确是左 AnySkin、右普通硅胶。公开默认代码却读两组磁场，作者未解释原因。按用户要求，`official prepare visk` 默认 `paper-single`：只把加载器数量、环境数量改为 1，配置改为 `sensor0`，保留单传感器变更；另按用户要求统一两台固定相机，生成 `PAPER_SINGLE_SENSOR.patch`、`TWO_FIXED_CAMERAS.patch` 和 manifest。ViSk 论文原实验仍是四相机。官方参考 checkout 保持原样，模型、损失、归一化（含最小尺度 100）、基线处理、动作块和采样逻辑不改。不补零、不复制第二组。
+**记录在案的本地差异：**
 
-**FTF 机器人分支**：机器人遥操作记录 → `process_data_robot.py` → `convert_to_pkl_robot.py` 初始转换 → `label_points.ipynb` 标注 → 再运行转换器并启用 `--process_points` → `train.py agent=p3po suite=p3po dataloader=p3po` → 官方带接触反馈的推理。沿用官方 README 的 FTF 机器人设置：subsample 15、`binarize_gripper_data=true`；batch 64、历史 10、动作块 20、训练 100100 步来自固定版配置。
+- 论文是单侧 AnySkin，公开代码默认双组；`PAPER_SINGLE_SENSOR.patch` 选择一组，不补零或复制数据。
+- 论文四相机，本项目按用户要求三相机；自动读取导出元数据并生成 `THREE_VIEW_CAMERAS.patch`。先前四路布局仍保存在 `configs/cameras.json`。
+- 仿真反馈开度不能代替闭合指令。`MUJOCO_ACTION_LABELS.patch` 保留 measured gripper 作为状态，动作标签取录制的 `commanded_gripper`；缺少该字段会报错，不反推或强制全闭。公开数据对照可显式选择 `--visk-action-profile published-state`。
+- Franka/MuJoCo 是本地环境接口，不是论文的原 XArm 硬件。模型、损失、归一化、动作块和官方采样逻辑没有替换。
+- 部署频率尚未与论文对齐：论文 IV-A 写 10 Hz；当前 `visk_sim.py` 根据本地 30 Hz 图像和公开加载器默认 `subsample=5` 使用 6 Hz（仿真时间）。这属于本地执行时序选择，不是论文规定。改变它前需一并核对标签时间间隔，不能只改执行频率。
+- 论文 III-A 在遥操作速度方向上加入小角度随机扰动；当前本地采集没有复现该示教扰动。`--ideal` 控制的是触觉读出噪声等，不是该方向扰动。任务与数据量也不是论文实验配置。[论文 III-A / IV-A](https://arxiv.org/html/2410.17246v2#S3.SS1)
 
-**FTF 人手主线**：人戴触觉手套直接操作物体 → `process_data_human.py` → `convert_to_pkl_human.py` → 标注物体点 → 转换器 `--process_points --smooth_tracks` → `convert_pkl_human_to_robot.py --smooth_robot_tracks` → `train.py agent=point_policy suite=point_policy dataloader=point_policy` → 官方带接触反馈的机器人推理。使用官方 subsample 3；batch 64、历史 10、动作块 20、训练 100100 步。
+补丁、来源和 SHA256 保存在 workspace 的 `manifest.json`。官方参考 checkout 不修改。这是带明确数据／环境适配的官方算法流程，不能称为硬件、任务和论文成绩的完整复现。
 
-FTF 两条路线都保留 DIFT / CoTracker 物体跟踪；人手主线额外保留 MediaPipe 和手部映射。机器人九个参考点按官方位姿几何构造；物体点来自任务的人工语义标注和视觉跟踪，不固定为八个方块角点。
-
-上述数字是固定版本公开配置，并非断言所有论文实验使用同一训练步数。模型、归一化和控制器不应用此前历史补丁；采集、转换和训练配置包含上述明确记录的单传感器与双相机变更。公开代码中的错误/论文差异需逐项记录。
-
-## 采集后如何处理
-
-所有命令从 项目根目录 运行。选择 `both-raw` 同时录两种格式；操作、频率、字段和起止规则统一见 [采集说明](PICK_CUBE_ZH.md)。
-
-线材场景已接入 `teleop --task cable --record-format both-raw --ideal`，使用形变＋磁偶极子输出，数据单独写入 `visk/raw/cable` 与 `ftf-robot/extracted_data/cable`。本页已有转换命令和工作目录仍针对 `pick_cube`，不能直接当作线材配置使用；后续须准备任务名 `cable` 的独立工作目录，FTF 物体点依据线材任务视觉标注确定。已接通原始录制，不表示线材策略已训练或布线成功率已验证。
-
-**ViSk**：双相机需要新建工作目录；旧四相机工作目录保留。
+以下是以后训练用的命令，本次**不启动训练**：
 
 ```bash
-.venv/bin/python -m wowskin_lab official prepare visk \
-  --workspace outputs/official/visk-two-camera \
-  --data-root data/official_two_camera/visk --task pick_cube
-.venv/bin/python -m wowskin_lab official process-visk-sim \
-  --workspace outputs/official/visk-two-camera
+.venv-reduced/bin/python scripts/train_visk_mac.py \
+  --workspace data/exports/visk_cube/workspace \
+  --output outputs/training/visk_cube_three_view --steps 10000 --save-every 3000
 ```
 
-输出 `data/official_two_camera/visk/processed_data_pkl_aa/pick_cube.pkl`，并检查原版加载器输入：两路 `[1,3,128,128]` 图像、`sensor0=[1,15]`、`actions=[1,10,7]`。原版转换器负责 BGR 色序、128px 缩放和统计量。原 XArm 预处理依靠位姿完全相等推断暂停；仿真桥接仅改用录制起止事件切段，不伪造静止位姿。已扣/未扣基线不能混用。
+默认 MPS、batch 256、subsample 5、动作块 10。调用原 `WorkspaceIL.train()` / `BCAgent.update()`；Mac 运行差异写入 `status.json`：不支持的 MPS 运算走 PyTorch CPU fallback，float64 在传入 MPS 前转为原 update 要求的 float32，DataLoader 默认单进程。它们不保证与官方 CUDA 位级一致。按原循环零起始步号，`3000.pt` 在第 3001 次更新后保存；另存最后更新完成的 `10000.pt`。TensorBoard／CSV 与 checkpoint 频率独立。
 
-现有处理结果不覆盖。新批次可用新的 `data-root/workspace`，通过 `--raw-root` 指向原始目录。训练命令在对应工作目录的 `COMMANDS.md`；Mac 支持范围见本文开头。PickCube 是本项目任务，方向噪声、实物任务和成绩尚未复现。
+## ViSk MuJoCo 实时闭环
 
-**FTF 机器人分支**：先对齐，再产生供标注的初始图像 PKL。
+训练完成后：
 
 ```bash
-.venv/bin/python -m wowskin_lab official process-ftf-robot \
-  --data-root data/official_two_camera/ftf-robot --task pick_cube
-.venv/bin/python -m wowskin_lab official convert-ftf-robot-initial \
-  --data-root data/official_two_camera/ftf-robot --task pick_cube \
-  --calib-path data/official_two_camera/ftf-robot/extracted_data/pick_cube/demonstration_0/sim_camera_calibration.npy
+.venv-reduced/bin/mjpython scripts/eval_visk_sim.py \
+  --training outputs/training/visk_cube_three_view \
+  --checkpoint outputs/training/visk_cube_three_view/snapshot/10000.pt \
+  --output outputs/evaluation/visk_cube_three_view_01 --viewer
 ```
 
-第一步运行原版 `process_data_robot.py` 生成 MP4/CSV；第二步运行原版 `convert_to_pkl_robot.py`，不加 `--process_points`。输出位于 `processed_data_pkl/expert_demos/franka_env/pick_cube.pkl`，**目录叫 expert_demos 也不代表已能训练**；同名 `.initial_conversion.json` 记录 `training_ready=false`。包装入口只补建目录、检查长度/有限值、阻止追加。
+执行原版 `WorkspaceIL.eval()`、`BCAgent.act()`、checkpoint 归一化和时间聚合。每次从实时三路图像与触觉产生一个 7 维动作，再分摊到 100 Hz 控制周期，持续累积运动目标。零增量保持目标，不在每次推理时丢弃尚未跟上的位移。反馈开度不覆盖预测的夹爪命令；底层限幅、实际执行量和评分写入结果。原训练片段不参与闭环回放。
 
-## FTF 点标注与自动跟踪
+读取采集元数据中的物理／控制配置；评估和采集共用任务成功判定。显示用独立 MuJoCo data，窗口 reset 不改写运行中的策略物理状态。目前支持 cube 和喂食闭环；线材策略执行入口尚未接入。旧错误夹爪标签的模型不能通过更换接口变成正确模型；新采集仍需要新训练和独立测试。控制器对照能完成动作不等于策略学会任务。
 
-这是两个独立步骤：**Notebook 人工选起点 → Python 脚本自动跟踪视频 → 检查轨迹 → 最终 PKL**。机器人分支九个参考点使用官方位姿几何；物体点数由语义标注决定，不固定为八个方块角点。
+接口回归覆盖：官方转换器／加载器保留实测夹爪状态并使用真实指令作为标签、旋转基座下的坐标转换、增量跨控制周期只执行一次、跟踪滞后和零增量时保留累计目标，以及显示窗口 reset 不修改真实物理状态。`tests/unit/test_visk_action_transport.py` 与 `tests/official/test_visk_command_labels.py` 共 4 项测试已于 2026-10-11 通过；它们不验证新三相机策略成功率，也不证明本地部署频率等同论文。
 
-### 第一步：在 Mac 打开 notebook 标注
+## FTF：机器人记录到视觉点轨迹
 
-本机已有两段自动采集示范，以下文件都真实存在：
+FTF 使用**稀疏三维关键点轨迹＋触觉接触历史**，不是稠密点云。机器人参考点由官方位姿几何构造；物体点来自人工标注和视觉跟踪，点数取决于任务，不能固定成“17 个点”。15 路触觉完整保留，官方机器人转换器取首个芯片扣基线后的 XYZ 范数作为标量接触量，不是牛顿力。
 
-- [对齐后双目视频和状态](../data/automated/flow_check_20261009/ftf-robot/processed_data/pick_cube)。
-- [初始 PKL](../data/automated/flow_check_20261009/ftf-robot/processed_data_pkl/expert_demos/franka_env/pick_cube.pkl)，约 944 MiB，因为包含两路完整图像序列。
-- [官方标注 notebook 工作副本](../outputs/official/ftf-annotation-20261009/label_points.ipynb)，只填了任务与路径，原始算法单元未改。
+FTF 从同一份记录中选择固定相机 1、2，腕部数据仍留在公共数据集。深度不自动替代其原版双目三角化。
 
 ```bash
-cd WowSkin-Lab
-.venv/bin/jupyter notebook outputs/official/ftf-annotation-20261009/label_points.ipynb
+.venv-reduced/bin/python -m wowskin_lab dataset-export data/episodes/pick_cube --format ftf --output data/exports/ftf_cube
+.venv-reduced/bin/python -m wowskin_lab official process-ftf-robot \
+  --data-root data/exports/ftf_cube --task pick_cube
+.venv-reduced/bin/python -m wowskin_lab official convert-ftf-robot-initial \
+  --data-root data/exports/ftf_cube --task pick_cube \
+  --calib-path data/exports/ftf_cube/extracted_data/pick_cube/demonstration_0/sim_camera_calibration.npy
+.venv-reduced/bin/python -m wowskin_lab official prepare-ftf-annotation \
+  --data-root data/exports/ftf_cube --task pick_cube --output data/exports/ftf_cube/annotation
+.venv-reduced/bin/python -m notebook data/exports/ftf_cube/annotation/label_points.ipynb
 ```
 
-1. 顺序运行单元，保持 `traj_idx=0`、`original_bgr=True`、`size_multiplier=1`。
-2. 最后一个单元先设 `pixel_key="pixels1"`，在图上点击语义明确的物体点，按 Save Points。
-3. 改为 `pixel_key="pixels2"`，重新运行最后一个单元，按**同一物理点、同一顺序**点击并保存。两侧都必须可辨认，不能把遮挡位置随意猜成对应点。
-4. 保存到 `data/automated/flow_check_20261009/ftf-robot/coordinates/pick_cube/`：`images/pixels1.png`、`pixels2.png`，以及 `coords/pixels1_objects.pkl`、`pixels2_objects.pkl`。坐标为 `[(0,x,y), ...]`，0 表示首帧。原注释建议每视角最多 10 点；点数必须与任务配置一致。
+预处理使用固定版本 `process_data_robot.py`、`convert_to_pkl_robot.py`。初始 PKL 只供标注，`training_ready=false`。短到未离开初始位姿的记录可能被官方预处理丢弃，不修改它的时间戳或姿态让其通过。
 
-通常每个任务标一个参考示范的首帧，不必逐帧手点。当前只检查了 notebook 能执行，**没有完成上述人工标注**。新数据可用 `official prepare-ftf-annotation --data-root ROOT --task TASK --output NEW_DIR` 生成副本；依赖在 `requirements-annotation.txt`。
+接下来必须完成：
 
-### 第二步：在 CUDA 环境自动跟踪
+1. notebook 在两视角首帧按同一物理点、同一顺序标注并保存。
+2. CUDA 上用官方 DIFT 匹配各段起点、CoTracker 跟踪、双目三角化恢复三维轨迹；运行转换器 `--process_points`。先移走初始 PKL，避免原脚本追加混入未跟踪数据。
+3. 检查轨迹、点数配置及官方机器人参考点与本地 TCP 配准。
+4. 机器人分支运行 `train.py agent=p3po suite=p3po dataloader=p3po`，之后对接官方触觉反馈控制。
 
-准备原版权重、任务配置、双目标定和 TCP 配准，将标注目录放入官方工作目录 `source/coordinates/pick_cube/`。运行该工作目录 `COMMANDS.md` 的 `track` 命令，即原版转换器加 `--process_points`。
+Mac 可做导出、视频预处理、初始 PKL 与标注。固定版本 DIFT/CoTracker 路径直接依赖 CUDA/xformers，当前 Mac 尚未跑完视觉处理，也未验证 FTF MuJoCo 策略闭环。不会用仿真物体真值、八个角点或简化跟踪器代替官方视觉流程。自建任务需准备点数一致的 YAML，用 `official prepare ftf-robot --task-config PATH.yaml` 生成可审查工作目录，命令见其 `COMMANDS.md`。
 
-- **DIFT**：将参考图上的点匹配到各段示范首帧。
-- **CoTracker**：跟踪这些点在后续帧中的二维位置。
-- **双目三角化**：用内外参恢复三维物体轨迹，检查跟踪视频后再训练。
+## FTF 人手示范分支
 
-当前固定版 [correspondence.py](../third_party/official/feel-the-force/point_policy/point_utils/correspondence.py) 调用 `.cuda()`，DIFT 启用 xformers。不能只把 notebook 打开或配置 `device=cpu` 就认为整条流水线可在 Mac 运行。[原版 PointsClass](../third_party/official/feel-the-force/point_policy/point_utils/points_class.py)
-
-**运行跟踪前先归档同路径的初始 PKL**：原版检测到已有文件会追加，否则会混入未跟踪记录。人手主线还需要 MediaPipe 和 `convert_pkl_human_to_robot.py`，机器人示教不替代此步骤。
-
-截至本次核对，官方未找到可直接下载的完整 FTF 同步示教数据包/预训练任务策略；官网展示视频不能替代触觉、标定和时间戳。CoTracker 自带 [apple 示例视频](../third_party/official/feel-the-force/co-tracker/gradio_demo/videos/apple.mp4)可看组件格式，但不是 FTF 示教。
-
-## FTF 方法与分支
-
-FTF 用历史点轨迹与接触状态，经 MLP/Transformer 行为克隆预测未来运动和目标接触强度。执行时机器人跟踪运动，夹爪根据目标与实测触觉误差调节闭合。原版机器人转换器使用起始五帧均值作基线，取首个磁力计 XYZ 差的模长；不是三维牛顿力回归。[论文 §3](https://arxiv.org/html/2506.01944v1#S3)
-
-论文称接触反馈为 PD 控制，固定版 `force_step` 可见按误差比例更新；增益与信号尺度/频率相关，当前尚未移植并验证。未使用的 `sensor_history` 解析硬编码为 30 通道，输出接触量只取前三路；这些公开实现差异仍按原样记录。原版源码公开，固定版本根目录未找到 LICENSE，不替作者宣称 MIT 等许可。
-
-## FTF 人类视频到底怎么录
-
-[论文 §3.1–3.2](https://arxiv.org/html/2506.01944v1#S3) 中，人佩戴拇指掌侧带 AnySkin 的手套，直接完成抓取等任务；两台固定、标定过的相机拍摄手和物体，同时经 USB 记录触觉。论文描述视频 30 fps、触觉原始 200 fps，再按时间对齐。视频不是后期展示录像，也不能替代同步触觉。
-
-**人手和机器人两条路线共用 Franka-Teach 的记录器，不只用于机器人遥操作。** 本地源码：
-
-- [teleop.py](../third_party/official/feel-the-force/Franka-Teach/teleop.py)：`teleop_mode=human` / `robot` 分支。
-- [teleoperator.py](../third_party/official/feel-the-force/Franka-Teach/frankateach/teleoperator.py)：human 模式采集期间不把手柄位姿发给机器人运动控制；按钮 A/B 更新 `start_teleop`，用于后处理截取示范。启动时仍有机器人 reset/offset 调用，并持续请求机器人状态，因此公开入口依赖机器人服务，不能称为独立录像工具。
-- [camera_server.py](../third_party/official/feel-the-force/Franka-Teach/camera_server.py)：发布双相机图像；官方 camera.yaml 为 640×480、30 fps。
-- [reskin_server.py](../third_party/official/feel-the-force/Franka-Teach/reskin_server.py)：固定子模块实际的触觉服务入口（主仓库 README 写成 reskin.py）。
-- [collect_data.py](../third_party/official/feel-the-force/Franka-Teach/collect_data.py) → [DataCollector](../third_party/official/feel-the-force/Franka-Teach/frankateach/data_collector.py)：接收图像、状态、触觉并存盘。
-
-在官方服务、VR、相机和串口均配置完成后，其人手采集命令是：
+人佩戴触觉手套直接操作物体，双相机＋同步触觉记录；不需要用机器人遥操作来替代人的动作。公开 Franka-Teach 同时提供 human/robot 模式：
 
 ```bash
-# 在 Franka-Teach 目录，两个终端分别运行；这些服务尚未在本机接通。
+# 在官方 Franka-Teach 目录，且已接好它依赖的机器人／相机／触觉服务
 python teleop.py teleop_mode=human
 python collect_data.py collect_img=true collect_state=true collect_reskin=true demo_num=0
 ```
 
-每段输出 `cam_1_rgb_video.avi`、`cam_2_rgb_video.avi`，各自的 `.metadata` 保存时间戳；`reskin_sensor_values.h5` 保存 `timestamp`、`sensor_values`、`sensor_history`；另有 `states.pkl`、`commanded_states.pkl`，状态包含示范起止标记。`DataCollector` 的写入从进程启动持续到停止，VR 起止标志供预处理裁剪，不等于按一下按钮就关闭视频文件。
+输出 AVI／时间戳、触觉 H5、`states.pkl` 和 `commanded_states.pkl`。公开 human 入口仍调用机器人 reset／状态服务，当前没有在本机接好独立人手采集，不能称为已完成。
 
-之后：MediaPipe 从两路视频检测手部关键点，双目三角化获得三维位置；物体点经人工初始标注、DIFT 对应和 CoTracker 跟踪；最后将手指运动映射为机器人参考点并与触觉对齐。输入是**视频＋同步触觉＋时间/标定信息**，训练 PKL 是这些处理的产物。
+后续原流程：`process_data_human.py` → `convert_to_pkl_human.py` → 标注／跟踪（`--process_points --smooth_tracks`）→ `convert_pkl_human_to_robot.py --smooth_robot_tracks` → `train.py agent=point_policy suite=point_policy dataloader=point_policy`。人手三维运动还需 MediaPipe 和手部到机器人的映射。仿真 Franka 记录只覆盖机器人分支，不能作为人手示范。
 
-已发现的公开版本差异：论文写触觉 200 fps，但固定 Franka-Teach 触觉发布器使用 `FrequencyTimer(100)`；README 的 `num_mags=5` 示例与子模块配置默认 10 不同。需要依据实际接入通道和时间戳核对，不能隐藏这些差异。
+## 来源与检查
 
-## 准备可审查的官方工作目录
+### 当前验证与尚未接入的功能
 
-`official prepare` 复制固定版本上游代码，填写路径/任务配置；ViSk 默认另外应用上面三行论文单传感器配置，逐文件记录 SHA256 和变更理由。不会训练、打开机器人连接、编造数据或自动执行步骤。
+录制回归覆盖多段追加、三视角 RGB-D、状态／指令与时间对齐、并发写入保护、最终验证失败保留原始媒体并阻止后续追加。Pico 的佩戴／对面模式、重连、方向和共享 LeRobot 录制也有测试；本次没有连接头显，未重新做硬件验收。测试命令见 README。
+
+保存提交已修复：最终媒体校验和元数据更新都完成后才清除 `INCOMPLETE`，失败时保留恢复文件。不自动丢帧或把未验证 episode 标为可用。
+
+需要修复／接入的事项：
+
+- 采集追加签名比较配置值，但没有模型资产内容及控制／评分代码版本。只改变资产或实现、不改变配置时，仍可能混合不同环境的数据；应保存并比较相关版本／摘要。已有成功条件配置值在 signature 中，不能说完全没有校验评分配置。
+- 米制夹爪反馈／目标和七关节下发目标尚未接入；需同步升级 raw、LeRobot、算法导出、推理反变换和 schema，不能只改字段名，也不能把实测 qvel 当速度指令。
+- 当前 raw 的 `command_7d` 来自已处理的 `row['action']`；未独立记录原始输入请求及每次裁剪／重锚事件。虽然配置和实际指令已保留，仍不足以逐次还原输入被改变了多少，应补全审计字段。
+- ViSk 当前 6 Hz 与论文 10 Hz 的时序差异仍未解决；需联合检查标签时间间隔和部署时钟。线材 ViSk 闭环仍未接入，新三相机策略未训练。FTF 视觉跟踪与完整闭环未验证。
+- Robotiq 喂食已接入源连杆初始关节、实际指腹中点放勺和 EBiM 接触预紧初始化，保留三路相机；连续夹爪目标仍按实际下发值保存。预紧只用于 reset，不钳制后续策略／遥操作指令；再次全闭合与复杂线材接触的稳定性仍未解决。cube／喂食的 Panda 默认 Menagerie 伺服，线材的 Panda 默认 robosuite 伺服，Robotiq 保留 EBiM 转轴伺服，不能声称所有任务控制器参数相同。
+- 当前默认拟合偶极子的幅值系数来自旧网格和 Pollen 伪标签分布；48 点降阶网格、方块和勺子的响应仍缺独立验证，不能称为真机标定。材料／接触数值参数及网络局限见[模型与标定](MODEL_CALIBRATION_ZH.md)。
+
+控制限制的开启／关闭影响也记录在该文档；删除局部高度截断、冻结／补零不代表取消全部限制。后续修改应保留原始反馈、原始请求和实际下发命令，明确记录裁剪／重锚事件；旧 schema 不与新数据静默混用。
+
+### π0.5 / NeoSim：采集协议核对（2026-10-11）
+
+以下是源码核对与后续接入要求，**没有修改当前录制协议，也没有启动训练**。π0.5 是策略模型，不规定所有机器人必须使用同一种夹爪单位或动作空间。
+
+- **OpenPI 的 DROID 自定义数据示例**：原始 `trajectory.h5`＋各相机 MP4＋语言注释，经转换写成 LeRobot。示例保存两路外部 RGB 与一路腕部 RGB、7 维实测关节位置、1 维夹爪状态、8 维动作及任务文字，15 Hz；图像 feature 声明为 `image`，不能把它描述成必须使用 MP4 的 LeRobot 写法。动作来自 `action/joint_velocity`＋`action/gripper_position`，不是实测关节速度。固定版本：[转换脚本](https://github.com/Physical-Intelligence/openpi/blob/215abfb217dbac7d5f1273282331b9b1866c0479/examples/droid/convert_droid_data_to_lerobot.py)。
+- **DROID 夹爪是归一化宽度**：`g = 1 - width / max_width`，0 开、1 闭；下发时转换回 `target_width = max_width * (1-g)`。[DROID 驱动](https://github.com/droid-dataset/droid/blob/main/droid/franka/robot.py)。本项目当前是驱动关节行程比例，尤其 Robotiq 转轴角度的比例不能直接声称等于 DROID 的宽度比例。
+- **保存三视角不等于模型使用三视角**：原 π0.5-DROID 输入适配实际启用一路外部 RGB＋腕部 RGB，以及关节／夹爪状态和语言；不读取 AnySkin 15 路磁场或深度。[输入适配](https://github.com/Physical-Intelligence/openpi/blob/215abfb217dbac7d5f1273282331b9b1866c0479/src/openpi/policies/droid_policy.py)。部署示例还将预测的夹爪目标按 0.5 二值化；这属于其部署代码，不是 LeRobot 格式要求，不应在本项目中隐式照搬。[部署示例](https://github.com/Physical-Intelligence/openpi/blob/215abfb217dbac7d5f1273282331b9b1866c0479/examples/droid/main.py)。
+- **仿真可采用官方关节位置训练分支**：OpenPI 的完整 DROID 微调示例使用 RLDS，动作取下发的关节位置目标，训练时前七维转为相对关节位置，输出时还原；夹爪保持绝对目标。该分支与预训练 π0.5-DROID 的关节速度接口不同，不能直接替换原 checkpoint 的执行语义。自有小数据集用 LeRobot 时，需要明确配置同等的动作转换，而非直接运行默认速度版配置。[训练说明](https://github.com/Physical-Intelligence/openpi/blob/215abfb217dbac7d5f1273282331b9b1866c0479/examples/droid/README_train.md)、[配置](https://github.com/Physical-Intelligence/openpi/blob/215abfb217dbac7d5f1273282331b9b1866c0479/src/openpi/training/config.py)。
+- **NeoSim 原始数据**：公开代码位于 `neoteai/N0-Foundation/neosim`，核对版本 `ad2d9b1ead7274391b348641e9abf38167e04f1e`。脚本策略＋cuRobo 按 seed 自动采集；每条演示保存 `hdf5/<seed>.hdf5`，另外保存拼接预览 `video/<seed>.mp4`、metadata 和成功记录。HDF5 含相机、机器人关节／末端位姿、触觉等；RGB 在 HDF5 中编码为 JPEG 字节，预览视频不是唯一图像来源。[采集说明](https://github.com/neoteai/N0-Foundation/blob/ad2d9b1ead7274391b348641e9abf38167e04f1e/neosim/docs/Collection.md)、[保存实现](https://github.com/neoteai/N0-Foundation/blob/ad2d9b1ead7274391b348641e9abf38167e04f1e/neosim/envs/utils/data.py)。
+- **NeoSim 夹爪与标签**：Franka 原始 joint 是七个臂关节＋两个手指关节，单臂 ACT 转换选前八维；最后一维是一个手指的直线关节位置（米），不是两指总间距。ACT 转换取 `q[t]` 作 state、`q[t+1]` 作 action。π0.5 单臂客户端也使用七关节＋一个手指位置，下发关节位置目标。不能把该 ACT 标签做法当成 OpenPI 的指令记录方法，或直接替代本项目的夹持指令。[ACT 转换](https://github.com/neoteai/N0-Foundation/blob/ad2d9b1ead7274391b348641e9abf38167e04f1e/neosim/policy/ACT/process_data.py)、[单臂部署](https://github.com/neoteai/N0-Foundation/blob/ad2d9b1ead7274391b348641e9abf38167e04f1e/neosim/eval/eval_pi05_single_joint_cl.py)。
+
+当前接入缺口：本项目已保存三相机、instruction、实测七关节位置／速度、TCP 状态／指令、夹爪状态／指令、深度和磁场；**没有独立记录实际下发的七关节位置目标／DROID 语义的速度指令，也没有保存与真机驱动同义的夹爪反馈宽度与目标宽度（米）**。宽度约定见本文开头，不要求硅胶接触面间距。当前 7 维 TCP `action` 不能改个字段名就作为 DROID 的 8 维关节动作。建议保留公共 LeRobot＋100 Hz raw，补全实际关节命令与驱动反馈宽度，再分别导出 ViSk、FTF、OpenPI；旧数据不伪造缺失命令。这些额外字段尚未接入；当前 cube / ViSk 流程仍使用上述 TCP 与连续夹爪指令，未偷偷更换协议。
+
+固定参考源码：
+
+- [ViSk 项目](https://visuoskin.github.io/)；本地 `third_party/official/visuoskin`，提交 `66519d2ffc09df7df33f1f0807c88f29f849be23`。
+- [FTF 项目](https://feel-the-force-ftf.github.io/)；本地 `third_party/official/feel-the-force`，提交 `954830f94e59e47c1668ad41c36b52626da975d0`；保留子模块固定版本。
 
 ```bash
-.venv/bin/python -m wowskin_lab official prepare visk   --workspace outputs/official/visk-two-camera --data-root data/official_two_camera/visk --task pick_cube
-
-# pick_bread 是官方配置文件名；其真实数据名由 YAML 读取，不被擅自改名。
-.venv/bin/python -m wowskin_lab official prepare ftf-robot   --workspace outputs/official/ftf-robot-two-camera --data-root data/official_two_camera/ftf-robot --task pick_bread
-.venv/bin/python -m wowskin_lab official prepare ftf-human   --workspace outputs/official/ftf-human-two-camera --data-root data/official_two_camera/ftf-human --task pick_bread
+.venv-reduced/bin/python -m wowskin_lab official status
+.venv-reduced/bin/python -m wowskin_lab official verify data/exports/visk_cube/workspace
+.venv-reduced/bin/python -m wowskin_lab dataset-check data/episodes/pick_cube/lerobot
 ```
 
-这些是**配置准备示例，数据尚不存在，不表示这些任务已复现**。自建任务使用 `--task-config PATH.yaml`，物体点数必须与实际语义标注一致；没有自动把 PickCube 当成官方任务。
+W&B 可在以后训练时独立同步指标：`scripts/watch_visk_wandb.py TRAINING_DIR --online --project WowSkin-Lab --entity YOUR_WORKSPACE`，只同步 loss、步数、耗时和配置，不上传视频／数据／权重。
 
-每个工作目录的 `COMMANDS.md` 列出采集/预处理/训练/推理命令及前置条件；`manifest.json` 记录来源。推理命令仍是官方真实机器人接口，MuJoCo 后端尚未接通。检查是否出现意外源码修改：
-
-```bash
-.venv/bin/python -m wowskin_lab official verify outputs/official/ftf-robot
-```
-
-## 官方相机布局
-
-**ViSk：4 路相机，3 台固定外部相机＋1 台夹爪相机。** [论文 III-A / 图 2](https://arxiv.org/html/2410.17246v2#S3.SS1) 写明四视角、30 Hz；图 2 左侧显示固定相机位于工作空间左右侧与上方，第四台装在夹爪附近，随末端运动。图中编号 5 是触觉，不是第五台相机。公开训练配置使用 `pixels1`、`pixels2`、`pixels51`、`pixels52`，这些是数据键，不是图中标号。
-
-**FTF：2 台固定、经过标定的 RealSense。** [论文 §3.1 / §3.2.1](https://arxiv.org/html/2506.01944v1#S3.SS1) 描述两台相机从不同视角拍摄手和操作物体，利用双视角三角化恢复三维点。人手采集与机器人部署沿用同一相机设置；没有腕部相机。论文正文没有给出可直接照抄的 XYZ / RPY 安装坐标，不能自行指定前方/侧方为作者精确布局。
-
-**本地仿真：** 按当前用户配置只保留 `lab_front`、`lab_side` 两台固定相机；ViSk 和 FTF 使用同一对相机、相同内外参与 30 Hz 采样时钟。不再录制顶部或腕部相机。ViSk 相机数量与论文四视角不同；其他策略、损失和动作配置保留。`published-default` 保留原四视角配置用于对照，不用于当前双相机采集。定义在 [cameras.py](../wowskin_lab/data/cameras.py)。
-
-新数据写入 `data/official_two_camera/`，旧 `data/official/` 和工作目录保持原样。ViSk 原始格式升级为 `visk_mujoco_raw_v2`；处理器检查相机 ID 为 `[1, 2]`，拒绝把旧四视角记录混入新数据。
-
-## 四路配置存档与 FTF 扩展
-
-[configs/cameras.json](../configs/cameras.json) 保存 `two_fixed` 和 `previous_four_view`。此前四路是 `pixels1`、`pixels2`、`pixels51`、`pixels52`：前两个固定斜视角、固定顶部视角、随夹爪移动的腕部视角。文件记录 ID、父坐标系、米单位位置、朝向目标、视场角、640×480 分辨率、30 Hz、内参生成规则及喂食场景的位置覆盖。腕部相机朝向相对 TCP 定义，世界外参必须逐帧更新。这是本地仿真配置，并非论文精确外参。
-
-当前采集默认仍为 `two_fixed`。四路配置供预览和后续扩展使用；`.venv/bin/python scripts/preview_cameras.py` 从该配置生成对照图，不能把它当作四路 FTF 已接通。
-
-FTF 的 `convert_to_pkl_human.py` 有 `--camera` 多 ID 参数，`utils.triangulate_points` 支持两个以上视角。原版相机键映射包括 1、2、3、4、51，未包含本项目的 52；机器人转换器当前直接使用 `[1, 2]`，本地记录器也只记录 1、2。完整扩展四路还需统一记录、预处理、语义点标注/跟踪、相机键与内外参，并验证后续加载器。额外图像不会自动变成 FTF 的视觉输入；FTF 策略使用提取的三维点轨迹。
-
-四台固定相机可继续使用固定投影矩阵；此前三固定＋一腕部布局则需要让跟踪和三角化使用逐帧腕部投影矩阵，不能给移动相机套用整段不变的外参。当前未实施这一扩展，不修改原版上游 checkout。
+物理局限、本地控制参数及 Robotiq 强夹持故障见 [模型与标定](MODEL_CALIBRATION_ZH.md)。采集接口测试通过不代表触觉已真实标定，也不代表两篇论文的完整成绩已复现。

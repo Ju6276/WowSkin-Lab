@@ -14,12 +14,14 @@ import threading
 from types import SimpleNamespace
 
 import mujoco
+import h5py
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from wowskin_lab.data.cameras import CAMERAS
-from wowskin_lab.data.recording import magnetic_baseline, magnetic_metadata
+from wowskin_lab.data.cameras import CAMERAS, capture_options
+from wowskin_lab.data.recording import magnetic_baseline, magnetic_metadata, require_training_tactile
 from wowskin_lab.learning.official import verify_reference
+from wowskin_lab.data.robot_state import append_h5, camera_from_world, robot_metadata, robot_sample
 
 
 class _SimulationSubscriber:
@@ -72,6 +74,7 @@ class FTFSimRecorder:
         self.history = deque(maxlen=40)
         self.writer = None
         self.collector = None
+        self.joints = None
         self.frames, self.samples = 0, 0
         self.errors, self.workers, self.subscribers = [], [], []
 
@@ -96,6 +99,7 @@ class FTFSimRecorder:
     def _field(self):
         # Restore the baseline to the measured (filtered/noisy/delayed) delta.
         # This is a simulated raw field in uT, not a force or ADC conversion.
+        require_training_tactile(self.env)
         return (np.asarray(self.env.observation()['magnetic_ut'])+
                 magnetic_baseline(self.env)).astype(np.float32)
 
@@ -109,6 +113,7 @@ class FTFSimRecorder:
                 sub.stop()
 
     def start(self):
+        require_training_tactile(self.env)
         if self.active:
             raise RuntimeError('Finish this demonstration before starting another')
         # Fill history with actual simulation samples, never duplicated padding.
@@ -151,7 +156,8 @@ class FTFSimRecorder:
             timestamp_clock='simulation_seconds; camera metadata uses milliseconds',
             video_writer='unmodified Franka-Teach DataCollector.save_rgb; BGR XVID AVI',
             tactile='15 simulated raw magnetic channels in uT; baseline restored; NOT calibrated hardware ADC',
-            pose_reference='tactile_tcp site in MuJoCo world; xyz metres and xyzw quaternion',
+            pose_reference='tactile_tcp in robot base link0; xyz metres and xyzw quaternion',
+            joint_recording='robot_joints.h5; measured joints, base/world poses and state timestamps',
             tcp_position_in_hand_m=self.env.model.site_pos[self.env.tcp_site].tolist(),
             tcp_registration_to_original_franka='not yet validated',
             gripper='commanded closure mapped to -1=open,+1=closed, as original FrankaServer last_gripper_action',
@@ -159,8 +165,18 @@ class FTFSimRecorder:
             sensor_baseline_subtracted=False, magnetic_baseline_ut=magnetic_baseline(self.env).tolist(),
             uncalibrated=True, training_ready=False)
         self.metadata.update(magnetic_metadata(self.env))
+        self.metadata.update(robot_metadata(self.env))
         self._write_metadata()
-        self._idle_roll(20)  # Genuine preceding pause, tagged start_teleop=False.
+        try:
+            self.joints = h5py.File(path/'robot_joints.h5', 'w')
+            self.joints.attrs['robot_state_schema'] = 'robot_base_v1'
+            self.joints.attrs['arm_joint_names'] = self.metadata['arm_joint_names']
+            self.joints.attrs['arm_qpos_unit'] = 'rad'
+            self.joints.attrs['arm_qvel_unit'] = 'rad/s'
+            self._idle_roll(20)  # Genuine preceding pause, tagged start_teleop=False.
+        except BaseException as exc:
+            self.abort(str(exc))
+            raise
         print(f'FTF official raw recording: {path}', flush=True)
 
     def _write_metadata(self):
@@ -172,6 +188,7 @@ class FTFSimRecorder:
             self._capture(False)
 
     def _capture(self, start_teleop, force_camera=False):
+        require_training_tactile(self.env)
         if self.errors:
             raise RuntimeError('; '.join(self.errors))
         e, c = self.env, self.collector
@@ -180,16 +197,20 @@ class FTFSimRecorder:
             row = e.last_row or {}
             query = np.asarray(row.get('reskin_query_mm', [np.nan]*3))
             audit = dict(time_s=t, query_mm=query.tolist() if np.isfinite(query).all() else None,
-                         status=row.get('reskin_status', 'unloaded_reference_zero'),
+                         status=row.get('reskin_status', 'UNAVAILABLE:missing_response_status'),
                          input_in_training_domain=bool(row.get('reskin_in_training_domain', False)),
                          transfer_validated=False)
             with (self.writer.path/'reskin_response.jsonl').open('a') as stream:
                 stream.write(json.dumps(audit)+'\n')
         grip = float(2*e.gripper_fraction(target=True)-1)
-        state = self.State(e.data.site_xpos[e.tcp_site].copy(),
-                           Rotation.from_matrix(e.data.site_xmat[e.tcp_site].reshape(3, 3)).as_quat(),
+        robot = robot_sample(e)
+        pose, target = robot['cartesian_states'], robot['commanded_pose']
+        state = self.State(pose[:3].copy(), Rotation.from_rotvec(pose[3:]).as_quat(),
                            grip, t, start_teleop)
-        action = self.Action(e.target_xyz.copy(), Rotation.from_matrix(e.target_rotation).as_quat(), grip, False, t)
+        action = self.Action(target[:3].copy(), Rotation.from_rotvec(target[3:]).as_quat(), grip, False, t)
+        for key, value in dict(timestamp=t, start_teleop=start_teleop, **robot).items():
+            append_h5(self.joints, key, value)
+        self.joints.flush()
         field = self._field()
         self.history.append(field.copy())
         pending = [c.state_socket.send(state), c.commanded_state_socket.send(action),
@@ -202,13 +223,11 @@ class FTFSimRecorder:
             for i, sub in c.image_subscribers.items():
                 name = CAMERAS[f'pixels{i}']
                 cid = e.model.camera(name).id
-                self.renderer.update_scene(e.data, camera=name)
+                self.renderer.update_scene(e.data, camera=name, scene_option=capture_options())
                 bgr = self.renderer.render()[..., ::-1].copy()
                 pending.append(sub.send((bgr, t*1000)))
                 focal = 240/np.tan(np.deg2rad(e.model.cam_fovy[cid])/2)
-                ext = np.eye(4)
-                ext[:3, :3] = np.diag([1., -1., -1.]) @ e.data.cam_xmat[cid].reshape(3, 3).T
-                ext[:3, 3] = -ext[:3, :3] @ e.data.cam_xpos[cid]
+                ext = camera_from_world(e, cid) @ robot['world_from_base']
                 calibration[f'cam_{i}'] = dict(ext=ext, int=np.array([[focal, 0, 319.5], [0, focal, 239.5], [0, 0, 1]]),
                                                dist_coeff=np.zeros(5))
             if self.frames == 0:
@@ -254,6 +273,7 @@ class FTFSimRecorder:
                 raise RuntimeError('; '.join(self.errors) or 'Official recorder worker did not exit')
             self.metadata.update(status=status, camera_frames=self.frames, state_samples=self.samples)
             self._write_metadata()
+            self._close_joints()
             # The unmodified upstream processor filters by these name tokens.
             # Do not let failed/interrupted/unreviewed demonstrations silently
             # enter behavior cloning because it doesn't read our metadata.
@@ -278,8 +298,14 @@ class FTFSimRecorder:
                 path.rename(ignored)
             raise
         finally:
+            self._close_joints()
             self.collector = None
             self.writer = None
+
+    def _close_joints(self):
+        if self.joints is not None:
+            self.joints.close()
+            self.joints = None
 
     def close(self):
         try:
@@ -301,6 +327,7 @@ class FTFSimRecorder:
             subscriber.abort()
         for worker in self.workers:
             worker.join(timeout=1.)
+        self._close_joints()
         self.metadata.update(status='failed', error=reason, training_ready=False,
                              camera_frames=self.frames, state_samples=self.samples)
         self._write_metadata()

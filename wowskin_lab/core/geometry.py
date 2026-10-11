@@ -6,6 +6,7 @@ approximations. The same outline drives rendering AND the deformable volume.
 import json
 from wowskin_lab.paths import ROOT
 import numpy as np
+import mujoco
 
 
 def standard_mesh(width, length, bottom, top, outline_samples=48):
@@ -126,17 +127,30 @@ def standard_xml(cfg):
     # folding through themselves. They are numerical constraints, not a new
     # material law; retain the deformation validity check in magnetic_field.
     internal = 'true' if cfg.get('fem_internal_contact', False) else 'false'
+    dof = cfg.get('skin_dof', 'full')
+    if dof not in ('full', 'trilinear'):
+        raise ValueError('skin_dof must be full or trilinear')
+    if dof == 'trilinear':
+        if tuple(map(int, mujoco.__version__.split('.')[:2])) < (3, 15):
+            raise ValueError('Mounted trilinear skin requires the isolated MuJoCo 3.15 environment; use .venv-reduced/bin/mjpython')
+        # MuJoCo's official gripper_trilinear pins interpolation nodes, NOT
+        # mesh vertices. With local Z normal, these are the four lower nodes.
+        # This approximates attachment by the cap bounding-box bottom plane;
+        # the full mesh retains its original underside and inner-skirt pins.
+        pin = '<pin id="0 2 4 6"/>'
+        internal = 'false'  # MuJoCo 3.5 disallows reduced-flex self-collision.
     radius = cfg.get('fem_contact_radius_m', .00005)
     timeconst = cfg.get('fem_contact_timeconst_s', .002)
     impedance = (f' solimp="{numbers(cfg["fem_contact_solimp"])}"'
                  if 'fem_contact_solimp' in cfg else '')
-    flex = f'''<flexcomp name="skin" type="direct" dim="3"
+    internal_attr = '' if dof == 'trilinear' else f' internal="{internal}"'
+    flex = f'''<flexcomp name="skin" type="direct" dim="3" dof="{dof}"
                 point="{numbers(points)}" element="{' '.join(map(str, elements.reshape(-1)))}"
                 mass="{mass}" radius="{radius}"
                 flatskin="true" rgba="{cfg.get('skin_rgba', '.32 .27 .25 1')}">
       {pin}
       <elasticity young="{cfg['young_pa']}" poisson="{cfg['poisson']}" damping=".00001"/>
-      <contact selfcollide="none" internal="{internal}" condim="3"
+      <contact selfcollide="none"{internal_attr} condim="3"
                friction="{cfg['friction']} .005 .0001" solref="{timeconst} 1"{impedance}/>
     </flexcomp>'''
     return asset, housing, flex

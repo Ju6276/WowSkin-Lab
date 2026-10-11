@@ -1,0 +1,33 @@
+{
+  "schema": "local_feeding_delivery_v4_spoon_front",
+  "source": "Local delivery-to-mouth task definition; not EBiM scoring, clinical safety or swallowing",
+  "initial_tcp_world_m": [-1.43, -0.08, 1.34],
+  "initial_arm_joint_seed_rad": [0.31615919, 0.48221492, -0.53350819, -2.06995840, -0.55047351, 1.11820148, 1.84898029],
+  "initial_grasp_spoon_m": [-0.020, 0.0, 0.006539],
+  "mouth_center_head_m": [0.0, -0.0808337358, -0.0004],
+  "target_offset_outside_lips_m": 0.012,
+  "target_ellipsoid_radii_m": [0.018, 0.012, 0.012],
+  "bowl_center_spoon_m": [0.042, 0.0, 0.0],
+  "delivery_point_spoon_m": [0.060731, 0.0, 0.0007],
+  "delivery_part_bounds_spoon_m": [[0.040731, -0.01311338, -0.0077], [0.060731, 0.01311345, 0.00126]],
+  "bean_volume_spoon": {"center_xy_m": [0.042, 0.0], "radii_xy_m": [0.023, 0.013], "z_range_m": [-0.010, 0.008]},
+  "required_beans": 6,
+  "completion_checks": ["region", "beans"],
+  "max_tilt_deg": 20.0,
+  "max_approach_angle_deg": 25.0,
+  "max_bowl_speed_m_s": 0.02,
+  "continuous_dwell_s": 0.5,
+  "require_no_head_contact": true,
+  "notes": [
+    "The local reset joint seed was obtained by IK for the configured TCP and horizontal spoon, with the palm rolled 180 degrees about the spoon axis to avoid the wrist limit. It is not a manufacturer home pose.",
+    "User-requested 20-degree tilt diagnostic reference and grasp closer to the bowl. Initial grasp moved 5 mm toward +X from x=-25 mm; z=6.539 mm is the centre of the source handle section at x=-20 mm. This only sets the initial free-body pose, with ordinary contact thereafter.",
+    "Coordinates are measured in the local enlarged head / original spoon frames.",
+    "Mouth centre is the front head_skin.obj surface at head-local x=0, z=-0.4 mm (scale 1.5). The target's face-side edge touches this lip plane; it is not an oral cavity.",
+    "delivery_point_spoon_m retains the legacy front-rim point for old configurations. This version scores overlap of delivery_part_bounds_spoon_m (the front 20 mm bounding volume) with the mouth region. Bean retention and bowl speed still use the bowl.",
+    "The goal is outside the lips, because the head collision is a convex rigid proxy without an oral cavity.",
+    "Bean retention is a geometric bowl-volume test, not proof of swallowing.",
+    "Thresholds define this local task; they are not measured material or human safety parameters.",
+    "User-selected completion: the front portion of the spoon overlaps the mouth-side region, all six beans retained, continuously for 0.5 s. The front portion is an oriented bounding box of the first 20 mm of spoon_visual.obj; this is a scoring volume, not added collision geometry. Tilt, approach, speed, grasp and head contact are diagnostic metrics only.",
+    "Success is latched after all conditions continuously hold; it never moves the robot or stops recording."
+  ]
+}

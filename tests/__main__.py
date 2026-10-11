@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 import unittest
 
-GROUPS = ('unit', 'physics', 'official', 'artifacts', 'legacy')
+GROUPS = ('unit', 'physics', 'official', 'artifacts')
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

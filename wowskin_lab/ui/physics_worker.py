@@ -5,7 +5,7 @@ viewer owns a separate model/data, so sync() cannot reset or perturb live
 physics halfway through a solver step. Simulation clocks are not changed.
 """
 import copy
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 import threading
 import time
 
@@ -32,8 +32,10 @@ class PhysicsWorker:
         self._next = 0.
         self.last_operation_wall_s = 0.
         self.on_present = None
+        self.on_status = None
         self._previous_hook = getattr(env, '_viewer_progress', None)
         self._previous_run = getattr(env, '_viewer_run', None)
+        self._previous_run_io = getattr(env, '_viewer_run_io', None)
 
     @staticmethod
     def display(env):
@@ -45,6 +47,7 @@ class PhysicsWorker:
     def __enter__(self):
         self.env._viewer_progress = self.checkpoint
         self.env._viewer_run = self.run
+        self.env._viewer_run_io = self.run_io
         return self
 
     def __exit__(self, kind, value, tb):
@@ -52,6 +55,7 @@ class PhysicsWorker:
         self._pool.shutdown(wait=True)
         self.env._viewer_progress = self._previous_hook
         self.env._viewer_run = self._previous_run
+        self.env._viewer_run_io = self._previous_run_io
         return kind is ViewerInterrupted
 
     def checkpoint(self, force=False):
@@ -78,6 +82,8 @@ class PhysicsWorker:
         if changed:
             mujoco.mj_forward(self.model, self.data)
         if self.handle.is_running():
+            if hasattr(self.env, 'update_viewer_options'):
+                self.env.update_viewer_options(self.handle)
             self.handle.sync()
             if self.on_present is not None:
                 self.on_present(self.handle)
@@ -85,8 +91,11 @@ class PhysicsWorker:
     def run(self, function, *args):
         self._cancel.clear()
         if function.__name__ == 'reset' or (function.__name__ == 'key_command' and args[-1] in (ord('R'), 259)):
-            self.handle.set_texts([(mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT,
-                                   'Resetting simulation', 'Settling physical contacts | P exits')])
+            if self.on_status:
+                self.on_status(['Resetting'], ['Settling physical contacts | P exits'])
+            else:
+                self.handle.set_texts([(mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT,
+                                       'Resetting simulation', 'Settling physical contacts | P exits')])
         def work():
             started = time.perf_counter()
             try:
@@ -101,7 +110,12 @@ class PhysicsWorker:
                 if not self.handle.is_running() or ord('P') in self.keyboard.peek().commands:
                     self._cancel.set()
                 self.present()
-                self._cancel.wait(1/60) if not self._cancel.is_set() else time.sleep(.001)
+                # Wake as soon as the sample completes. A fixed 1/60 sleep
+                # otherwise throttles fast reduced physics below 100 Hz.
+                if not self._cancel.is_set():
+                    wait((future,), timeout=1/60)
+                else:
+                    time.sleep(.001)
             result = future.result()
             self.present()
             return result
@@ -115,3 +129,23 @@ class PhysicsWorker:
             if self.on_abort:
                 self.on_abort('Viewer operation interrupted or failed')
             raise
+
+    def run_io(self, function, *args):
+        """Pump the UI while saving closed files, without stepping physics.
+
+        Exit requests wait for the write to finish. No cancellation halfway
+        through a dataset commit, and no robot/reset command runs concurrently.
+        """
+        future = self._pool.submit(function, *args)
+        try:
+            while not future.done():
+                self.present()
+                wait((future,), timeout=1/30)
+            return future.result()
+        finally:
+            # Keep resources alive if presenting fails or the window closes.
+            # File errors propagate; the saved raw files remain recoverable.
+            try:
+                future.result()
+            finally:
+                self.present()

@@ -30,9 +30,9 @@ class OfficialWorkflowChecks(unittest.TestCase):
                         self.assertEqual(cfg.dataloader.bc_dataset.subsample, 5)
                         self.assertEqual(list(cfg.suite.aux_keys), ['sensor0'])
                         self.assertEqual(manifest['visk_profile'], 'paper-single')
-                        self.assertEqual(list(cfg.suite.pixel_keys), ['pixels1', 'pixels2'])
-                        self.assertEqual(manifest['camera_ids'], [1, 2])
-                        self.assertTrue((directory/'TWO_FIXED_CAMERAS.patch').is_file())
+                        self.assertEqual(list(cfg.suite.pixel_keys), ['pixels1', 'pixels2', 'pixels52'])
+                        self.assertEqual(manifest['camera_ids'], [1, 2, 52])
+                        self.assertTrue((directory/'THREE_VIEW_CAMERAS.patch').is_file())
                         self.assertTrue((directory/'PAPER_SINGLE_SENSOR.patch').is_file())
                         self.assertEqual(cfg.suite.num_train_steps, 10000)
                     else:
@@ -68,7 +68,7 @@ class OfficialWorkflowChecks(unittest.TestCase):
         result = subprocess.run([sys.executable, '-m', 'wowskin_lab', 'train-ftf', 'old.pkl'],
                                 text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('simplified pipeline has been retired', result.stderr)
+        self.assertIn('simplified pipeline has been removed', result.stderr)
 
 
 if __name__ == '__main__':

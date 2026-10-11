@@ -1,139 +1,111 @@
-"""One demonstration produces compatible data for both acquisition routes."""
+"""Shared dataset -> official exports, with real MuJoCo samples and images."""
+import hashlib
 import json
 from pathlib import Path
+import pickle
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
-import h5py
 import cv2
+import h5py
+import mujoco
 import numpy as np
+from scipy.spatial.transform import Rotation
 
+from wowskin_lab.data.dataset_export import export_dataset
 from wowskin_lab.data.learning_recording import LearningSimRecorder
-from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv
-from wowskin_lab.learning.official import process_ftf_robot
+from wowskin_lab.data.media import video_path
+from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration
+from wowskin_lab.envs.feeding import PandaFeedingEnv
+from wowskin_lab.learning.official import prepare, process_ftf_robot
+from wowskin_lab.data.visk_processing import process_visk_sim
+from wowskin_lab.paths import ROOT
 
 
+@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Run in .venv-reduced')
 class JointAcquisitionChecks(unittest.TestCase):
-    def test_spacemouse_commands_record_and_fault_aborts_without_postroll(self):
-        from unittest.mock import patch
-        from wowskin_lab.core.physics import configuration
-        from wowskin_lab.envs.cable import PandaCableEnv
-        from wowskin_lab.teleop.spacemouse import SpaceMouseController, MouseState
-        cfg = configuration()
-        cfg.update(timestep_s=.0001, noise_ut=0., drift_ut_per_s=0.)
-        controller, state = SpaceMouseController(), MouseState()
-        cfg['spacemouse'] = controller.settings()
-        env = PandaCableEnv(cfg, pollen=False)
-        with tempfile.TemporaryDirectory() as tmp, LearningSimRecorder(env,tmp,source='spacemouse') as recorder:
+    def env(self, task):
+        cfg = response_configuration(SimpleNamespace(task=task, skin_dof='trilinear', ideal=True,
+            magnetic_fit=ROOT/'configs/magnetic_fit_pollen_nonslip.json'))
+        return (PandaFeedingEnv if task == 'feeding' else PandaPickCubeTactileEnv)(cfg, pollen=False)
+
+    def test_single_dataset_joints_base_coordinates_and_both_official_routes(self):
+        for task in ('pick_cube', 'feeding'):
+            with self.subTest(task=task), tempfile.TemporaryDirectory() as tmp:
+                root, env = Path(tmp), self.env(task)
+                joints, velocities, world_positions = [], [], []
+                with LearningSimRecorder(env, root/'episodes', source='acquisition_contract_test') as recorder:
+                    recorder.start()
+                    for _ in range(240):
+                        command = env.hold_action()
+                        command[2] = .0001  # Actual >1 cm motion, as required by FTF's original pause detector.
+                        recorder.step(env.step(command)[-1])
+                        joints.append(env.data.qpos[env.arm_q].copy())
+                        velocities.append(env.data.qvel[env.arm_v].copy())
+                        world_positions.append(env.data.site_xpos[env.tcp_site].copy())
+                    path = recorder.finish('success')
+                self.assertFalse((root/'visk').exists())
+                self.assertFalse((root/'ftf-robot').exists())
+                self.assertFalse(list(path.glob('*.avi')))
+                self.assertTrue(all(video_path(path, camera).is_file() for camera in (1, 2)))
+                meta = json.loads((path/'metadata.json').read_text())
+                self.assertEqual(meta['pose_frame'], 'robot_base')
+                self.assertEqual(meta['arm_joint_names'], [f'joint{i}' for i in range(1, 8)])
+                self.assertEqual(meta['magnetic_source'], 'fitted_dipole')
+                with h5py.File(path/'measurements.h5') as f:
+                    times, poses = f['timestamp'][:], f['cartesian_states'][:]
+                    phase = f['phase'][:]
+                    np.testing.assert_array_equal(f['arm_qpos'][:][phase == 1], joints)
+                    np.testing.assert_array_equal(f['arm_qvel'][:][phase == 1], velocities)
+                    np.testing.assert_allclose(np.diff(times), .01, atol=1e-9)
+                    transforms = f['world_from_base'][:][phase == 1]
+                    reconstructed = np.einsum('nij,nj->ni', transforms[:, :3, :3], poses[phase == 1, :3])+transforms[:, :3, 3]
+                    np.testing.assert_allclose(reconstructed, world_positions, atol=1e-10)
+                    for i in (0, 100, 200):
+                        transform = f['world_from_base'][i]
+                        rbase = Rotation.from_rotvec(poses[i, 3:]).as_matrix()
+                        rworld = Rotation.from_rotvec(f['cartesian_states_world'][i, 3:]).as_matrix()
+                        np.testing.assert_allclose(transform[:3, :3] @ rbase, rworld, atol=1e-10)
+                    camera_base = f['camera_base_to_cv'][:]
+                    np.testing.assert_allclose(camera_base, f['camera_world_to_cv'][:] @ f['world_from_base'][0], atol=1e-10)
+                    if task == 'feeding':
+                        self.assertGreater(np.linalg.norm(poses[0, :3]-f['cartesian_states_world'][0, :3]), 1.)
+                originals = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in path.iterdir()}
+                ftf = export_dataset(path.parent, root/'ftf_export', 'ftf')
+                exported = Path(ftf['exported_episodes'][0])
+                with (exported/'states.pkl').open('rb') as stream:
+                    states = pickle.load(stream)
+                np.testing.assert_allclose([s.pos for s in states], poses[40:, :3])
+                np.testing.assert_allclose([s.timestamp for s in states], times[40:])
+                self.assertEqual(sum(s.start_teleop for s in states), 240)
+                calibration = np.load(exported/'sim_camera_calibration.npy', allow_pickle=True).item()
+                for cid in (1, 2):
+                    np.testing.assert_allclose(calibration[f'cam_{cid}']['ext'], camera_base[0, cid-1])
+                with h5py.File(path/'measurements.h5') as raw, h5py.File(exported/'reskin_sensor_values.h5') as tactile:
+                    np.testing.assert_allclose(tactile['sensor_values'][:], raw['sensor_states'][40:], rtol=1e-6)
+                    np.testing.assert_allclose(tactile['sensor_history'][0], raw['sensor_states'][1:41], rtol=1e-6)
+                process_ftf_robot(root/'ftf_export', task)
+                self.assertTrue((root/'ftf_export/processed_data'/task/'demonstration_0/states.csv').exists())
+                export_dataset(path.parent, root/'visk_export', 'visk')
+                if task == 'feeding':
+                    prepare('visk', root/'workspace', root/'visk_export', task)
+                    report = process_visk_sim(root/'workspace')
+                    self.assertTrue(report['validation']['dataset_loader_validated'])
+                    self.assertEqual(report['episodes'][0]['pose_frame'], 'robot_base')
+                self.assertEqual(originals, {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in path.iterdir()})
+                np.testing.assert_array_equal(env.data.warning.number, 0)
+
+    def test_abort_never_advances_physics_and_failed_episode_is_not_exported(self):
+        env = self.env('pick_cube')
+        with tempfile.TemporaryDirectory() as tmp, LearningSimRecorder(env, tmp) as recorder:
             recorder.start()
-            controller.action(env,state.sample(),135,now=1.)
-            for i in range(15):
-                state.feed([1,*np.asarray([175,0,-80,0,0,35],dtype='<i2').tobytes()],2+i*.01)
-                action=controller.action(env,state.sample(),135,now=2+i*.01)
-                recorder.step(env.step(action)[-1])
-            result=recorder.finish('success')
-            for name,filename in [('visk','metadata.json'),('ftf','simulation_metadata.json')]:
-                meta=json.loads((result[name]/filename).read_text())
-                self.assertEqual(meta['source'],'spacemouse')
-                self.assertEqual(meta['simulation_config']['spacemouse'],controller.settings())
-            with h5py.File(result['visk']/'measurements.h5') as stream:
-                self.assertEqual(stream['command_7d'].shape,(16,7))
-                self.assertTrue(np.any(stream['command_7d'][1:,3:6]))
-                self.assertEqual(stream['sensor_states'].shape,(16,15))
-            recorder.start()
-            before=env.data.time
-            with patch.object(env,'step',side_effect=AssertionError('Invalid physics must not step')):
-                failed=recorder.abort('test invalid FEM')
-            self.assertEqual(env.data.time,before)
+            before = env.data.time
+            with patch.object(env, 'step', side_effect=AssertionError('Must not step invalid physics')):
+                path = recorder.abort('deliberate acquisition failure')
+            self.assertEqual(env.data.time, before)
             self.assertFalse(recorder.active)
-            self.assertFalse(any(t.is_alive() for t in recorder.ftf.workers))
-            self.assertTrue(all('_ignore' in p.name for p in failed.values()))
-
-    def test_cable_raw_recording_keeps_task_and_magnetic_samples_separate(self):
-        from wowskin_lab.envs.cable import PandaCableEnv
-        from wowskin_lab.envs.pick_cube import save_records
-        from wowskin_lab.core.physics import configuration
-        cfg = configuration()
-        cfg.update(noise_ut=0., drift_ut_per_s=0.)
-        env = PandaCableEnv(cfg, pollen=False)
-        self.assertIsNone(env.reskin_response)
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            rows = []
-            with LearningSimRecorder(env, root, source='cable_acquisition_contract_test') as recorder:
-                recorder.start()
-                for _ in range(120):
-                    command = env.hold_action()
-                    command[:3] = [.00005, -.00005, 0.]
-                    row = env.step(command)[-1]
-                    recorder.step(row)
-                    rows.append(row)
-                result = recorder.finish('success')
-            for name,filename in [('visk','metadata.json'),('ftf','simulation_metadata.json')]:
-                self.assertEqual(result[name].parent.name,'cable')
-                meta = json.loads((result[name]/filename).read_text())
-                self.assertEqual(meta['task'],'cable')
-                self.assertNotIn('reskin_model',meta['simulation_config'])
-            with h5py.File(result['visk']/'measurements.h5') as v, h5py.File(result['ftf']/'reskin_sensor_values.h5') as f:
-                ts = v['timestamp'][1:]
-                indices = np.searchsorted(f['timestamp'][:],ts)
-                np.testing.assert_allclose(f['timestamp'][:][indices],ts,atol=1e-10)
-                np.testing.assert_allclose(f['sensor_values'][:][indices],v['sensor_states'][1:],atol=1e-4)
-                self.assertEqual(v['sensor_states'].shape,(121,15))
-                self.assertEqual(v['command_7d'].shape,(121,7))
-                self.assertFalse(any('object' in key or 'cube' in key for key in v))
-                for camera in (1,2):
-                    stream=cv2.VideoCapture(str(result['visk']/f'cam_{camera}.avi'))
-                    try:
-                        ok,frame=stream.read()
-                        self.assertTrue(ok)
-                        self.assertEqual(frame.shape,(480,640,3))
-                        self.assertEqual(int(stream.get(cv2.CAP_PROP_FRAME_COUNT)),len(v['camera_timestamp']))
-                    finally:
-                        stream.release()
-            save_records(rows,root/'diagnostic')
-            self.assertNotIn('lift_m',(root/'diagnostic/inference.csv').read_text().splitlines()[0])
-            self.assertFalse((root/'visk/raw/pick_cube').exists())
-            self.assertFalse((root/'ftf-robot/extracted_data/pick_cube').exists())
-            process_ftf_robot(root/'ftf-robot','cable')
-            self.assertTrue((root/'ftf-robot/processed_data/cable/demonstration_0/states.csv').is_file())
-            np.testing.assert_array_equal(env.data.warning.number,0)
-
-    def test_both_recordings_share_actual_samples_and_finish_without_losing_boundaries(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            env = PandaPickCubeTactileEnv(pollen=False)
-            with LearningSimRecorder(env, root, source='joint_acquisition_contract_test') as recorder:
-                recorder.start()
-                for _ in range(120):
-                    command = env.hold_action()
-                    command[:3] = [.0001, 0, .0001]
-                    recorder.step(env.step(command)[-1])
-                result = recorder.finish('success')
-                self.assertFalse(recorder.active)
-                env.reset()
-                recorder.start()
-                recorder.step(env.step(env.hold_action())[-1])
-                failed = recorder.finish('failure')
-                self.assertTrue(all(p.name.endswith('_fail') for p in failed.values()))
-            vi = json.loads((result['visk']/'metadata.json').read_text())
-            ft = json.loads((result['ftf']/'simulation_metadata.json').read_text())
-            self.assertEqual(vi['paired_recording_id'], ft['paired_recording_id'])
-            self.assertEqual(vi['simulation_config'], ft['simulation_config'])
-            self.assertEqual(vi['simulation_config'], env.cfg)
-            self.assertIn('seed', vi['simulation_config'])
-            self.assertEqual(vi['simulation_episode_id'], ft['simulation_episode_id'])
-            with h5py.File(result['visk']/'measurements.h5') as a, h5py.File(result['ftf']/'reskin_sensor_values.h5') as b:
-                # FTF has additional prefix/suffix; every actual manual step
-                # in ViSk must have one identical sample in the FTF recording.
-                vi_time, ft_time = a['timestamp'][1:], b['timestamp'][:]
-                indices = np.searchsorted(ft_time, vi_time)
-                np.testing.assert_allclose(ft_time[indices], vi_time, atol=1e-10)
-                np.testing.assert_allclose(b['sensor_values'][:][indices], a['sensor_states'][1:], atol=1e-4)
-                np.testing.assert_allclose(np.diff(ft_time), .01, atol=1e-10)
-            process_ftf_robot(root/'ftf-robot', 'pick_cube')
-            self.assertTrue((root/'ftf-robot/processed_data/pick_cube/demonstration_0/states.csv').is_file())
-
-
-if __name__ == '__main__':
-    unittest.main()
+            with self.assertRaises(ValueError):
+                export_dataset(path.parent, Path(tmp)/'export', 'ftf', [path.name])
+            self.assertFalse((Path(tmp)/'export').exists())

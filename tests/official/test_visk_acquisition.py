@@ -8,9 +8,12 @@ import unittest
 import h5py
 import numpy as np
 
-from wowskin_lab.data.visk_recording import ViSkSimRecorder
+from wowskin_lab.data.learning_recording import LearningSimRecorder
+from wowskin_lab.data.dataset_export import export_dataset
+from wowskin_lab.data.media import video_path
+from types import SimpleNamespace
 from wowskin_lab.data.visk_processing import process_visk_sim
-from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv
+from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration
 from wowskin_lab.learning.official import prepare, verify_reference, verify_workspace
 
 
@@ -18,8 +21,8 @@ class ViSkAcquisitionChecks(unittest.TestCase):
     def test_paper_single_sensor_recording_reaches_original_converter_and_loader(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            env = PandaPickCubeTactileEnv(pollen=False)
-            with ViSkSimRecorder(env, root/'data/raw/pick_cube', source='acquisition_contract_test') as recorder:
+            env = PandaPickCubeTactileEnv(response_configuration(SimpleNamespace(task='pick_cube', skin_dof='trilinear', ideal=True)), pollen=False)
+            with LearningSimRecorder(env, root/'capture', source='acquisition_contract_test') as recorder:
                 recorder.start()
                 for i in range(240):
                     command = env.hold_action()
@@ -34,20 +37,24 @@ class ViSkAcquisitionChecks(unittest.TestCase):
                 recorder.start()
                 recorder.step(env.step(env.hold_action())[-1])
                 bad = recorder.finish('failure')
-            self.assertTrue(bad.name.endswith('_fail'))
-            self.assertEqual(env.model.ncam, 2)
-            np.testing.assert_array_equal(env.model.cam_bodyid, [0, 0])
-            self.assertEqual(json.loads((good/"metadata.json").read_text())["camera_ids"], [1, 2])
+            self.assertEqual(json.loads((bad/'metadata.json').read_text())['status'], 'failure')
+            self.assertEqual(env.model.ncam, 3)
+            np.testing.assert_array_equal(env.model.cam_bodyid[:2], [0, 0])
+            self.assertNotEqual(env.model.cam_bodyid[2], 0)
+            self.assertEqual(json.loads((good/"metadata.json").read_text())["camera_ids"], [1, 2, 52])
             self.assertFalse((good/'cam_51.avi').exists())
-            self.assertFalse((good/'cam_52.avi').exists())
+            self.assertTrue(video_path(good, 52).is_file())
             with h5py.File(good/'measurements.h5') as f:
                 times = f['timestamp'][:]
-                self.assertEqual(f['sensor_states'].shape, (241, 15))
+                self.assertEqual(f['sensor_states'].shape, (len(times), 15))
+                active = np.flatnonzero(f['phase'][:] == 1)
+                self.assertEqual(len(active), 240)
                 np.testing.assert_allclose(np.diff(times), .01, atol=1e-10)
-                np.testing.assert_allclose(f['command_7d'][100], [.0001, -.0001, .0001, .0005, -.0006, .0007, .5])
-                self.assertEqual(f['camera_world_to_cv'].shape[1:], (2, 4, 4))
+                np.testing.assert_allclose(f['command_7d'][active[100]], [.0001, -.0001, .0001, .0005, -.0006, .0007, .5])
+                self.assertEqual(f['camera_world_to_cv'].shape[1:], (3, 4, 4))
                 self.assertFalse(any('object' in k or 'point' in k for k in f))
                 raw_poses, raw_tactile = f['cartesian_states'][:], f['sensor_states'][:]
+            export_dataset(root/'capture/pick_cube', root/'data', 'visk')
             workspace = root/'workspace'
             prepare('visk', workspace, root/'data', 'pick_cube')
             report = process_visk_sim(workspace)
@@ -58,7 +65,7 @@ class ViSkAcquisitionChecks(unittest.TestCase):
             self.assertEqual(report['validation']['sample_shapes']['pixels1'], [1, 3, 128, 128])
             self.assertEqual(report['validation']['sample_shapes']['pixels2'], [1, 3, 128, 128])
             self.assertNotIn('pixels51', report['validation']['sample_shapes'])
-            self.assertNotIn('pixels52', report['validation']['sample_shapes'])
+            self.assertEqual(report['validation']['sample_shapes']['pixels52'], [1, 3, 128, 128])
             self.assertEqual(report['validation']['sample_shapes']['actions'], [1, 10, 7])
             self.assertEqual(report['validation']['batch_size'], 256)
             self.assertEqual(report['validation']['subsample'], 5)

@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import secrets
+import shutil
 import subprocess
 import threading
 import time
@@ -17,6 +18,7 @@ import mujoco
 import numpy as np
 
 from wowskin_lab.paths import ROOT
+from wowskin_lab.data.cameras import capture_options
 
 
 def quaternion_matrix(xyzw):
@@ -224,17 +226,24 @@ class PicoController:
                 self.status = 'Pose jump: release right grip'
                 return env.hold_action()
         self.previous = (p.copy(), r.copy())
-        desired_p = np.clip(self.robot_p + self.scale*self.basis @ (p-self.origin_p), *WORKSPACE)
+        desired_p = self.robot_p + self.scale*self.basis @ (p-self.origin_p)
+        limited = not env.cfg.get('disable_cartesian_limits', False)
+        if limited:
+            desired_p = np.clip(desired_p, *getattr(env, 'workspace', WORKSPACE))
         desired_r = self.basis @ r @ self.origin_r.T @ self.basis.T @ self.robot_r
         # Bound motion per simulated second, and bound target lead at contact.
         actual_p = env.data.site_xpos[env.tcp_site]
         actual_r = env.data.site_xmat[env.tcp_site].reshape(3, 3)
-        env.target_xyz = np.clip(env.target_xyz, actual_p-.03, actual_p+.03)
         from wowskin_lab.envs.pick_cube import rotation_matrix
-        env.target_rotation = actual_r @ rotation_matrix(limit_vector(rotation_vector(actual_r.T @ env.target_rotation), .10))
+        if limited:
+            env.target_xyz = np.clip(env.target_xyz, actual_p-.03, actual_p+.03)
+            env.target_rotation = actual_r @ rotation_matrix(limit_vector(rotation_vector(actual_r.T @ env.target_rotation), .10))
         hz = env.cfg['sample_hz']
-        delta_p = limit_vector(desired_p-env.target_xyz, self.speed/hz)
-        delta_r = limit_vector(rotation_vector(env.target_rotation.T @ desired_r), self.angular_speed/hz)
+        delta_p = desired_p-env.target_xyz
+        delta_r = rotation_vector(env.target_rotation.T @ desired_r)
+        if limited:
+            delta_p = limit_vector(delta_p, self.speed/hz)
+            delta_r = limit_vector(delta_r, self.angular_speed/hz)
         closure = float(right['buttons'][0])
         self.status = 'Moving: right trigger closes gripper'
         return np.r_[delta_p, delta_r, closure]
@@ -316,7 +325,10 @@ class PicoBridge:
     def open_usb(self):
         adb = ROOT/'.tools/platform-tools/adb'
         if not adb.exists():
-            raise RuntimeError('Install Android platform-tools in .tools/platform-tools first')
+            installed = shutil.which('adb')
+            if not installed:
+                raise RuntimeError('Install Android Platform-Tools in .tools/platform-tools or add adb to PATH')
+            adb = Path(installed)
         result = subprocess.run([str(adb), 'devices'], capture_output=True, text=True, check=True, timeout=10)
         devices = [line.split()[0] for line in result.stdout.splitlines()[1:] if line.endswith('\tdevice')]
         if len(devices) != 1:
@@ -350,7 +362,11 @@ class PicoBridge:
         self.preview_time = time.monotonic()
         if self.renderer is None:
             self.renderer = mujoco.Renderer(env.model, height=480, width=640)
-        self.renderer.update_scene(env.data, camera=camera)
+        from types import SimpleNamespace
+        options = capture_options()
+        if hasattr(env, 'update_viewer_options') and isinstance(camera, mujoco.MjvCamera):
+            env.update_viewer_options(SimpleNamespace(cam=camera, opt=options))
+        self.renderer.update_scene(env.data, camera=camera, scene_option=options)
         buf = io.BytesIO()
         Image.fromarray(self.renderer.render()).save(buf, format='JPEG', quality=75)
         with self.mailbox.lock:

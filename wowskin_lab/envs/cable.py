@@ -15,6 +15,7 @@ import mujoco
 import numpy as np
 
 from wowskin_lab.paths import ROOT
+from wowskin_lab.envs.task_evaluation import CableClipEvaluator, task_config
 from wowskin_lab.core.physics import configuration
 from wowskin_lab.envs.pick_cube import (
     PandaPickCubeTactileEnv, pick_scene, TABLE_Z, MOTION_KEYS, ROTATE_AXES,
@@ -28,9 +29,8 @@ ASSETS = ROOT/'assets/ebim'
 CABLE_LENGTH = .38
 CABLE_COUNT = 25  # 24 capsules; original scene uses count=71 and length=3 m.
 CABLE_LAYOUTS = ('routing', 'single_clip')
-# Keep the 44.9 mm-tall pad clear of the tabletop in the downward orientation.
-# This is a Cartesian work envelope, not full collision avoidance when rotated.
-WORKSPACE = np.array([[.24, -.22, .127], [.64, .22, .40]])
+# No fixed TCP-height floor: the installed gripper must contact the actual table.
+WORKSPACE = np.array([[.24, -.22, -np.inf], [.64, .22, .40]])
 
 
 def cable_scene(cfg, layout):
@@ -40,11 +40,6 @@ def cable_scene(cfg, layout):
     root.set('model', 'WowSkin-Lab | PandaCable: single clip (EBiM)' if single_clip
              else 'WowSkin-Lab | PandaCable: EBiM fixtures')
     world, asset = root.find('worldbody'), root.find('asset')
-    # Cube preview stops at a 6 mm gap. That leaves a 7 mm cable touching
-    # only the rounded pad edge without a firm grasp. Permit a 2 mm empty
-    # gap here, still preventing the two silicone surfaces from overlapping.
-    gap = 2*(.04+mount_reference(cfg)['position_m'][1]-cfg['total_height_m'])
-    root.find(".//default[@class='finger']/joint").set('range', f'{-(gap-.002)/2} 0')
     world.remove(world.find("body[@name='cube']"))
     for geom in list(world.findall('geom')):
         if geom.get('name', '').startswith(('cell_pick_', 'cell_place_')):
@@ -103,6 +98,7 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
 
     def __init__(self, cfg=None, pollen=False):
         cfg = dict(configuration() if cfg is None else cfg)
+        cfg.setdefault('clip_success', task_config('cable'))
         self.cable_layout = cfg.setdefault('cable_layout', 'routing')
         if self.cable_layout not in CABLE_LAYOUTS:
             raise ValueError(f'Unknown cable layout: {self.cable_layout}')
@@ -111,8 +107,8 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         cfg.setdefault('scene_design', 'ebim_task1_single_arm_single_clip' if self.cable_layout == 'single_clip'
                        else 'ebim_task1_single_arm')
         # Cable edges produce large local compression/shear. Improve top
-        # tetrahedron aspect ratios and enable MuJoCo internal contacts before
-        # the 0.15 volume-validity limit is crossed. Radius is a NUMERICAL
+        # tetrahedron aspect ratios and enable MuJoCo internal contacts in the
+        # full-node model. V/V0=0.15 is only a warning, not a stop. Radius is a NUMERICAL
         # collision thickness (also affects the external contact surface), not
         # a measured silicone thickness or a change to EBiM cable parameters.
         for key, value in dict(cap_top_inner_fraction=.85, fem_internal_contact=True,
@@ -120,10 +116,12 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
                                fem_contact_solimp=[.98, .98, .001, .5, 2.]).items():
             cfg.setdefault(key, value)
         # The default 0.9/0.95 contact impedance lets thin rim tetrahedra
-        # compress below the validity limit during one-sided cable shear.
+        # compress into the warning range during one-sided cable shear.
         # This is a numerical contact constraint (internal AND external),
-        # not measured silicone stiffness. Keep the volume guard at 0.15.
+        # not measured silicone stiffness. Nonpositive volumes remain invalid.
         cfg['silicone_numerics'] = 'cable edge-contact mesh + internal constraints; material uncalibrated'
+        if cfg.get('skin_dof') == 'trilinear':
+            cfg['silicone_numerics'] = 'Trilinear reduced skin, bottom nodes pinned; material uncalibrated'
         super().__init__(cfg, pollen=pollen, xml_factory=cable_scene,
                          contact_body='wire_B_last', contact_geom=f'wire_G{CABLE_COUNT-2}', object_joint=None)
         self.contact_geoms = {self.model.geom(f'wire_G{i}').id for i in range(CABLE_COUNT-1)}
@@ -134,6 +132,35 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         self.cfg['ebim_revision'] = json.loads((ASSETS/'manifest.json').read_text())['revision']
         self.cfg['grasp_assist'] = False
         self.cfg['clip_assist'] = False
+
+    def reset(self, seed=None):
+        result = super().reset(seed)
+        m = self.model
+        radius = float(m.geom_size[m.geom('wire_G0').id, 0])
+        base, back, roof = (m.geom(name).id for name in
+                            ('cclip_0_base', 'cclip_0_backwall', 'cclip_0_hook_top'))
+        p, z = m.geom_pos, m.geom_size
+        self.clip_score = CableClipEvaluator(self.cfg['clip_success'],
+            x_bounds=[p[roof,0]-z[roof,0], p[roof,0]+z[roof,0]],
+            y_bounds=[p[roof,1]-z[roof,1]+radius, p[back,1]-z[back,1]-radius],
+            z_bounds=[p[base,2]+z[base,2]+radius, p[roof,2]-z[roof,2]-radius])
+        return result
+
+    def evaluate_clip(self):
+        ids = [self.model.geom(f'wire_G{i}').id for i in range(CABLE_COUNT-1)]
+        half = self.model.geom_size[ids, 1]
+        axis = self.data.geom_xmat[ids].reshape(-1,3,3)[:, :, 2]
+        centres = self.data.geom_xpos[ids]
+        ends = np.stack((centres-axis*half[:,None], centres+axis*half[:,None]), axis=1)
+        clip = self.model.body('cclip_0').id
+        local = (ends-self.data.xpos[clip])@self.data.xmat[clip].reshape(3,3)
+        return self.clip_score.update(float(self.data.time), local)
+
+    def evaluation_metrics(self, row=None):
+        return dict(self.clip_score.metrics)
+
+    def task_evaluation(self):
+        return self.clip_score.summary()
 
     def observation(self):
         obs = super().observation()
@@ -150,13 +177,12 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         row['cable_end_m'] = (self.data.xpos[self.probe_body] +
                               self.data.xmat[self.probe_body].reshape(3,3)[:,0]*CABLE_LENGTH/(CABLE_COUNT-1))
         row.pop('lift_m')
-        # The cube criterion is not a cable routing success condition.
-        row['success'] = self.success = False
+        row.update(self.evaluate_clip())
+        row['success'] = self.success = self.clip_score.success
         row['cable_layout'] = self.cable_layout
-        row['task_status'] = ('scene_only; insertion evaluator not implemented' if self.cable_layout == 'single_clip'
-                              else 'scene_only; routing evaluator not implemented')
+        row['task_status'] = 'clip inserted' if self.success else 'press cable under clip roof'
         self.last_row = row
-        return self.observation(), 0., False, False, row
+        return self.observation(), float(self.success), False, False, row
 
 
 def camera(close=False):
@@ -175,7 +201,7 @@ def save_run(env, rows, output, elapsed):
                   sim_time_s=float(env.data.time), wall_s=elapsed,
                   physics_warnings=env.data.warning.number.tolist(), config=env.cfg,
                   cable_length_m=CABLE_LENGTH, cable_capsules=CABLE_COUNT-1,
-                  grasp_assist=False, clip_assist=False, routing_evaluator=False,
+                  grasp_assist=False, clip_assist=False, routing_evaluator=False, task_evaluation=env.task_evaluation(),
                   caveat='ReSkin MLP line-contact transfer unvalidated; no cable depth labels in Pollen.')
     (output/'report.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps({k:v for k,v in report.items() if k != 'config'}, indent=2), flush=True)
@@ -240,7 +266,7 @@ def viewer(env, args):
                         'PandaCable\nMove / rotate\nGripper / view\nContact N\nTask status',
                         'EBiM assets | one Franka\nWASD/EQ | IK LJ UO\nX/Z | V close view | P exit\n'
                         f"{r['normal_force_n']:.3f} / {r['passive_normal_force_n']:.3f}\n"+
-                        (fault or 'Scene preview; no assist / no scoring'))])
+                        (fault or ('SUCCESS: cable in clip' if env.success else 'Press cable into clip')))])
                     hud.show(handle, r)
                 before = env.data.time
                 guard.sync(handle) if guard else handle.sync()

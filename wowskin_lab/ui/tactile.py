@@ -20,6 +20,7 @@ class TactileHUD:
         self.sim = sim
         self.panel_title = title
         self.full_scale_ut = float(full_scale_ut)
+        self.operator_panel = None
         path = Path("/System/Library/Fonts/SFNSMono.ttf")
         if not path.exists():
             import matplotlib
@@ -92,11 +93,13 @@ class TactileHUD:
         if self.reskin_mode:
             query = row.get('reskin_query_mm', [float('nan')]*3)
             diagnostics = f"{'BLOCKED' if blocked else 'PREVIEW'} | depth {query[2]:.4f} mm"
+        if row.get("mesh_quality_warning"):
+            diagnostics = "LIVE | mesh quality warning"
         draw.text((16, 493), row.get("hud_status", diagnostics), font=self.font, fill=(231, 236, 241))
         draw.text((16, 515), getattr(self, "footer", "uT, not force | uncalibrated simulation"), font=self.small, fill=(242, 196, 113))
         timing = row.get('reskin_status', '') if self.reskin_mode else f"t={row['time_s']:.2f}s | channel mapping is provisional"
-        if self.reskin_mode and row.get('reskin_status') == 'unloaded_reference_zero':
-            timing = 'No contact: defined baseline zero'
+        if self.reskin_mode and row.get('reskin_status', '').startswith('UNAVAILABLE:'):
+            timing = 'Unavailable: no unloaded/recovery model'
         elif self.reskin_mode:
             timing = 'Outside depth/XY data' if not row.get('reskin_in_training_domain') else 'XY/depth in range; contact shape unvalidated'
         draw.text((16, 534), row.get("hud_timing", timing), font=self.small, fill=(171, 187, 204))
@@ -111,28 +114,37 @@ class TactileHUD:
         viewport = handle.viewport
         if viewport is None:  # Window may close between is_running() and drawing.
             return
+        def scaled(pixels, max_width, max_height):
+            h, w = pixels.shape[:2]
+            scale = min(1., max_width/w, max_height/h)
+            width, height = max(1, round(w*scale)), max(1, round(h*scale))
+            if (width, height) != (w, h):
+                pixels = np.asarray(Image.fromarray(pixels).resize((width, height), Image.Resampling.LANCZOS))
+            return pixels, width, height
+
         pixels = self.render(row, probability)
+        pixels, width, height = scaled(pixels, viewport.width*.28, viewport.height*.48)
+        # Tactile stays at bottom left; right column is acquisition cameras only.
+        rectangle = mujoco.MjrRect(viewport.left+10, viewport.bottom+10, width, height)
+        images = [(rectangle, pixels)]
+        if self.operator_panel is not None:
+            panel, panel_w, panel_h = scaled(self.operator_panel, viewport.width*.65, viewport.height*.46)
+            images.append((mujoco.MjrRect(viewport.left+10,
+                viewport.bottom+viewport.height-panel_h-10, panel_w, panel_h), panel))
         if cameras:
-            # Stack two actual acquisition views below the tactile panel.
             thumb_height = self.width*3//4
-            panel = Image.new('RGB', (self.width, self.height+len(cameras)*(thumb_height+24)), (21,27,34))
-            panel.paste(Image.fromarray(pixels), (0,0))
+            panel = Image.new('RGB', (self.width, len(cameras)*(thumb_height+24)), (21,27,34))
             draw = ImageDraw.Draw(panel)
             for index, (label, frame) in enumerate(cameras):
-                y = self.height+index*(thumb_height+24)
+                y = index*(thumb_height+24)
                 draw.text((10,y+4), label, font=self.small, fill=(223,230,240))
                 panel.paste(Image.fromarray(frame).resize((self.width,thumb_height), Image.Resampling.LANCZOS), (0,y+24))
-            pixels = np.asarray(panel)
-        panel_height = pixels.shape[0]
-        width = int(min(self.width, viewport.width*.33, viewport.height*.96*self.width/panel_height))
-        width = max(1, width)
-        height = max(1, round(width*panel_height/self.width))
-        if (height, width) != pixels.shape[:2]:
-            pixels = np.asarray(Image.fromarray(pixels).resize((width, height), Image.Resampling.LANCZOS))
-        rectangle = mujoco.MjrRect(viewport.left+viewport.width-width-10,
-                                   viewport.bottom+viewport.height-height-10, width, height)
+            camera_pixels, width, height = scaled(np.asarray(panel), viewport.width*.30, viewport.height-20)
+            rectangle = mujoco.MjrRect(viewport.left+viewport.width-width-10,
+                                       viewport.bottom+viewport.height-height-10, width, height)
+            images.append((rectangle, camera_pixels))
         if handle.is_running():
-            handle.set_images((rectangle, pixels))
+            handle.set_images(images)
 
     def key(self, code):
         if code in (ord(","), ord(".")):

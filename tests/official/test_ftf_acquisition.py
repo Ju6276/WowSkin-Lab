@@ -4,6 +4,7 @@ from pathlib import Path
 import pickle
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 import cv2
 import h5py
@@ -11,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from wowskin_lab.data.ftf_recording import FTFSimRecorder
-from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv
+from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration
 from wowskin_lab.learning.official import (process_ftf_robot, verify_reference,
                                         convert_ftf_robot_initial, prepare_ftf_annotation)
 
@@ -20,7 +21,7 @@ class FTFAcquisitionChecks(unittest.TestCase):
     def test_real_rendered_data_passes_original_preprocessor_without_point_substitutes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            env = PandaPickCubeTactileEnv(pollen=False)
+            env = PandaPickCubeTactileEnv(response_configuration(SimpleNamespace(task='pick_cube', skin_dof='trilinear', ideal=True)), pollen=False)
             with FTFSimRecorder(env, root/'extracted_data/pick_cube', source='unit_test_acquisition_contract') as recorder:
                 recorder.start()
                 for i in range(120):

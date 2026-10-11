@@ -1,0 +1,97 @@
+{
+  "repository": "https://github.com/EBiM-Benchmark/benchmark",
+  "revision": "161db49e9eafd34be31e5bdada72d8e2f796c16a",
+  "files": {
+    "robot_ee_robotiq_arg85_visual_robotiq_base.obj": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_visual_robotiq_base.obj",
+      "sha256": "deedf430c5aa4f05495241bd96ca30187f3072ccdc35b0440a9362d647505ce8",
+      "bytes": 1574918
+    },
+    "robot_ee_robotiq_arg85_collision_robotiq_base.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_collision_robotiq_base.stl",
+      "sha256": "ede5cd7d7846c051b88645f33d6bbb5ed9b36bbef404a19a46557639bfab7060",
+      "bytes": 20084
+    },
+    "robot_ee_robotiq_arg85_visual_left_knuckle.obj": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_visual_left_knuckle.obj",
+      "sha256": "a52545542b6f16be5d7652c301b442dbf495177f8ccb7b11247064e4f7c6e6ec",
+      "bytes": 52760
+    },
+    "robot_ee_robotiq_arg85_collision_left_knuckle.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_collision_left_knuckle.stl",
+      "sha256": "b7ec787f57a7db5b2b14e64ffbedaac28739e38f14aac8afa8b575bac941feb7",
+      "bytes": 4384
+    },
+    "robot_ee_robotiq_arg85_visual_right_knuckle.obj": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_visual_right_knuckle.obj",
+      "sha256": "0ad850b64fa51981f87217b5d37fcc7f8a83167de271f5f48746dea871c63f33",
+      "bytes": 53149
+    },
+    "robot_ee_robotiq_arg85_collision_right_knuckle.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_collision_right_knuckle.stl",
+      "sha256": "d151fb38f59748f1e6e627312e2ede96f2c98ba267bf722091665b20c78e7a8d",
+      "bytes": 4384
+    },
+    "robot_ee_robotiq_arg85_visual_left_finger.obj": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_visual_left_finger.obj",
+      "sha256": "65c7bf824550e650bca8300bc1f7d5c696afb23c2fb96150ac1acb9a96f7540b",
+      "bytes": 127518
+    },
+    "robot_ee_robotiq_arg85_collision_left_finger.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_collision_left_finger.stl",
+      "sha256": "f39a50be121122fc1c53c588a762ad1da8a0f64d39bc6f299cbe9b0597e7257b",
+      "bytes": 19684
+    },
+    "robot_ee_robotiq_arg85_visual_right_finger.obj": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_visual_right_finger.obj",
+      "sha256": "ed8a1cf8ddaebe76bd1aecce13603f499b0fd680440d0e4fec13d62dbec642e0",
+      "bytes": 127761
+    },
+    "robot_ee_robotiq_arg85_collision_right_finger.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_collision_right_finger.stl",
+      "sha256": "1d018fa2f0b50aca5941778d78810b211b1abfc8637c7953451d76d4833ba6f8",
+      "bytes": 19684
+    },
+    "robot_ee_robotiq_arg85_visual_left_inner_knuckle.obj": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_visual_left_inner_knuckle.obj",
+      "sha256": "648c0e02497edb0b71b4cc873c1b2db668243cbe23841fa69e39b2ae1624a62e",
+      "bytes": 69388
+    },
+    "robot_ee_robotiq_arg85_collision_left_inner_knuckle.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_collision_left_inner_knuckle.stl",
+      "sha256": "f250a3fea49be4d1bb2383d9980172c59fc44031193ef2293ca540f756f6c1e6",
+      "bytes": 17984
+    },
+    "robot_ee_robotiq_arg85_visual_right_inner_knuckle.obj": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_visual_right_inner_knuckle.obj",
+      "sha256": "0f19ae880afbf4a752815d3856375457e3682fca222aae4693ae3e7bb06d4dc6",
+      "bytes": 70205
+    },
+    "robot_ee_robotiq_arg85_collision_right_inner_knuckle.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_collision_right_inner_knuckle.stl",
+      "sha256": "c936d951ede875b91c180bd41d45b22ae23f8a39d9c3e09e29066453a8e863ef",
+      "bytes": 17784
+    },
+    "robot_ee_robotiq_arg85_visual_left_finger_tip.obj": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_visual_left_finger_tip.obj",
+      "sha256": "a4314197a19284670e164355c7574d02737008ac25345a53e87712b41b984f04",
+      "bytes": 121430
+    },
+    "robot_ee_robotiq_arg85_collision_left_finger_tip.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_collision_left_finger_tip.stl",
+      "sha256": "9d90031cd99106a8be63609f8ff78580638d91cc4167bf66c09198329f2e65cf",
+      "bytes": 11284
+    },
+    "robot_ee_robotiq_arg85_visual_right_finger_tip.obj": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_visual_right_finger_tip.obj",
+      "sha256": "ba1a3710ec5e71fa29c1a9f18fd3e3bc0927e38b37a1967297e2c7d6e98a5052",
+      "bytes": 119877
+    },
+    "robot_ee_robotiq_arg85_collision_right_finger_tip.stl": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/assets/robot_ee_robotiq_arg85_collision_right_finger_tip.stl",
+      "sha256": "126f1559f2f7dca62449a6ca926c609fbdaa93ca66df805ff7c069bb206e3d10",
+      "bytes": 11284
+    }
+  },
+  "license": "../LICENSE"
+}

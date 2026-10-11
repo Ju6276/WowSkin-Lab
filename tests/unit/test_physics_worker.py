@@ -43,6 +43,42 @@ class Handle:
 
 
 class PhysicsWorkerTests(unittest.TestCase):
+    def test_file_write_keeps_ui_live_and_defers_exit_until_commit(self):
+        env, handle, keys = Env(), Handle(), KeyState({ord('P'), ord('B'), 257})
+        model, data = PhysicsWorker.display(env)
+        writer_threads = []
+        committed = threading.Event()
+        def write_files():
+            writer_threads.append(threading.get_ident())
+            time.sleep(.12)
+            committed.set()
+            return 'saved'
+        def request_exit():
+            if handle.count == 2:
+                for key in (ord('B'), 257, ord('P')):
+                    keys.event(key, True)
+                    keys.event(key, False)
+        handle.on_sync = request_exit
+        with PhysicsWorker(env, handle, keys, model, data) as worker:
+            self.assertEqual(env._viewer_run_io(write_files), 'saved')
+            self.assertTrue(committed.is_set())
+            self.assertEqual(env.data.time, 0.)
+            self.assertGreater(handle.count, 2)
+        self.assertNotEqual(writer_threads, [threading.get_ident()])
+        self.assertEqual(handle.threads, {threading.get_ident()})
+        keys.discard_busy_input()
+        self.assertEqual(keys.sample().commands, (ord('P'),))
+        self.assertIsNone(env._viewer_run_io)
+
+    def test_file_error_is_not_reported_as_success(self):
+        env, handle, keys = Env(), Handle(), KeyState(set())
+        model, data = PhysicsWorker.display(env)
+        def full_disk():
+            raise OSError('disk full')
+        with PhysicsWorker(env, handle, keys, model, data) as worker:
+            with self.assertRaisesRegex(OSError, 'disk full'):
+                worker.run_io(full_disk)
+
     def test_detached_view_and_identical_dynamics(self):
         expected, actual = Env(), Env()
         reference = expected.advance(40)

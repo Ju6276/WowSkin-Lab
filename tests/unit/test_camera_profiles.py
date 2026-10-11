@@ -6,11 +6,12 @@ from wowskin_lab.data.cameras import camera_profile, add_recording_cameras
 
 
 class CameraProfileChecks(unittest.TestCase):
-    def test_default_pair_is_world_fixed(self):
+    def test_default_has_two_fixed_cameras_and_one_wrist_camera(self):
         world, hand = ET.Element('worldbody'), ET.Element('body')
         add_recording_cameras(world, hand, .09)
         self.assertEqual([c.get('name') for c in world.findall('camera')], ['lab_front', 'lab_side'])
-        self.assertEqual(len(hand.findall('camera')), 0)
+        self.assertEqual([c.get('name') for c in hand.findall('camera')], ['lab_wrist'])
+        self.assertEqual([c['id'] for c in camera_profile()], [1, 2, 52])
 
     def test_four_view_restores_wrist_parent_and_tcp_relative_direction(self):
         world, hand = ET.Element('worldbody'), ET.Element('body')

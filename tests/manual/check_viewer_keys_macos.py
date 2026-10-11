@@ -81,7 +81,7 @@ def launch(*args, **kwargs):
 mujoco.viewer.launch_passive = launch
 if PICK:
     sys.argv = ['pick_cube.py','viewer','--seconds','28','--output','outputs/diagnostics/pick_gui']
-    import pick_cube
+    from wowskin_lab.envs import pick_cube
     from wowskin_lab.ui.tactile import TactileHUD
     panels = []
     original_show = TactileHUD.show
@@ -106,7 +106,7 @@ if PICK:
     print('TACTILE_PANEL_PASS',len(panels),flush=True)
 elif FRANKA:
     sys.argv = ['franka_sensor.py','viewer','--pollen','--seconds','22']
-    import franka_sensor
+    from wowskin_lab.envs import franka as franka_sensor
     readings = []
     passive_readings = []
     original_reading = franka_sensor.FrankaTactileSim.reading
@@ -124,7 +124,7 @@ elif FRANKA:
     assert passive_readings[-1][0] == 'left' and passive_readings[-1][2] < 1e-4
 else:
     sys.argv = ['run.py','viewer','--seconds','19']
-    import run
+    from wowskin_lab.tools import sensor as run
     run.main()
 faulthandler.cancel_dump_traceback_later()
 assert all(ord(c) in dispatched for c in ('VDAEQXZRF[],.' if PICK else ('PSVLADB' if FRANKA else 'PVL12345Z'))),dispatched

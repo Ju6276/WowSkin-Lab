@@ -33,6 +33,7 @@ def main():
     entries = dict([fetch(('scene_100.xml', 'task3_mujoco/scene_100.xml'))])
     source = ET.parse(DEST/'scene_100.xml').getroot()
     files = {'config.json': 'task3_mujoco/config.json', 'upstream_README.md': 'task3_mujoco/README.md',
+             'upstream_teleop.py': 'task3_mujoco/teleop.py',
              'LICENSE': 'LICENSE', 'NOTICE': 'NOTICE', 'license_notes.md': 'LICENSES/README.md'}
     for e in asset_subset(source, selected_world(source)):
         if e.get('file'):

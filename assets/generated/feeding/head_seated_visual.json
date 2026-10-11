@@ -1,0 +1,7 @@
+{
+  "source": "assets/ebim_feeding/assets/head/head_skin.obj",
+  "source_sha256": "6e01cb1c2957781ac085d515c5322419b7b4856cf340e2732fd4285bc2c80b51",
+  "output_sha256": "8054cf949af27357238191bc9c854231a879735dbbda23140e9d20162ed9b8f6",
+  "purpose": "Visual tapered neck; original face expression unchanged; collision remains the original rigid hull",
+  "swallowing_or_oral_cavity_physics": false
+}

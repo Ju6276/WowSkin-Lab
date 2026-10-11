@@ -14,6 +14,8 @@ from wowskin_lab.core.geometry import standard_xml
 
 from wowskin_lab.paths import ROOT
 CHANNELS = [f"mag{i}_{axis}" for i in range(1, 6) for axis in "xyz"]
+# Local observation-quality threshold, NOT an identified material limit.
+MESH_VOLUME_WARNING_RATIO = .15
 
 
 def configuration(seed=0, randomize=False):
@@ -174,15 +176,46 @@ class TactileSim:
         ds = np.stack([v[:, k] - v[:, 0] for k in (1, 2, 3)], axis=-1)
         deformation = ds @ self.dm_inverse
         self.min_volume_ratio = float(np.linalg.det(deformation).min())
-        if self.min_volume_ratio <= .15:
+        if not np.isfinite(self.min_volume_ratio) or self.min_volume_ratio <= 0:
             raise RuntimeError(
                 f"Magnetic silicone FEM invalid: min V/V0={self.min_volume_ratio:.3f} "
-                f"at t={self.data.time:.3f}s (limit 0.15). Physics stopped, not a gripper stop")
+                f"at t={self.data.time:.3f}s. Cannot compute a fresh magnetic observation")
         u, _, vh = np.linalg.svd(deformation)
         rotation = u @ vh
         moments = np.einsum("nij,nj->ni", rotation, self.reference_moments)
         world = dipole_field(self.sensor_xyz, v.mean(axis=1), moments)
         return np.einsum("nji,nj->ni", self.rotations, world)*self.magnetic_gains[:, None]
+
+    def tactile_quality(self):
+        v = self.skin_vertices_local()[self.tets]
+        ds = np.stack([v[:, k]-v[:, 0] for k in (1, 2, 3)], axis=-1)
+        return {'min_volume_ratio': float(np.linalg.det(ds @ self.dm_inverse).min())}
+
+    def tactile_readout(self, quality):
+        """Compute every positive-volume state; 15% is a diagnostic only.
+
+        No field clamping, display hold, skipped sample or geometry change.
+        Finite output does not establish material accuracy at large strain.
+        """
+        ratios = np.array(list(quality.values()))
+        if not np.isfinite(ratios).all() or np.any(ratios <= 0):
+            raise RuntimeError(f'Silicone mesh inverted/nonfinite at t={self.data.time:.3f}s: {quality}')
+        self.min_volume_ratio = quality['min_volume_ratio']
+        warning = bool(np.any(ratios <= MESH_VOLUME_WARNING_RATIO))
+        field = self.magnetic_field()
+        if not np.isfinite(field).all():
+            raise RuntimeError('Nonfinite magnetic field; cannot supply a measurement')
+        ideal = field-self.baseline
+        alpha = 1-np.exp(-1/self.cfg['sample_hz']/max(self.cfg['filter_tau_s'], 1e-9))
+        self.filtered += alpha*(ideal-self.filtered)
+        measured = self.filtered + self.drift_rate*(self.data.time-self.zero_time)
+        measured += self.rng.normal(0, self.cfg['noise_ut'], measured.shape)
+        self.delay.append(measured.copy())
+        output = self.delay.popleft()
+        return dict(magnetic_ut=output.reshape(15), ideal_delta_ut=ideal.reshape(15),
+                    raw_field_ut=field.reshape(15), tactile_valid=True,
+                    tactile_status='mesh quality warning; live computed signal' if warning else 'valid',
+                    mesh_quality_warning=warning, mesh_volume_warning_ratio=MESH_VOLUME_WARNING_RATIO, **quality)
 
     def controls(self):
         t = self.data.time
@@ -237,6 +270,37 @@ class TactileSim:
         self.delay.clear()
         self.delay.extend(np.zeros((5, 3)) for _ in range(self.cfg["delay_samples"]))
 
+    def flex_vertex_velocities(self, flex_id):
+        """World velocities, including reduced-node interpolation and arm motion."""
+        m, d = self.model, self.data
+        selected = flex_vertex_slice(m, flex_id)
+        positions = d.flexvert_xpos[selected]
+        if int(m.flex_interp[flex_id]) == 1:
+            start = int(m.flex_nodeadr[flex_id])
+            if int(m.flex_nodenum[flex_id]) != 8:
+                raise ValueError('Only single-cell trilinear interpolation is supported')
+            coordinates = m.flex_vert0[selected]
+            corners = np.array([[i, j, k] for i in (0, 1) for j in (0, 1) for k in (0, 1)])
+            weights = np.prod(np.where(corners[None, :, :], coordinates[:, None, :],
+                                       1-coordinates[:, None, :]), axis=2)
+            velocities = np.zeros((8, 3))
+            for i in range(8):
+                bid = int(m.flex_nodebodyid[start+i])
+                point = d.xpos[bid]+d.xmat[bid].reshape(3, 3) @ m.flex_node[start+i]
+                jac = np.zeros((3, m.nv))
+                mujoco.mj_jac(m, d, jac, None, point, bid)
+                velocities[i] = jac @ d.qvel
+            # Explicit eight-node interpolation. On this macOS NumPy build,
+            # BLAS matmul raises floating-point warnings even for finite,
+            # bounded weights/velocities; do not silence those warnings globally.
+            return np.einsum('vi,ij->vj', weights, velocities)
+        velocities = np.zeros_like(positions)
+        for i, bid in enumerate(m.flex_vertbodyid[selected]):
+            jac = np.zeros((3, m.nv))
+            mujoco.mj_jac(m, d, jac, None, positions[i], int(bid))
+            velocities[i] = jac @ d.qvel
+        return velocities
+
     def contact_state(self, flex_id=None):
         """Force-weighted tangential relative speed at actual flex contacts.
 
@@ -249,18 +313,7 @@ class TactileSim:
         selected = flex_vertex_slice(m, flex_id)
         positions = d.flexvert_xpos[selected]
         tets = self.tets if flex_id == self.skin_flex else flex_tetrahedra(m, flex_id)
-        body_ids = m.flex_vertbodyid[selected]
-        velocities = np.zeros_like(positions)
-        for i, bid in enumerate(body_ids):
-            if self.mount_body is not None:
-                # World point Jacobians include motion inherited from the arm,
-                # including the pinned vertices on a moving finger.
-                jacobian = np.zeros((3, m.nv))
-                mujoco.mj_jac(m, d, jacobian, None, positions[i], int(bid))
-                velocities[i] = jacobian @ d.qvel
-            elif m.body_dofnum[bid]:
-                adr = m.body_dofadr[bid]
-                velocities[i] = d.qvel[adr:adr+3]
+        velocities = self.flex_vertex_velocities(flex_id)
         normal_force = 0.
         weighted_speed = 0.
         force_on_probe = np.zeros(3)
@@ -319,22 +372,13 @@ class TactileSim:
             raise RuntimeError("MuJoCo instability/warning; refusing to export invalid data")
         # Make positions, velocities and contact forces refer to the same time.
         mujoco.mj_forward(self.model, self.data)
-        field = self.magnetic_field()
-        ideal = field-self.baseline
-        alpha = 1-np.exp(-1/self.cfg["sample_hz"]/max(self.cfg["filter_tau_s"], 1e-9))
-        self.filtered += alpha*(ideal-self.filtered)
-        measured = self.filtered + self.drift_rate*(self.data.time-self.zero_time)
-        measured += self.rng.normal(0, self.cfg["noise_ut"], measured.shape)
-        self.delay.append(measured.copy())
-        output = self.delay.popleft()
+        readout = self.tactile_readout(self.tactile_quality())
         result = self.contact_state()
-        result.update(time_s=float(self.data.time), magnetic_ut=output.reshape(15),
-                      ideal_delta_ut=ideal.reshape(15), raw_field_ut=field.reshape(15),
-                      probe_xyz_m=self.data.xpos[self.probe_body].copy(),
-                      min_volume_ratio=self.min_volume_ratio)
+        result.update(time_s=float(self.data.time), probe_xyz_m=self.data.xpos[self.probe_body].copy(),
+                      **readout)
         if self.magnetic_fit:
             result.update(magnetic_source='dipole_with_simulation_fitted_readout_gains',
                           magnetic_fit_validated_real=False,
-                          unfitted_ideal_delta_ut=(ideal/self.magnetic_gains[:, None]).reshape(15),
+                          unfitted_ideal_delta_ut=(readout['ideal_delta_ut'].reshape(5, 3)/self.magnetic_gains[:, None]).reshape(15),
                           magnetic_fit_gains=self.magnetic_gains.copy())
         return result

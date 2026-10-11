@@ -65,7 +65,8 @@ def build_scene(cfg, layout):
     ET.SubElement(visual, "map", znear=".005")
     # Override the inherited panda joint defaults for elastic nodes.
     tactile_default = ET.SubElement(root.find("default"), "default", {"class": "tactile"})
-    ET.SubElement(tactile_default, "joint", armature="0", damping=".002", limited="false")
+    ET.SubElement(tactile_default, "joint", armature="0",
+                  damping="0" if cfg.get('skin_dof') == 'trilinear' else ".002", limited="false")
     world = root.find("worldbody")
     ET.SubElement(world, "light", pos="0 -1 2", dir="0 0 -1", diffuse=".7 .7 .7")
     ET.SubElement(world, "geom", name="floor", type="plane", size="2 2 .01",
@@ -90,7 +91,7 @@ def build_scene(cfg, layout):
     skin.find("contact").set("contype", "2")
     # Internal vertex/face contacts are skipped by MuJoCo unless the flex's
     # own contype intersects conaffinity. selfcollide remains none.
-    skin.find("contact").set("conaffinity", "6" if cfg.get('fem_internal_contact') else "4")
+    skin.find("contact").set("conaffinity", "6")
     mount.append(skin)
     for sensor in layout:
         ET.SubElement(mount, "site", name=sensor["name"],
@@ -108,7 +109,7 @@ def build_scene(cfg, layout):
     passive.set("name", "silicone")
     passive.set("rgba", ".86 .83 .74 1")
     passive.find("contact").set("contype", "2")
-    passive.find("contact").set("conaffinity", "6" if cfg.get('fem_internal_contact') else "4")
+    passive.find("contact").set("conaffinity", "6")
     passive_mount.append(passive)
     # This second flex is ordinary silicone: no chip sites or magnetic dipoles.
     # This probe moves in world XYZ; its controller acts in the PCB frame.
@@ -214,16 +215,17 @@ class FrankaTactileSim(TactileSim):
             force[2] = -load-.08*relative_velocity[2]
         d.xfrc_applied[self.probe_body, :3] = rotation @ force-cfg["probe_mass_kg"]*m.opt.gravity
 
-    def reading(self):
-        row = self.sample(lambda _: self.control())
+    def tactile_quality(self):
+        quality = super().tactile_quality()
         passive = self.passive_vertices_local()
         vertices = passive[self.passive_tets]
         ds = np.stack([vertices[:, k]-vertices[:, 0] for k in (1, 2, 3)], axis=-1)
-        row["passive_min_volume_ratio"] = float(np.linalg.det(ds @ self.passive_dm_inverse).min())
-        if row["passive_min_volume_ratio"] <= .15:
-            raise RuntimeError(
-                f"Passive silicone FEM invalid: min V/V0={row['passive_min_volume_ratio']:.3f} "
-                f"at t={self.data.time:.3f}s (limit 0.15). Physics stopped, not a gripper stop")
+        quality['passive_min_volume_ratio'] = float(np.linalg.det(ds @ self.passive_dm_inverse).min())
+        return quality
+
+    def reading(self):
+        row = self.sample(lambda _: self.control())
+        passive = self.passive_vertices_local()
         row["passive_max_displacement_m"] = float(np.linalg.norm(passive-self.passive_rest, axis=1).max())
         right_contact = self.contact_state(self.passive_flex)
         row["passive_normal_force_n"] = right_contact["normal_force_n"]
@@ -319,7 +321,7 @@ def demo(args):
         if renderer:
             renderer.close()
     values = {key: np.array([r[key] for r in rows]) for key in rows[0]}
-    from wowskin_lab.legacy.cli import save_episode
+    from wowskin_lab.tools.sensor_diagnostics import save_episode
     save_episode(output/"episode", sim.cfg, sim, values)
     import csv
     with (output/"inference.csv").open("w", newline="") as stream:

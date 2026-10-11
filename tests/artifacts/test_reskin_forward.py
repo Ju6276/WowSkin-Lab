@@ -55,7 +55,7 @@ class MappedResponseChecks(unittest.TestCase):
         self.assertTrue(np.isnan(blocked['magnetic_ut']).all())
         self.assertFalse(blocked['reskin_prediction_emitted'])
         self.assertIn('depth_outside', blocked['reskin_status'])
-        self.assertIn('cube_patch', blocked['reskin_status'])
+        self.assertIn('contact_shape_transfer_unverified', blocked['reskin_status'])
         backend.extrapolate = True
         preview = backend.evaluate(sim)
         np.testing.assert_allclose(preview['magnetic_ut'], backend.model.predict([8,8,.02], allow_extrapolation=True))
@@ -63,8 +63,8 @@ class MappedResponseChecks(unittest.TestCase):
         self.assertFalse(preview['reskin_transfer_validated'])
         backend.query = lambda sim: (None, 0., 0)
         unloaded = backend.evaluate(sim)
-        np.testing.assert_array_equal(unloaded['magnetic_ut'], np.zeros(15))
-        self.assertEqual(unloaded['reskin_status'], 'unloaded_reference_zero')
+        self.assertTrue(np.isnan(unloaded['magnetic_ut']).all())
+        self.assertTrue(unloaded['reskin_status'].startswith('UNAVAILABLE:'))
 
     def test_hud_marks_invalid_predictions_without_nan_crash(self):
         from types import SimpleNamespace
@@ -76,12 +76,25 @@ class MappedResponseChecks(unittest.TestCase):
         self.assertEqual(pixels.shape, (558,400,3))
         self.assertTrue(np.isnan(row['magnetic_ut']).all())
 
+    def test_auto_collection_rejects_unloaded_network_before_creating_files(self):
+        import mujoco
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from wowskin_lab.data.auto_collect import collect
+        from wowskin_lab.data.recording import MissingTactileError
+        dof = 'trilinear' if mujoco.__version__ == '3.15.0' else 'full'
+        with TemporaryDirectory() as temporary:
+            output = Path(temporary)/'episode'
+            with self.assertRaises(MissingTactileError):
+                collect(output, reskin_model=self.path, reskin_extrapolate=True, skin_dof=dof)
+            self.assertFalse(output.exists())
+
     def test_recording_does_not_mix_dipole_raw_with_empirical_delta(self):
         from types import SimpleNamespace
         from pathlib import Path
         import tempfile
         from wowskin_lab.baselines.reskin_contact import ReskinContactResponse
-        from wowskin_lab.data.recording import MujocoRecorder
+        from wowskin_lab.data.recording import magnetic_baseline, magnetic_metadata
         response = ReskinContactResponse(self.path, extrapolate=True)
         baseline = np.array(response.model.meta['baseline_ut'])
         delta = response.model.predict([8,8,1.5])
@@ -96,13 +109,6 @@ class MappedResponseChecks(unittest.TestCase):
         ftf = FTFSimRecorder.__new__(FTFSimRecorder)
         ftf.env = env
         np.testing.assert_allclose(ftf._field(), baseline+delta, atol=.0002)
-        with tempfile.TemporaryDirectory() as directory:
-            recorder = MujocoRecorder.__new__(MujocoRecorder)
-            recorder.env, recorder.directory, recorder.hz, recorder.source = env, Path(directory), 10, 'test'
-            recorder.rig, recorder.writer = SimpleNamespace(capture=lambda: {}), None
-            recorder.start()
-            path = recorder.finish()
-            metadata = json.loads((path/'metadata.json').read_text())
-            frame = np.load(path/'frames/000000.npz')
-            np.testing.assert_allclose(frame['raw_magnetic_ut']-metadata['magnetic_baseline_ut'], frame['sensor_states'])
-            self.assertFalse(bool(frame['reskin_transfer_validated']))
+        np.testing.assert_allclose(magnetic_baseline(env), baseline)
+        self.assertEqual(magnetic_metadata(env)['magnetic_source'], '3dcal_local_mlp')
+        self.assertFalse(magnetic_metadata(env)['real_transfer_validated'])

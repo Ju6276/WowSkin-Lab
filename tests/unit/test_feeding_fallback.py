@@ -14,6 +14,7 @@ class FeedingFallbackTests(unittest.TestCase):
     def test_failed_cg_sample_restores_state_and_observation_history(self):
         # Use a tiny real MjModel; no slow scene construction for retry logic.
         env = object.__new__(PandaFeedingEnv)
+        env.cfg = {"skin_dof": "full"}
         env.model = mujoco.MjModel.from_xml_string('<mujoco><worldbody><body><freejoint/><geom size=".01"/></body></worldbody></mujoco>')
         env.data = mujoco.MjData(env.model)
         env.model.opt.solver = mujoco.mjtSolver.mjSOL_CG

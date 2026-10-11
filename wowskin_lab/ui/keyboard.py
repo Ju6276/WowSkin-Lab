@@ -58,6 +58,15 @@ class KeyState:
             self._held.clear()
             self._commands.clear()
 
+    def discard_busy_input(self):
+        """No queued B/Enter/motion after save; preserve a requested exit."""
+        with self._lock:
+            quit_requested = ord('P') in self._commands
+            self._held.clear()
+            self._commands.clear()
+            if quit_requested:
+                self._commands.append(ord('P'))
+
     def peek(self):
         """Observe pending commands without consuming key-down events."""
         with self._lock:

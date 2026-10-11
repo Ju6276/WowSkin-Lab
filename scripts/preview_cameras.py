@@ -1,4 +1,4 @@
-"""Render the previous local four-view rig and current shared two-view rig."""
+"""Render the previous local four-view rig and current shared three-view rig."""
 import argparse
 from pathlib import Path
 import sys
@@ -18,7 +18,8 @@ def main():
     parser.add_argument('--output', type=Path, default=Path('outputs/previews/camera_views.png'))
     args = parser.parse_args()
     env = PandaPickCubeTactileEnv(pollen=False)
-    assert env.model.ncam == 2 and (env.model.cam_bodyid == 0).all()
+    assert env.model.ncam == 3
+    assert env.model.cam_bodyid[env.model.camera('lab_wrist').id] == env.model.body('hand').id
     # Add only the two historical local observation views for this preview.
     # No extra cameras are added to the actual recording environment.
     xml = ET.fromstring(env.xml)
@@ -39,16 +40,18 @@ def main():
         for name in ('lab_front', 'lab_side', 'lab_overhead', 'lab_wrist'):
             renderer.update_scene(data, camera=name)
             images[name] = renderer.render().copy()
-    fig, axes = plt.subplots(3, 2, figsize=(12, 13), facecolor='white')
+    fig, axes = plt.subplots(4, 2, figsize=(12, 16), facecolor='white')
     entries = [('lab_front', 'Previous ViSk / pixels1: fixed view A'),
                ('lab_side', 'Previous ViSk / pixels2: fixed view B'),
                ('lab_overhead', 'Previous ViSk / pixels51: overhead'),
                ('lab_wrist', 'Previous ViSk / pixels52: wrist'),
-               ('lab_front', 'Now ViSk + FTF / pixels1: fixed view A'),
-               ('lab_side', 'Now ViSk + FTF / pixels2: fixed view B')]
+               ('lab_front', 'Current / pixels1: fixed view A'),
+               ('lab_side', 'Current / pixels2: fixed view B'),
+               ('lab_wrist', 'Current / pixels52: wrist')]
+    axes.flat[-1].axis('off')
     for ax, (name, title) in zip(axes.flat, entries):
         ax.imshow(images[name]); ax.set_title(title, fontsize=12); ax.axis('off')
-    fig.suptitle('Previous local 4-view rig vs current shared 2-view rig\nSame MuJoCo scene and robot state; not paper camera extrinsics', fontsize=15)
+    fig.suptitle('Previous local 4-view rig vs current shared 3-view rig\nSame MuJoCo scene and robot state; not paper camera extrinsics', fontsize=15)
     fig.tight_layout(rect=(0, 0, 1, .95))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.output, dpi=140); plt.close(fig)

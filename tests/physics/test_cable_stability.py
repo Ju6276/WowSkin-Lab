@@ -108,10 +108,14 @@ class CableStabilityChecks(unittest.TestCase):
         self.assertIsNone(env.reskin_response)
         return env
 
-    def check_rows(self, env, rows):
+    def check_rows(self, env, rows, network_preview=False):
         self.assertGreater(min(r['min_volume_ratio'] for r in rows), .15)
         self.assertGreater(min(r['passive_min_volume_ratio'] for r in rows), .15)
-        self.assertTrue(np.isfinite([r['magnetic_ut'] for r in rows]).all())
+        if network_preview:
+            from tests.physics.test_reduced_skin import ReducedTaskChecks
+            ReducedTaskChecks().check_network_rows(rows)
+        else:
+            self.assertTrue(np.isfinite([r['magnetic_ut'] for r in rows]).all())
         np.testing.assert_allclose(np.diff([r['time_s'] for r in rows]), .01, atol=1e-8)
         np.testing.assert_array_equal(env.data.warning.number, 0)
 

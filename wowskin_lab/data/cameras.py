@@ -1,5 +1,4 @@
 """MuJoCo camera and point observations; all images are RGB, never viewer HUDs."""
-import itertools
 import json
 from wowskin_lab.paths import ROOT
 import xml.etree.ElementTree as ET
@@ -7,8 +6,35 @@ import xml.etree.ElementTree as ET
 import mujoco
 import numpy as np
 
-# Shared acquisition rig: exactly two fixed views of the same workspace.
-CAMERAS = dict(pixels1='lab_front', pixels2='lab_side')
+# Keep the historical wrist ID 52; never renumber old recordings.
+CAMERAS = dict(pixels1='lab_front', pixels2='lab_side', pixels52='lab_wrist')
+
+def active_cameras(env):
+    return {key: name for key, name in CAMERAS.items()
+            if mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_CAMERA, name) >= 0}
+
+
+def camera_configuration(env):
+    """Immutable optical/mount parameters for dataset append compatibility."""
+    m = env.model
+    return {key: dict(name=name, parent=m.body(int(m.cam_bodyid[m.camera(name).id])).name,
+                      position_m=m.cam_pos[m.camera(name).id].tolist(),
+                      quaternion_wxyz=m.cam_quat[m.camera(name).id].tolist(),
+                      fovy_deg=float(m.cam_fovy[m.camera(name).id]))
+            for key, name in active_cameras(env).items()}
+
+def recorded_camera_ids(metadata):
+    ids = tuple(int(i) for i in metadata.get('camera_ids', [1, 2]))
+    if not ids or len(set(ids)) != len(ids) or any(f'pixels{i}' not in CAMERAS for i in ids):
+        raise ValueError(f'Unsupported or duplicate recorded camera IDs: {ids}')
+    return ids
+
+
+def capture_options():
+    """Include room backdrop group 4, independently of free-view cutaway."""
+    options = mujoco.MjvOption()
+    options.geomgroup[4] = 1
+    return options
 
 
 def add_camera(parent, name, position, target, fovy=55):
@@ -23,9 +49,10 @@ def add_camera(parent, name, position, target, fovy=55):
                   xyaxes=' '.join(map(str, np.r_[x, y])), fovy=str(fovy))
 
 
-def camera_profile(profile='two_fixed', scene='pick_cube', tcp_z=0.):
+def camera_profile(profile=None, scene='pick_cube', tcp_z=0.):
     """Resolve the versioned local rig, including scene and wrist coordinates."""
     definition = json.loads((ROOT/'configs/cameras.json').read_text())
+    profile = profile or definition['default_profile']
     ids = definition['profiles'][profile]['camera_ids']
     overrides = definition.get('scene_overrides', {}).get(scene, {})
     result = []
@@ -40,64 +67,7 @@ def camera_profile(profile='two_fixed', scene='pick_cube', tcp_z=0.):
     return result
 
 
-def add_recording_cameras(world, hand, tcp_z, profile='two_fixed', scene='pick_cube'):
+def add_recording_cameras(world, hand, tcp_z, profile=None, scene='pick_cube'):
     for camera in camera_profile(profile, scene, tcp_z):
         parent = world if camera['parent'] == 'world' else hand
         add_camera(parent, camera['name'], camera['position_m'], camera['target_m'], camera['fovy_deg'])
-
-
-
-def project(points, intrinsic, world_to_camera):
-    camera = np.asarray(points) @ world_to_camera[:3, :3].T+world_to_camera[:3, 3]
-    pixels = camera @ intrinsic.T
-    pixels = pixels[:, :2]/np.maximum(camera[:, 2:3], 1e-8)
-    return pixels.astype(np.float32), camera[:, 2] > 0
-
-
-class CameraRig:
-    def __init__(self, env, size=128):
-        self.env, self.size = env, size
-        self.renderer = mujoco.Renderer(env.model, height=size, width=size)
-
-    def close(self):
-        self.renderer.close()
-
-    def points(self):
-        e, d = self.env, self.env.data
-        # Legacy simulation-adapter landmarks, NOT the official FTF geometry.
-        # Retained for reproducibility of existing smoke-test data only.
-        position = d.site_xpos[e.tcp_site]
-        rotation = d.site_xmat[e.tcp_site].reshape(3, 3)
-        offsets = np.array([[0, 0, 0], [0, 0, -.04], [0, .04, -.04],
-                            [0, -.04, -.04], [0, 0, -.075],
-                            [0, .04, -.075], [0, -.04, -.075]])
-        robot = offsets @ rotation.T+position
-        left = e.to_world(np.array([0., 0., e.cfg['total_height_m']]))
-        right = e.to_world(np.array([0., 0., e.cfg['total_height_m']]), e.passive_mount)
-        robot = np.concatenate([robot[:1], [left, right], robot[1:]], axis=0)
-        half = e.model.geom_size[e.probe_geom, :3]
-        corners = np.array(list(itertools.product([-1, 1], repeat=3)))*half
-        obj = corners @ d.xmat[e.probe_body].reshape(3, 3).T+d.xpos[e.probe_body]
-        return robot.astype(np.float32), obj.astype(np.float32)
-
-    def capture(self):
-        e, d, size = self.env, self.env.data, self.size
-        robot, obj = self.points()
-        result = dict(robot_points_world_m=robot, object_points_world_m=obj)
-        for key, name in CAMERAS.items():
-            cid = e.model.camera(name).id
-            focal = .5*size/np.tan(np.deg2rad(e.model.cam_fovy[cid])/2)
-            intrinsic = np.array([[focal, 0, (size-1)/2], [0, focal, (size-1)/2], [0, 0, 1.]])
-            extrinsic = np.eye(4)
-            extrinsic[:3, :3] = np.diag([1., -1., -1.]) @ d.cam_xmat[cid].reshape(3, 3).T
-            extrinsic[:3, 3] = -extrinsic[:3, :3] @ d.cam_xpos[cid]
-            self.renderer.update_scene(d, camera=name)
-            result[key] = self.renderer.render().copy()
-            result[f'camera_intrinsic_{key}'] = intrinsic
-            result[f'world_to_camera_{key}'] = extrinsic
-            for label, points in [('robot', robot), ('object', obj)]:
-                pixels, front = project(points, intrinsic, extrinsic)
-                result[f'{label}_tracks_{key}'] = pixels
-                result[f'{label}_in_frame_{key}'] = (front & (pixels >= 0).all(axis=1)
-                                                     & (pixels < size).all(axis=1))
-        return result

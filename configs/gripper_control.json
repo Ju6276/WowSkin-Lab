@@ -1,12 +1,12 @@
 {
   "gripper_control_mode": "panda_menagerie_position",
   "gripper_source": "Google DeepMind MuJoCo Menagerie / franka_emika_panda, commit 0059d4335f8156206f63a35662313385f7ad6d74; assets/reference/panda_menagerie/manifest.json",
-  "gripper_force_status": "Source Panda position servo. Local joint coordinate q_local = q_source - 0.04 m; closure command reverses source open command. Modified fingertip travel bounds retained for added skin. No local 0.35 N drive cap. Not a hardware force calibration.",
+  "gripper_force_status": "Source Panda position servo. Local joint coordinate q_local = q_source - 0.04 m; closure command reverses source open command. Native 40 mm per-finger travel retained; no artificial empty gap or local 0.35 N drive cap. Not a hardware force calibration.",
   "legacy_force_control": {
     "gripper_force_per_finger_n": 0.35,
     "gripper_force_min_n": 0.15,
     "gripper_force_max_n": 1.0,
-    "gripper_force_status": "LOCAL uncalibrated demonstration settings, not Franka/AnySkin/EBiM specifications. Default retained for existing experiment reproducibility; must be validated for each grasp."
+    "gripper_force_status": "LOCAL uncalibrated demonstration settings, not Franka/AnySkin/EBiM specifications. Available only through explicit legacy --grip-force mode, not the default; must be validated for each grasp."
   },
   "transmission": "Source split tendon 0.5 + 0.5; actuator range -100..100 N, not per-finger contact force. Actual force depends on position error, velocity and contacts."
 }

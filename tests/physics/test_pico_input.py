@@ -2,6 +2,7 @@
 import copy
 import json
 import time
+from types import SimpleNamespace
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,8 +11,9 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import numpy as np
+import mujoco
 
-from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, rotation_matrix, rotation_vector
+from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration, rotation_matrix, rotation_vector
 from wowskin_lab.teleop.pico import PicoBridge, PicoController, PicoMailbox, validate_frame
 
 
@@ -25,7 +27,8 @@ def frame(seq=0, grip=0., trigger=0., p=(0., 1., 0.), q=(0., 0., 0., 1.)):
 class PicoChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.env = PandaPickCubeTactileEnv(pollen=False)
+        cls.env = PandaPickCubeTactileEnv(response_configuration(SimpleNamespace(
+            task='pick_cube', skin_dof='trilinear' if mujoco.__version__ == '3.15.0' else 'full')), pollen=False)
 
     def setUp(self):
         self.env.reset()
@@ -49,6 +52,29 @@ class PicoChecks(unittest.TestCase):
         action = control.action(self.env, frame(2, 1., q=(0., np.sin(theta/2), 0., np.cos(theta/2))), 1.04, 1, now=1.04)
         expected = rotation_vector(self.env.target_rotation.T @ rotation_matrix([0., 0., theta]) @ self.env.target_rotation)
         np.testing.assert_allclose(action[3:6]/np.linalg.norm(action[3:6]), expected/np.linalg.norm(expected), atol=1e-8)
+
+    def test_translated_scene_uses_its_own_workspace(self):
+        # Feeding lives outside the cube's world-coordinate box. Even an
+        # unchanged held controller must not drag it towards that cube box.
+        workspace = np.array([[-2.01, -.36, -np.inf], [-1.26, .52, 1.68]])
+        with patch.object(self.env, 'workspace', workspace, create=True):
+            self.env.data.site_xpos[self.env.tcp_site] = [-1.7, .1, 1.4]
+            control = self.armed()
+            action = control.action(self.env, frame(2, 1.), 1.04, 1, now=1.04)
+            np.testing.assert_allclose(action[:3], 0., atol=1e-10)
+
+    def test_explicit_unlimited_mode_does_not_slew_or_clamp_cartesian_target(self):
+        self.env.cfg['disable_cartesian_limits'] = True
+        try:
+            control = self.armed()
+            before = self.env.target_xyz.copy()
+            # A deliberately narrow task workspace would clip this ordinary
+            # 10 cm tracked controller motion in the default profile.
+            with patch.object(self.env, 'workspace', np.array([before-.001, before+.001]), create=True):
+                command = control.action(self.env, frame(2, 1., p=(0., 1., -.10)), 1.04, 1, now=1.04)
+            np.testing.assert_allclose(command[:3], [.05, 0, 0], atol=1e-10)
+        finally:
+            self.env.cfg.pop('disable_cartesian_limits', None)
 
     def test_stale_loss_session_and_missed_release_require_rearm(self):
         control = self.armed()
@@ -124,8 +150,8 @@ class PicoChecks(unittest.TestCase):
         np.testing.assert_allclose(actions[0],actions[1],atol=1e-10)
 
     def test_responsive_profile_tracks_ramp_and_stops_on_release(self):
-        from wowskin_lab.core.physics import configuration
-        cfg = configuration()
+        cfg = response_configuration(SimpleNamespace(task='pick_cube',
+            skin_dof='trilinear' if mujoco.__version__ == '3.15.0' else 'full'))
         cfg.update(tcp_speed_m_s=.25, tcp_angular_speed_rad_s=1.5)
         env = PandaPickCubeTactileEnv(cfg, pollen=False)
         control = PicoController(scale=1., camera_azimuth=0.)
@@ -206,29 +232,34 @@ class PicoChecks(unittest.TestCase):
             with urlopen(Request(url+'/input', data=payload, headers={'X-Pico-Token': token})) as reply:
                 self.assertEqual(json.load(reply)['frames'], 1)
 
-    def test_pico_commands_feed_both_unchanged_recorders(self):
+    def test_pico_commands_feed_single_shared_dataset(self):
         import h5py
-        from wowskin_lab.data.learning_recording import LearningSimRecorder
+        from wowskin_lab.data.lerobot_recording import LeRobotSimRecorder, validate_dataset
+        from wowskin_lab.data.media import video_path
+        from wowskin_lab.paths import ROOT
+        self.env = PandaPickCubeTactileEnv(response_configuration(SimpleNamespace(
+            task='pick_cube', skin_dof='trilinear', ideal=True,
+            magnetic_fit=ROOT/'configs/magnetic_fit_pollen_nonslip.json')), pollen=False)
         with tempfile.TemporaryDirectory() as temporary:
-            with LearningSimRecorder(self.env, Path(temporary), source='pico') as recorder:
+            with LeRobotSimRecorder(self.env, Path(temporary), source='pico') as recorder:
                 recorder.start()
                 control = self.armed()
                 for i in range(20):
                     sample = frame(i+2, 1., .3, p=(0., 1.+i*.0005, 0.))
                     action = control.action(self.env, sample, 2+i*.01, 1, now=2+i*.01)
                     recorder.step(self.env.step(action)[-1])
-                result = recorder.finish('unreviewed')
-            vi = json.loads((result['visk']/'metadata.json').read_text())
-            ft = json.loads((result['ftf']/'simulation_metadata.json').read_text())
+                result = recorder.finish('success')  # Format test, not a task success claim.
+            vi = json.loads((result/'metadata.json').read_text())
             self.assertEqual(vi['source'], 'pico')
-            self.assertEqual(ft['source'], 'pico')
             self.assertIn('pico', vi['collection_method'])
-            self.assertEqual(vi['paired_recording_id'], ft['paired_recording_id'])
-            self.assertEqual(len(list(result['visk'].glob('cam_*.avi'))), 4)
-            self.assertEqual(len(list(result['ftf'].glob('cam_*_rgb_video.avi'))), 2)
-            with h5py.File(result['visk']/'measurements.h5') as data:
+            self.assertEqual(vi['pose_frame'], 'robot_base')
+            self.assertEqual(vi['camera_ids'], [1, 2, 52])
+            self.assertTrue(all(video_path(result, i).suffix == '.mp4' for i in vi['camera_ids']))
+            self.assertTrue(validate_dataset(Path(temporary)/'pick_cube/lerobot')['official_loader_passed'])
+            with h5py.File(result/'measurements.h5') as data:
                 self.assertEqual(data['sensor_states'].shape[1], 15)
                 self.assertGreater(data['timestamp'].shape[0], 15)
+                self.assertEqual(data['arm_qpos'].shape[1], 7)
 
     def test_desk_skips_preview_render_and_worn_resumes(self):
         with PicoBridge(port=0) as bridge, patch('wowskin_lab.teleop.pico.mujoco.Renderer') as factory:

@@ -1,77 +1,67 @@
-"""Record one teleoperation session for both official learning workflows."""
+"""One canonical raw dataset; ViSk and FTF exports happen after collection."""
 from pathlib import Path
-import uuid
 
-from .ftf_recording import FTFSimRecorder
-from .visk_recording import ViSkSimRecorder
+from .raw_recording import RawRobotRecorder
 
 
-class LearningSimRecorder:
-    def __init__(self, env, directory, source='keyboard'):
-        root = Path(directory)
+class LearningSimRecorder(RawRobotRecorder):
+    def __init__(self, env, directory, source='keyboard', *, instruction=None, record_depth=True):
         task = getattr(env, 'task_name', 'pick_cube')
-        self.ftf = FTFSimRecorder(env, root/'ftf-robot/extracted_data'/task, source)
-        try:
-            self.visk = ViSkSimRecorder(env, root/'visk/raw'/task, source)
-        except BaseException:
-            self.ftf.close()
-            raise
+        if task == 'cable' and env.cfg.get('cable_layout') == 'single_clip':
+            task = 'cable_insert'
+        super().__init__(env, Path(directory)/task, source, instruction=instruction, record_depth=record_depth)
+        self.phase = 0
 
-    @property
-    def active(self):
-        return self.visk.active or self.ftf.active
-
-    @property
-    def writer(self):
-        return self.visk.writer if self.visk.active else self.ftf.writer
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        self.close()
+    def _idle_roll(self, count):
+        run = getattr(self.env, '_viewer_run', None)
+        for _ in range(count):
+            row = (self.env.step(self.env.hold_action()) if run is None else
+                   run(self.env.step, self.env.hold_action()))[-1]
+            self.capture(row)
 
     def start(self):
-        if self.active:
-            raise RuntimeError('Finish the current demonstration first')
-        # FTF records its genuine simulation pre-roll first. ViSk then starts;
-        # no simulation steps are advanced between the two per-step captures.
-        self.ftf.start()
+        self.phase = 0
+        super().start()
         try:
-            self.visk.start()
-            pair = uuid.uuid4().hex
-            for recorder in (self.ftf, self.visk):
-                recorder.metadata['paired_recording_id'] = pair
-            self.ftf._write_metadata()
-            self.visk._metadata()
-        except BaseException:
-            self.finish('interrupted')
+            self.metadata.update(phase_codes={'0': 'actual pre-roll', '1': 'demonstration', '2': 'actual post-roll'},
+                                 pre_roll_samples=61, post_roll_samples=20,
+                                 algorithm='none; select ViSk or FTF at export time',
+                                 joint_recording='measurements.h5: arm_qpos (rad), arm_qvel (rad/s), joint order in metadata')
+            self._metadata()
+            # Genuine observations for FTF's 40-sample tactile history and
+            # pause boundaries. Save every sample once; never pad by copying.
+            self.set_progress('PREPARING', 'Recording 0.6 s of actual baseline observations')
+            self._idle_roll(60)
+            self.phase = 1
+            self.set_progress('RECORDING', 'Demonstration recording started')
+        except BaseException as exc:
+            self.abort(str(exc))
             raise
 
-    def step(self, row):
-        if self.active:
-            self.visk.step(row)
-            self.ftf.step(row)
+    def capture(self, row):
+        super().capture(row)
+        self._append('phase', self.phase)
+        self.h5.flush()
 
     def finish(self, status='unreviewed'):
-        # Close ViSk before FTF advances its post-roll simulation steps.
-        try:
-            visk = self.visk.finish(status)
-        except BaseException:
-            self.ftf.finish('interrupted')
-            raise
-        ftf = self.ftf.finish(status)
-        return dict(visk=visk, ftf=ftf) if visk or ftf else None
-
-    def close(self):
-        try:
-            self.visk.close()
-        finally:
-            self.ftf.close()
+        if not self.active:
+            return None
+        if self.phase == 1 and status != 'interrupted':
+            self.phase = 2
+            self.set_progress('SAVING', 'Recording final 0.2 s of actual observations')
+            try:
+                self._idle_roll(20)
+                # A final image must have an actually issued following action.
+                # Record one real hold update if the last camera hit the final
+                # state tick; never fabricate a terminal action by copying.
+                if abs(float(self.h5['camera_timestamp'][-1])-float(self.h5['timestamp'][-1])) < 1e-8:
+                    self._idle_roll(1)
+            except BaseException as exc:
+                self.abort(str(exc))
+                raise
+        return super().finish(status)
 
     def abort(self, reason):
-        try:
-            visk = self.visk.abort(reason)
-        finally:
-            ftf = self.ftf.abort(reason)
-        return dict(visk=visk, ftf=ftf)
+        if self.active:
+            self.metadata['error'] = reason
+        return super().finish('interrupted')

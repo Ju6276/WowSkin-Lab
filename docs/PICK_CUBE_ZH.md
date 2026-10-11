@@ -1,15 +1,34 @@
 # 遥操作与数据采集
 
-所有启动命令见 [README](../README.md)。在 项目根目录 运行，每次只启动一个遥操作窗口。图形入口使用 `.venv/bin/mjpython`。
+所有启动命令见 [README](../README.md)。在 项目根目录 运行，每次只启动一个遥操作窗口。图形入口使用 `.venv-reduced/bin/mjpython`。
 
 ## 场景选择
 
-- `--task pick_cube`：夹取方块；追加 `--randomize` 可在复位时将方块 XY 各随机偏移 ±25 mm，`--seed` 控制序列。成功条件是双侧接触且抬高超过 60 mm，没有指定位置的放置判据。
+- `--task pick_cube`：黄框抓起、绿框放下。追加 `--randomize` 可在复位时将方块 XY 各随机偏移 ±25 mm，`--seed` 控制序列。
 - `--task cable`：原绕线布局，两个导向柱、右侧黄色卡槽及固定座。
 - `--task cable --cable-layout single_clip`：简单插线，保留线材固定座和一个黄色 C 型卡槽；卡槽旋转 180°。卡槽位于初始线束的 +Y 一侧，body 位置 `(0.45,-0.06,0.1009) m`，入口距初始线束约 5 cm；线材首段仍固定。数据任务名 `cable_insert`。
-- `--task feeding`：固定机器人送食，勺子已夹住并装有六颗豆子；人头在桌面，其他餐具已移除。显示头部接触载荷及峰值；没有口腔/吞咽模型或自动成功判定。
+- `--task feeding`：固定机器人送食，勺子已夹住并装有六颗豆子。默认 `--feeding-setting care_room`：人物坐在桌边护理椅上，EBiM 人头连接本地躯干/四肢；暖色木地板、窗帘、柜子和绿植构成康养室内背景。人体/椅子为固定刚性碰撞模型，背景装饰不参与接触；不是人体软组织仿真。原来的独立桌面人头布局可用 `--feeding-setting ebim_station` 打开。
+
+喂食继续显示原有头部接触载荷及峰值，不把躯干碰撞计入头部峰值。人头保持闭嘴，没有口腔或吞咽模型。EBiM 原始文件保持不变；坐姿版只在派生视觉网格中收拢颈部，头部碰撞仍用原始刚性网格。桌面碰撞尺寸/摩擦、勺子和六颗豆子的物理参数沿用原场景。康养布局的人头位置为 `(-1.09, 0.04, 1.36) m`，朝向机器人；布局、人体模型范围、头部位置和三路相机实际内外参进入采集元数据。新旧布局的画面分布不同，不视为同一视觉实验条件。自由视角转到墙外时，显示暂时隐藏挡视线的墙面/窗帘；固定采集相机始终渲染完整房间，碰撞不随视角变化。
+
+**界面与保存：**五点触觉在左下角，右侧三路预览使用实际采集相机。左上角任务栏达到条件后持续显示 `SUCCESS`，直到复位。B 手动开始录制，Enter 手动结束并标记成功；自动判定不会启动、截断录制或控制机器人。人工标签与每帧自动评分分别保存，允许复核二者是否一致。
+
+**方块和线材成功判定：**参数在 [configs/task_success.json](../configs/task_success.json)，是本地任务定义，不是论文或 EBiM 官方阈值：
+
+- 方块初始完整投影在黄框内，被夹持抬高 ≥60 mm；随后八个角点的 XY 全部进入绿框内沿、底面距桌面 ≤2 mm、脱离所有夹爪接触、线速度 ≤15 mm/s 且角速度 ≤0.15 rad/s，连续保持 0.3 秒。框的位置与视觉标记使用同一份配置。单纯推入绿框、仍夹着或悬在框上方都不算成功。
+- 两种线材布局均检测实际胶囊段在 clip 局部坐标系的位置。线芯中心线必须跨越槽两端及中间截面，并位于扣顶以下、槽壁之间的可容纳半径区域，连续保持 0.3 秒。允许 0.3 mm 数值接触容差，不吸附、不改碰撞、不移动线材。碰顶盖、贴侧壁或停在入口外不算完成。按当前要求无需松夹爪；这项评分不证明松手后保持，也不评分完整绕柱路线。
+
+**送食成功判定：**参数集中在 [configs/feeding.json](../configs/feeding.json)。按用户要求，只检查三项：**勺子前部与嘴边区域相交、六颗豆子仍在勺内、连续保持 0.5 秒**。黄色透明框包住勺子前端 20 mm，用这个随勺运动的有向包围盒与嘴边椭球相交来评分，不再限定一个勺尖点；这是评分几何近似，不是新增碰撞。嘴边椭球半径 18/12/12 mm，中心距唇面 12 mm。嘴位置取源人头网格在 x=0、z=-0.4 mm 的前表面，没有改碰撞来让评分通过。初始夹持点沿勺柄向勺碗移动 5 mm，只改变初始化摆放，随后由正常接触求解承重。
+
+勺面倾角、进给朝向、速度、双指夹持状态和头部接触继续记录，**不阻止 SUCCESS**。因此“完成送达”和“是否撞到头部”可以分别比较。头部接触次数、瞬时力、采样区间峰值、全程峰值、合力和接触冲量随 100 Hz raw 的 `evaluation/` 保存；它们是当前刚性头部碰撞代理的仿真量，不能作为口腔软组织力或吞咽判定。配置里的 20°/25°/20 mm/s 保留为诊断参考，不再是完成门槛。
+
+界面 `To finish` 只显示进框、豆子与停留相关的未满足条件。绿色 SUCCESS 保留到复位，不会停止机器人或自动结束录制；Enter 保存人工成功标签，自动评分独立保存。新配置版本是 `local_feeding_delivery_v4_spoon_front`；旧数据保留原判定配置与标签，按旧元数据复现时仍使用旧条件。`delivery_distance_m` 是前部包围盒上最接近目标椭球中心的点到中心的距离，不再是固定勺尖距离。
+
+手动采集默认没有运行限时。`--seconds` 仅用于限时检查，到时会把仍在进行的录制保存为 `interrupted`，不会自动标成功。B 开始，达到绿色 SUCCESS 后 Enter 完成保存；这时会显示 `Saved SUCCESS`。退出前未完成的原始状态、视频、深度仍保留在 raw 和 `.pending_media`，不会丢弃或自动当作成功训练样本。
 
 线材和喂食使用本地布局及 [EBiM 原素材](../assets/ebim/manifest.json) / [喂食素材](../assets/ebim_feeding/manifest.json)，不代表完整官方评测任务。卡槽网格、碰撞块和线材材料参数保留来源配置；短线长度为 0.38 m。简单布局不改变原绕线场景。
+
+当前线材沿用 EBiM 的 `mujoco.elasticity.cable` 插件：半径 3.5 mm、密度 800 kg/m³、`bend=2e6`、`twist=1e7`、关节 damping=0.15。原文件是 3 m、`count=71`；本地改为 0.38 m、`count=25`（24 段胶囊），调整初始方向、位置、颜色和碰撞分组，保留首段固定。机器人、软指腹及整个场景的积分/接触设置也与上游不同，因此不是原场景的等价缩放。独立 `whip` 对照来自另一篇鞭子工作，没有替换此线材。
 
 ## 控制与视角
 
@@ -19,11 +38,17 @@ X/Z 闭合/张开，C 保持当前开度。方块/喂食默认采用 Menagerie P
 
 V 切换近景/全景，Esc 恢复全景；鼠标左拖旋转、右拖平移、滚轮缩放。逗号/句号调整触觉显示比例。R/Backspace 复位，P 保存并退出。F 仅用于方块自动短测，不能用于线材或喂食。
 
+左侧默认只保留输入状态、任务进度、录制状态和简短操作提示。H 展开/收起磁场模型、夹爪驱动、接触力、网格质量、求解耗时及 IK 等诊断；收起只影响文字显示，不影响物理计算、录制字段或三路相机/触觉。录制异常、网格警告和物理故障仍会提示。
+
 若显示 `PAUSED: physics invalid`，物理求解已停止，触觉面板保留最后有效帧；按 R 复位后继续。该段录制会中止，不导出失效后的物理数据。
 
 ## SpaceMouse USB 遥操作
 
 使用 `--input spacemouse`。旋钮推拉映射为相机平面 XY，提起为世界 Z，倾斜/扭转控制三维旋转。左键夹紧、右键张开、双键保持开度。旋钮回中停止，失去窗口焦点停止输入。
+
+macOS 下此模式会独占打开 SpaceMouse，终端应显示 `exclusive HID=True`。若误用 `--input keyboard`，程序不会读取/独占 SpaceMouse，旋钮可能仍移动系统鼠标；请退出并按 README 的 SpaceMouse 命令启动，不需要关闭普通鼠标。
+
+前后倾斜绕当前画面的左右轴旋转：夹爪朝下时，前压旋钮让指尖向画面远处倾，后仰让指尖向自己倾。此约定随相机水平视角变化，不以机器人面对操作者的方向判断前后；相机俯视角不参与地面坐标映射。轴符号和约定保存在采集 metadata 中。
 
 默认平移上限为 0.12 m/s、角速度 0.5 rad/s，均按仿真时间计。可设置 `--spacemouse-speed`、`--spacemouse-angular-speed`、`--spacemouse-deadzone`。面板的 `Simulation speed` 是实际实时倍率；换输入设备不会减少软体求解耗时。
 
@@ -47,38 +72,57 @@ V 切换近景/全景，Esc 恢复全景；鼠标左拖旋转、右拖平移、�
 
 原偶极子与拟合偶极子使用 U1中心、U2上、U3右、U4下、U5左的 PCB 参考顺序。网络预览使用 CH1中心、CH2左、CH3右、CH4上、CH5下的候选分组。实物对应与轴向仍未全部验证。
 
-三个任务默认启用 `configs/magnetic_fit_pollen_nonslip.json` 的拟合偶极子；`--magnetic-fit` 可显式指定其他拟合文件。`--reskin-model outputs/reskin_forward_mapped --reskin-extrapolate` 启用网络预览，两个选项互斥。详见 [模型与标定](MODEL_CALIBRATION_ZH.md)。
+三个任务遥操作默认使用 `configs/magnetic_fit_pollen_nonslip.json` 拟合偶极子：网格形变计算磁场，再应用五组幅值增益。需要网络对照时追加 `--reskin-model outputs/reskin_forward_mapped`，严格检查输入且不自动外推；其输入是所有外部接触的中心 XY 和最大法向压缩深度，不是完整形变场。`--reskin-extrapolate` 显式开启未经验证的接触预览；无接触仍为不可用，不人为返回零。拟合与网络两者互斥，不自动回退。网络数值诊断保留同状态 `fitted_dipole_ideal_delta_ut`（原 U 顺序），但不混入主观测。详见 [模型与标定](MODEL_CALIBRATION_ZH.md)。
 
 ## 保存了哪些数据
 
-线材/喂食默认配置双格式导出，方块需 `--record-format both-raw`。启动时都不录制，按 B 才开始。
+所有任务只采集一次，默认 `--record-format lerobot`。`data/episodes/<任务>/lerobot/` 是成功 episodes 的 LeRobot v2.1，`raw/capture_000000/` 等目录只保存 `metadata.json` 与 100 Hz `measurements.h5`；RGB/深度最终只保留在 `lerobot/`，metadata 用相对路径引用；简单插线任务名为 `cable_insert`。失败/中断只留 raw，不进入 LeRobot 训练数据。`--record-dir` 指定采集根目录；显式 `--record-format dataset` 只保存原始格式。
 
-1. B 复位并开始一段示教，保持无接触约 1 秒仿真时间。
-2. 遥操作完成任务。
-3. Enter 保存成功，N 保存失败；再次 B 保存待审核；P 保存中断并退出。
+LeRobot 使用未修改的 `lerobot==0.3.3` 写入器/读取器（v2.1），数值存 Parquet，图像为 MP4。`observation.state` 为实际基座系 TCP xyz＋rotvec＋夹爪，`action` 为该观测之后第一条 100 Hz 控制发出的绝对 TCP/夹爪目标，另存 `observation.joint_position`、`observation.joint_velocity`、`observation.tcp_velocity` 和 15 路 `observation.tactile`。这是本项目的动作契约，不自动等同于任何 VLA 的预训练动作空间。
 
-Enter 是操作者标记，线材/喂食没有自动成功评分。未经审核或失败的段不会自动作为成功专家示教使用。
+每行对应一帧实际采集图像，无重复补帧。LeRobot `timestamp=frame_index/30` 用于视频索引，`aux.sim_timestamp` 保留真实仿真采样时刻；相机在 100 Hz tick 上触发，两个时间轴最大偏差约 6.67 ms。`aux.raw_sample_index`、`aux.raw_camera_index` 可回查原始值，`aux.action_timestamp` 核对动作时序。100 Hz 触觉、基线和内外参完整保留在 raw；FTF 导出读取该附件。写入异常会留下 `INCOMPLETE` 标记，不能将半成品用于训练。
 
-- ViSk：两路固定相机图像、实际位姿与夹爪、七维命令、15 路原始磁场、基线、时间戳和配置。
-- FTF：官方 Franka-Teach 写出的双路视频、状态/动作 PKL、触觉 H5 与元数据。
-- 两套数据通过 `paired_recording_id` 关联；状态/触觉为 100 Hz 仿真时钟，相机约 30 Hz。
+H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机（固定 1、2，腕部 52）按约 30 Hz 保存：
 
-当前默认拟合模式的根目录为 `outputs/diagnostics/fitted_dipole_preview/two_camera/episodes/`，其下 `visk/raw/<任务>/` 与 `ftf-robot/extracted_data/<任务>/` 分开保存。`--record-dir` 可指定另一根目录。直接网络预览使用 `outputs/diagnostics/reskin_preview/two_camera/episodes/`，其下也按任务分开。
+- `cartesian_states` / `commanded_pose`：实际／目标 TCP **基座系** XYZ（米）＋旋转向量（弧度），不是 RPY。基座是 Panda `link0`；TCP 是新指腹之间的 `tactile_tcp`，不是法兰中心。
+- `arm_qpos` / `arm_qvel`：七关节实际角（rad）／实际角速度（rad/s），顺序 `joint1` 到 `joint7`。不是目标关节角。
+- `tcp_velocity`：实际基座系线速度 vx/vy/vz（m/s）＋角速度 wx/wy/wz（rad/s），由 MuJoCo Jacobian 与实际 qvel 计算；不是 rotvec 的逐项差分。另保留世界系 `tcp_velocity_world`。
+- `gripper_states` / `commanded_gripper`：实际／目标闭合比例；另存夹爪驱动关节的实际位置、速度及对应单位。
+- `command_7d`：基座系 ΔXYZ＋目标 TCP 局部系 δrotvec＋夹爪闭合目标。控制器内部仍用世界系，`command_7d_world` 保留实际下发的世界系命令。
+- `sensor_states`：15 路含基线的仿真磁场（μT）；基线、通道、拟合增益及物理参数写在 metadata。未完成实物标定。
+- `world_from_base`、`cartesian_states_world`、`commanded_pose_world` 保留换算依据；`camera_base_to_cv` / `camera_world_to_cv` 是同一相机在两种参考系下的外参，内参单独保存。
+- `phase`：0 为实际预录制、1 为演示、2 为实际收尾。采集包括 0.6 秒预录制、至少 0.2 秒收尾，必要时增加一条实际控制采样以保存末帧之后的真实动作；为 FTF 保留实际的触觉历史及暂停边界，不复制帧。异常中止不推进仿真补收尾。
+- `skin_min_volume_ratio`、`passive_min_volume_ratio`、`mesh_quality_warning`：与 100 Hz 状态同频的网格质量诊断。0–15% 的正体积区间只警告，继续实时计算磁场和录制，不保持旧值；字段保留在 raw H5，可按相机时间映射回 LeRobot 帧。当前算法导出不因警告自动删除帧。单元翻转或求解发散才中断该段采集。
 
-全会话数值诊断在 `outputs/<任务>/teleop_*/`，不能替代包含图像的正式示教。FTF 还需要官方视觉点标注与跟踪，录制后处理见 [学习工作流](LEARNING_WORKFLOWS_ZH.md)。
+方块/线材的基座与世界系重合；喂食中基座在 `(-1.63,-0.38,1.08485019) m`、绕 Z 转 90°，采集时使用 `T_base_tcp=inv(T_world_base)·T_world_tcp`。工具相对 hand 的位置与朝向也写入 metadata；与真实 Franka / 官方 FTF 工具参考点的注册仍未验证。
+
+启动时不录制，B 复位并开始；Enter 保存成功并编码 LeRobot 视频，N 保存失败；P 保存中断并退出。编码期间有等待和终端提示。成功标签由操作者给出。原始记录不因算法而重复保存，后续使用 `dataset-export` 选择成功 episodes，生成 ViSk 或 FTF 的派生输入，见[学习工作流](LEARNING_WORKFLOWS_ZH.md)。关节数据保留在公共源数据中；不会擅自把它们加入官方策略网络输入。
+
+原始附件 schema 为 `wowskin_robot_dataset_v1`；它与 LeRobot v2.1 容器版本是不同概念。旧文件仍保留原坐标约定，不原地改写；世界系与基座系记录不能混入同一个导出。完整采集流程测试可用默认拟合偶极子；显式切换到网络后，缺失的卸载观测会使录制被拒绝。
+
+## Instruction、RGB-D 与多次采集
+
+- `--instruction "Pick up the cube and place it on the table."` 逐字保存；未指定时使用任务模板，并记录来源。一个 episode 使用一条指令，换指令后可继续追加到同一物理配置的数据集。`meta/tasks.jsonl` 保存文字，Parquet 中的 `task_index` 和 `annotation.human.action.task_description` 保存索引；后者沿用 GR00T 命名，不表示示范一定由人操作。
+- [GR00T N1 官方数据约定](https://github.com/NVIDIA/Isaac-GR00T/blob/755876a9afdb41ca6eb6383b36f4a0adb085c73f/getting_started/LeRobot_compatible_data_schema.md) 使用 MP4、Parquet、任务索引及 `meta/modality.json`。本项目写入位置、axis-angle 旋转、夹爪、关节、触觉的字段映射；这不代表 GR00T 策略已经训练/部署，也没有改动原版 ViSk/FTF 的输入选择。
+- 默认三路 RGB/深度（固定相机 1、2 和腕部相机 52）为同一 MuJoCo 状态、同一相机、640×480 像素。深度在 `lerobot/depth/chunk-000/episode_000000.h5`，float32 **米**，为相机光轴 +Z 深度，不是射线距离；LZF 无损压缩，保存有效掩码、内参、基座/世界外参、实际时间戳。它是 MuJoCo 真值，不是真实深度相机噪声仿真。
+- 深度是 v2.1 数据集的扩展，原版 LeRobot/GR00T N1 不会自动加载。通过 `wowskin_lab.data.depth.load_depth_frame(root, episode_index, aux.raw_camera_index)` 读取。不能用训练行的 `frame_index` 猜测原始深度索引。
+- LeRobot 保留真实预录制/演示/收尾的全部 RGB 帧；`aux.acquisition_phase` 分别为 0/1/2，ViSk 导出只选演示阶段。这样 FTF 可直接重用同一视频，raw 不必另存 AVI。视频索引固定 30 Hz，另存真实采样时刻，无图像/动作补帧。
+- 原始编号 `capture_000000` 按所有采集递增；LeRobot `episode_000000` 只按成功采集递增。失败会使两者编号不同，`metadata.json` 的 `lerobot_episode_index` 与 `meta/wowskin_sources.jsonl` 明确映射。重启会扫描已有记录并追加，重复导入拒绝，同目录并发写入有文件锁。
+- 成功编码并校验帧数后移除暂存图像；raw 仅剩数值 H5/metadata。失败/断电的 `.pending_media/` 保留恢复资料，不进入训练集；`INCOMPLETE` 表示打包未完成，需另建导出目录恢复，不能继续向半成品追加。
+- 改变物理/相机/传感器配置、深度开关或数据字段版本时需换 `--record-dir`，不能静默混成同一组归一化数据。旧目录不原地升级或补造速度/深度字段。
 
 ## 自动采集
 
 ```bash
-.venv/bin/python -m wowskin_lab record-auto --output data/automated/my_run --episodes 2 --randomize
+.venv-reduced/bin/python -m wowskin_lab record-auto --output data/automated/my_run --episodes 2 --randomize --magnetic-fit configs/magnetic_fit_pollen_nonslip.json --ideal
 ```
 
-使用新目录。该命令是方块脚本示教，不能用作线材/喂食自动成功验证。
+使用新目录，并显式选择观察模型；不再自动选择网络并开启外推。网络缺失空载响应时，此入口会在创建数据目录前报错。该命令是方块脚本示教，不能用作线材/喂食自动成功验证，也不代表磁场已标定。
 
-## 使用范围
+## 诊断与边界
 
-方块保持段的滑移回归未通过，线材夹爪仍可能被负载顶开。喂食采用 50 μs、线材 100 μs、方块 20 μs 积分步长；当前软指尖会使抓持和多相机录制低于实时速度。头部峰值为本地刚性碰撞指标，不是人体安全标定。
+默认三任务使用 MuJoCo 3.15 降阶指腹、CG 与拟合偶极子。材料、触觉和夹持仍未做真机标定。完整参数来源及开关影响统一见 [模型与标定](MODEL_CALIBRATION_ZH.md)，不要把脚本测试通过理解为任意接触稳定。
 
-## 查看相机画面
+正常遥操作只在按 B 后保存正式采集。完整 NPZ/CSV 诊断需显式 `--diagnostic-log`；故障自动保留最后最多 200 条样本，位于 `outputs/diagnostics/<task>/teleop_…/`。
 
-`.venv/bin/python scripts/preview_cameras.py` 生成 `outputs/previews/camera_views.png`：前两排为之前本地四视角，最后一排为当前 ViSk / FTF 共用的两台固定相机。场景和机械臂姿态一致；顶部与腕部相机仅用于生成历史布局对照，不加入当前采集场景。
+三路相机布局可用 `.venv-reduced/bin/python scripts/preview_cameras.py --help` 查看；原两路与四路参考布局保存在 `configs/cameras.json`，不会自动改动当前采集配置。切换配置必须用新数据目录。

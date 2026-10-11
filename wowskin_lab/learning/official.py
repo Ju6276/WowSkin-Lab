@@ -1,6 +1,6 @@
 """Prepare upstream workspaces without replacing preprocessing or training.
 
-The ViSk paper profile changes only the published two-sensor defaults to one.
+The ViSk paper profile sets the paper single sensor and the explicitly selected camera list.
 Every change is recorded; policies, losses, normalization and action chunks
 are preserved. Reference checkouts always remain untouched.
 Preparation is not a successful reproduction or a working MuJoCo deployment.
@@ -68,7 +68,8 @@ def tracked_hashes(directory, prefix=''):
     return result
 
 
-def prepare(route, destination, data_root, task, task_config=None, visk_profile='paper-single'):
+def prepare(route, destination, data_root, task, task_config=None, visk_profile='paper-single', camera_profile=None,
+            visk_action_profile='auto'):
     import yaml
     reference, spec, submodules = verify_reference(route)
     destination = Path(destination).resolve()
@@ -93,6 +94,25 @@ def prepare(route, destination, data_root, task, task_config=None, visk_profile=
             raise ValueError('FTF task config needs a positive num_object_points')
         if task_data['object_labels'] != ['objects']:
             raise ValueError('The pinned converters use object_labels=[objects]; align annotations/config explicitly')
+    camera_ids = None
+    if visk_action_profile not in ('auto', 'published-state', 'mujoco-command'):
+        raise ValueError('Unknown ViSk action profile')
+    if route == 'visk' and visk_action_profile == 'auto':
+        metadata = [json.loads(p.read_text()) for p in (data_root/'raw'/task).glob('*/metadata.json')]
+        visk_action_profile = ('mujoco-command' if metadata and all(m.get('backend') == 'mujoco' for m in metadata)
+                               else 'published-state')
+    if route == 'visk' and visk_profile == 'paper-single':
+        from wowskin_lab.data.cameras import recorded_camera_ids
+        rigs = {recorded_camera_ids(json.loads(path.read_text()))
+                for path in (data_root/'raw'/task).glob('*/metadata.json')}
+        if camera_profile is None:
+            if len(rigs) > 1:
+                raise ValueError('Mixed camera rigs: export one capture configuration per workspace')
+            camera_ids = list(next(iter(rigs))) if rigs else [1, 2, 52]
+        else:
+            camera_ids = {'two_fixed': [1, 2], 'three_view': [1, 2, 52]}[camera_profile]
+        if camera_ids not in ([1, 2], [1, 2, 52]):
+            raise ValueError('The single-sensor simulation bridge supports two_fixed or three_view')
     hashes = tracked_hashes(reference)
     destination.mkdir(parents=True)
     code = destination/'source'
@@ -144,24 +164,49 @@ def prepare(route, destination, data_root, task, task_config=None, visk_profile=
                 changes.extend(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
                                fromfile='a/'+name, tofile='b/'+name))
             (destination/'PAPER_SINGLE_SENSOR.patch').write_text(''.join(changes))
-            # Explicit user-requested acquisition change: two fixed cameras.
+            # Explicit user-requested camera selection; no policy implementation change.
             # Keep the pinned reference checkout and published-default intact.
             camera_changes = []
             camera_replacements = {
                 'cfgs/suite/xarm_env_aa.yaml': ('pixel_keys: ["pixels1", "pixels2", "pixels51", "pixels52"]',
-                                             'pixel_keys: ["pixels1", "pixels2"]'),
-                'convert_to_pkl.py': ('camera_indices = [1, 2, 51, 52]', 'camera_indices = [1, 2]'),
-                'process_xarm_data.py': ('    51: "fish_eye",\n    52: "fish_eye",\n', ''),
+                                             'pixel_keys: '+json.dumps([f'pixels{i}' for i in camera_ids])),
+                'convert_to_pkl.py': ('camera_indices = [1, 2, 51, 52]', 'camera_indices = '+repr(camera_ids)),
+                'process_xarm_data.py': ('    51: "fish_eye",\n    52: "fish_eye",\n', '    52: "fish_eye",\n' if 52 in camera_ids else ''),
             }
             for name, (old, new) in camera_replacements.items():
                 before = (code/name).read_text()
                 if before.count(old) != 1:
                     raise ValueError(f'Unexpected upstream camera configuration in {name}')
                 after = before.replace(old, new)
-                write(name, after, 'User-requested two fixed cameras; paper-single tactile count retained; policy/loss unchanged')
+                write(name, after, f'User-requested camera IDs {camera_ids}; paper-single tactile count retained; policy/loss unchanged')
                 camera_changes.extend(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
                                       fromfile='a/'+name, tofile='b/'+name))
-            (destination/'TWO_FIXED_CAMERAS.patch').write_text(''.join(camera_changes))
+            (destination/('THREE_VIEW_CAMERAS.patch' if 52 in camera_ids else 'TWO_FIXED_CAMERAS.patch')).write_text(''.join(camera_changes))
+
+        if visk_action_profile == 'mujoco-command':
+            # Explicit robot-backend label adapter. Measured gripper state
+            # remains an observation; the servo must learn commanded closure.
+            import difflib
+            changes = []
+            replacements = {
+                'convert_to_pkl.py': (
+                    '    observation["gripper_states"] = gripper_states.astype(np.float32)',
+                    '    observation["gripper_states"] = gripper_states.astype(np.float32)\n'
+                    '    observation["commanded_gripper"] = state["commanded_gripper"].values.astype(np.float32)'),
+                'read_data/xarm_env_aa.py': (
+                    'observations[i]["gripper_states"][:, None]',
+                    'observations[i]["commanded_gripper"][:, None]'),
+            }
+            for name, (old, new) in replacements.items():
+                before = (code/name).read_text()
+                if before.count(old) != 1:
+                    raise ValueError(f'Unexpected upstream action label construction in {name}')
+                after = before.replace(old, new)
+                reason = configured.get(name, {}).get('reason', '')
+                write(name, after, reason+'; MuJoCo action labels use recorded commanded gripper; measured observation, model, loss and normalization algorithm unchanged')
+                changes.extend(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
+                               fromfile='a/'+name, tofile='b/'+name))
+            (destination/'MUJOCO_ACTION_LABELS.patch').write_text(''.join(changes))
 
         task_override = 'suite.task.tasks=['+task+']'
         command('process', '', ['python', 'process_xarm_data.py', '-t', task],
@@ -230,9 +275,10 @@ def prepare(route, destination, data_root, task, task_config=None, visk_profile=
                     data_root=str(data_root), dataset=str(dataset), training_config=training_config,
                     original_sha256=hashes, configured_files=configured, commands=commands)
     if route == 'visk':
+        manifest['action_profile'] = visk_action_profile
         manifest['visk_profile'] = visk_profile
-        manifest['camera_ids'] = [1, 2] if visk_profile == 'paper-single' else [1, 2, 51, 52]
-        manifest['camera_profile'] = 'two-fixed-user-requested' if visk_profile == 'paper-single' else 'published-four-view'
+        manifest['camera_ids'] = camera_ids if visk_profile == 'paper-single' else [1, 2, 51, 52]
+        manifest['camera_profile'] = ('three-view-user-requested' if 52 in camera_ids else 'two-fixed-user-requested') if visk_profile == 'paper-single' else 'published-four-view'
     (destination/'manifest.json').write_text(json.dumps(manifest, indent=2, ensure_ascii=False)+'\n')
     lines = ['# Prepared official commands — not an end-to-end validation', '',
              'Use the corresponding upstream environment. Commands are listed separately; do not run hardware stages before configuring services.', '']
@@ -270,8 +316,8 @@ def status():
                   ftf_human_data='not_collected; user requires acquisition',
                   default_local_recorder='single sensor / 10 Hz / 128px / GT diagnostics; not official reproduction input')
     result['ftf_raw_acquisition'] = 'MuJoCo input -> original Franka-Teach writers -> original process_data_robot verified; visual tracking/training not completed'
-    result['visk_profile'] = 'paper-single: one AnySkin, 15 channels; explicit sensor-count and user-requested two-fixed-camera patches in prepared workspace'
-    result['visk_acquisition'] = 'visk-raw records two fixed cameras at nominal 30 Hz and state/tactile at 100 Hz; process-visk-sim runs original PKL converter and loader validation'
+    result['visk_profile'] = 'paper-single: one AnySkin, 15 channels; explicit sensor-count and user-requested camera-list patches in prepared workspace'
+    result['visk_acquisition'] = 'Shared base-frame dataset: three cameras (two fixed + wrist) at nominal 30 Hz; poses/joints/tactile at 100 Hz. dataset-export selects episodes; process-visk-sim runs the original converter and loader'
     try:
         import torch
         result['compute'] = dict(python=platform.python_version(), torch=torch.__version__, cuda=torch.cuda.is_available())
@@ -299,6 +345,16 @@ def process_ftf_robot(data_root, task):
                 if p.is_dir() and 'fail' not in p.name and 'ignore' not in p.name]
     if not eligible:
         raise ValueError('No eligible demonstrations: review recordings before preprocessing')
+    pose_frames = set()
+    for episode in eligible:
+        metadata_path = episode/'simulation_metadata.json'
+        if metadata_path.exists():
+            metadata = json.loads(metadata_path.read_text())
+            pose_frames.add(metadata.get('pose_frame', 'world'))
+        else:
+            pose_frames.add('robot_base')  # Original real Franka-Teach convention.
+    if len(pose_frames) != 1:
+        raise ValueError('Mixed world/base FTF recordings: use separate data roots; old data are not converted implicitly')
     if (data_root/'processed_data'/task).exists():
         raise FileExistsError('Processed task already exists; use the original interactive script to review append/overwrite')
     environment = os.environ.copy()
@@ -314,8 +370,16 @@ def process_ftf_robot(data_root, task):
     command = [sys.executable, 'process_data_robot.py', '--data_dir', str(data_root), '--task_names', task]
     subprocess.run(command, cwd=reference/'point_policy/robot_utils/franka', env=environment,
                    stdin=subprocess.DEVNULL, check=True)
+    retained = sorted(p.parent.name for p in (data_root/'processed_data'/task).glob('*/states.csv'))
+    if not retained:
+        raise ValueError('Official FTF preprocessing retained no demonstrations. Its original pause detector '
+                         'requires departure from the initial pose (atol=1e-2); inspect recorded motion and boundaries. '
+                         'Raw data were preserved; no poses or timestamps were fabricated.')
     return {'stage': 'official process_data_robot only', 'data_root': str(data_root),
-            'task': task, 'visual_tracking_complete': False, 'training_ready': False}
+            'task': task, 'pose_frame': next(iter(pose_frames)),
+            'retained_episodes': retained,
+            'skipped_episodes': sorted(p.name for p in eligible if p.name not in retained),
+            'visual_tracking_complete': False, 'training_ready': False}
 
 
 def convert_ftf_robot_initial(data_root, task, calibration):
@@ -419,7 +483,9 @@ def main(argv=None):
     make.add_argument('--data-root', type=Path, required=True)
     make.add_argument('--task', required=True, help='ViSk task name / FTF task-config stem (dataset name read from YAML)')
     make.add_argument('--task-config', type=Path)
+    make.add_argument('--camera-profile', choices=['two_fixed', 'three_view'], help='ViSk: infer from exported metadata by default, otherwise three_view')
     make.add_argument('--visk-profile', choices=['paper-single', 'published-default'], default='paper-single')
+    make.add_argument('--visk-action-profile', choices=['auto', 'published-state', 'mujoco-command'], default='auto')
     verify = sub.add_parser('verify')
     verify.add_argument('workspace', type=Path)
     process = sub.add_parser('process-ftf-robot', help='Run original raw -> video/CSV preprocessing; no point/label substitute')
@@ -441,7 +507,7 @@ def main(argv=None):
         if args.command == 'status':
             result = status()
         elif args.command == 'prepare':
-            result = prepare(args.route, args.workspace, args.data_root, args.task, args.task_config, args.visk_profile)
+            result = prepare(args.route, args.workspace, args.data_root, args.task, args.task_config, args.visk_profile, args.camera_profile, args.visk_action_profile)
         elif args.command == 'process-ftf-robot':
             result = process_ftf_robot(args.data_root, args.task)
         elif args.command == 'convert-ftf-robot-initial':

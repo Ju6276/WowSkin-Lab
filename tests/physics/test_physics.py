@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 
 from wowskin_lab.core.physics import TactileSim, configuration, dipole_field
-from wowskin_lab.legacy.cli import run_episode
+from wowskin_lab.tools.sensor_diagnostics import run_episode
 
 
 class PhysicsChecks(unittest.TestCase):

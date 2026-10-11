@@ -2,7 +2,7 @@
 
 Local delivery-only variant, not EBiM's mobile dual-arm evaluator. Original
 meshes, spoon and bean mechanics are retained. Reset physically grips a loaded
-spoon. The user-requested head completion/enlargement is local to this scene.
+spoon. The head completion/enlargement and seated care room are local additions.
 A local rigid convex head collision proxy reports simulation loads;
 it does not model a mouth, swallowing, tissue compliance or ISO safety limits.
 """
@@ -17,15 +17,18 @@ from wowskin_lab.paths import ROOT
 from wowskin_lab.core.physics import configuration
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, pick_scene, rotation_matrix
 from wowskin_lab.envs.franka import mount_reference
-from wowskin_lab.data.cameras import add_camera, camera_profile
+from wowskin_lab.data.cameras import add_recording_cameras
+from wowskin_lab.envs.feeding_room import add_care_room, add_seated_adult
+from wowskin_lab.envs.feeding_evaluation import DeliveryEvaluator, delivery_config
 
 ASSETS = ROOT/'assets/ebim_feeding'
 TABLE_TOP = 1.08485019
 ROBOT_POSITION = [-1.63, -.38, TABLE_TOP]
 # User-requested visual enlargement of the complete source head + neck.
-# Scale eyes, posterior completion and collision together; keep its base on table.
+# Scale eyes, posterior completion and collision together.
 HEAD_SCALE = 1.5
-HEAD_POSITION = [-1.45, .25, TABLE_TOP+.1*HEAD_SCALE]
+HEAD_POSITION = [-1.09, .04, 1.36]
+LEGACY_HEAD_POSITION = [-1.45, .25, TABLE_TOP+.1*HEAD_SCALE]
 BEAN_COUNT = 6
 HEAD_COMPLETION = ROOT/'assets/generated/feeding'
 # Source head eyes are on local -Y. Face the robot, not away from it.
@@ -34,6 +37,14 @@ HEAD_YAW = np.arctan2(ROBOT_POSITION[0]-HEAD_POSITION[0],
 HEAD_QUAT = [np.cos(HEAD_YAW/2), 0., 0., np.sin(HEAD_YAW/2)]
 BODIES = ('dynamic_bowl2', 'dynamic_plate2', 'dynamic_simple_tray', 'dynamic_spoon2',
           'dynamic_cup', 'configurable_visual_head')
+
+
+def head_placement(setting):
+    if setting not in ('care_room', 'ebim_station'):
+        raise ValueError('feeding_setting must be care_room or ebim_station')
+    position = HEAD_POSITION if setting == 'care_room' else LEGACY_HEAD_POSITION
+    yaw = np.arctan2(ROBOT_POSITION[0]-position[0], position[1]-ROBOT_POSITION[1])
+    return position, [np.cos(yaw/2), 0., 0., np.sin(yaw/2)]
 
 
 def selected_world(source):
@@ -63,8 +74,11 @@ def feeding_scene(cfg, layout):
         raise FileNotFoundError('Run .venv/bin/python scripts/fetch_ebim_feeding.py first')
     source = ET.parse(ASSETS/'scene_100.xml').getroot()
     official_cfg = json.loads((ASSETS/'config.json').read_text())
+    care_room = cfg.get('feeding_setting', 'care_room') == 'care_room'
+    head_position, head_quat = head_placement(cfg.get('feeding_setting', 'care_room'))
     root = ET.fromstring(pick_scene(cfg, layout))
-    root.set('model', 'WowSkin-Lab | PandaFeeding: EBiM task 3 assets')
+    root.set('model', 'WowSkin-Lab | PandaFeeding: Care room' if care_room
+             else 'WowSkin-Lab | PandaFeeding: Tabletop')
     world, asset = root.find('worldbody'), root.find('asset')
     cap = json.loads((HEAD_COMPLETION/'head_back.json').read_text())
     head_scale = ' '.join([str(HEAD_SCALE)]*3)
@@ -92,9 +106,6 @@ def feeding_scene(cfg, layout):
     for flex in robot.iter('flexcomp'):
         flex.find('contact').set('contype', '16')
         flex.find('contact').set('conaffinity', '17')
-    gap = 2*(.04+mount_reference(cfg)['position_m'][1]-cfg['total_height_m'])
-    minimum_gap = 2*cfg.get('fem_contact_radius_m', .0002)
-    root.find(".//default[@class='finger']/joint").set('range', f'{-(gap-minimum_gap)/2} 0')
     # The global Panda defaults are empty. Give imported source elements their
     # own child class so EBiM's default contact values remain exactly intact.
     default = ET.SubElement(root.find('default'), 'default', {'class': 'ebim_task3'})
@@ -112,12 +123,29 @@ def feeding_scene(cfg, layout):
             directory = ASSETS/'assets' if e.tag == 'mesh' else ASSETS
             e.set('file', str(directory/e.get('file')))
         asset.append(e)
+    # A derived neck fit; original source mesh remains the collision
+    # reference and the legacy station remains visually unchanged.
+    if care_room:
+        if not (HEAD_COMPLETION/'head_short_hair.obj').exists():
+            from scripts.build_feeding_head import build_hair
+            build_hair()
+        ET.SubElement(asset, 'mesh', name='local_short_hair_mesh',
+                      file=str(HEAD_COMPLETION/'head_short_hair.obj'), scale=head_scale)
+        ET.SubElement(asset, 'texture', name='local_short_hair_texture', type='2d',
+                      file=str(HEAD_COMPLETION/'head_short_hair.png'))
+        ET.SubElement(asset, 'material', name='local_short_hair_material',
+                      texture='local_short_hair_texture', specular='.05', shininess='.08')
+        if not (HEAD_COMPLETION/'head_seated_visual.obj').exists():
+            from scripts.build_feeding_head import build_seated_face
+            build_seated_face()
+        ET.SubElement(asset, 'mesh', name='local_seated_face_mesh',
+                      file=str(HEAD_COMPLETION/'head_seated_visual.obj'), scale=head_scale)
     for e in elements:
         e = copy.deepcopy(e)
         e.set('childclass' if e.tag == 'body' else 'class', 'ebim_task3')
         if e.get('name') == 'configurable_visual_head':
-            e.set('pos', ' '.join(map(str, HEAD_POSITION)))
-            e.set('quat', ' '.join(map(str, HEAD_QUAT)))
+            e.set('pos', ' '.join(map(str, head_position)))
+            e.set('quat', ' '.join(map(str, head_quat)))
             skin = next(g for g in e.findall('geom') if 'skin' in g.get('mesh', ''))
             collision = copy.deepcopy(skin)
             collision.set('name', 'local_head_collision')
@@ -127,6 +155,13 @@ def feeding_scene(cfg, layout):
             collision.set('rgba', '0 0 0 0')
             collision.attrib.pop('material', None)
             e.append(collision)
+            if care_room:
+                skin.set('mesh', 'local_seated_face_mesh')
+                ET.SubElement(e, 'geom', name='local_short_hair_visual', type='mesh',
+                              mesh='local_short_hair_mesh', material='local_short_hair_material',
+                              contype='0', conaffinity='0', density='0', group='1')
+            # Goal regions are drawn only in the operator's user_scn. There
+            # is no target site/geom in the camera or physics model.
             ET.SubElement(e, 'geom', name='local_head_back_visual', type='mesh', mesh='local_head_back_mesh',
                           material='local_head_back_skin', group='1', contype='0', conaffinity='0', density='0')
             ET.SubElement(e, 'geom', name='local_head_back_collision', type='mesh', mesh='local_head_back_mesh',
@@ -145,13 +180,22 @@ def feeding_scene(cfg, layout):
     for e in source.find('contact'):
         if e.tag == 'pair' and e.get('geom1') in geoms and e.get('geom2') in geoms:
             contact.append(copy.deepcopy(e))
-    # Preserve original lights and floor. Cameras alone are local acquisition
-    # views and are saved with intrinsics/extrinsics by the existing recorders.
+    # Keep the original station available for old recordings; care-room assets
+    # are local and never modify the vendored EBiM files.
     for e in source.findall('worldbody/light'):
         world.append(copy.deepcopy(e))
-    for camera in camera_profile(scene='feeding'):
-        add_camera(world, camera['name'], camera['position_m'], camera['target_m'], camera['fovy_deg'])
-    root.find('statistic').set('center', '-1.65 .0 1.25')
+    if care_room:
+        add_seated_adult(root, head_position, head_quat, cap['skin_rgba'])
+        add_care_room(root)
+    for parent in root.iter():
+        for child in list(parent):
+            if child.tag == 'camera':
+                parent.remove(child)
+    hand = root.find(".//body[@name='hand']")
+    tcp_z = float(hand.find("site[@name='tactile_tcp']").get('pos').split()[2])
+    add_recording_cameras(world, hand, tcp_z, profile=cfg.get('camera_profile'),
+                          scene='feeding_care_room' if care_room else 'feeding')
+    root.find('statistic').set('center', '-1.38 .0 1.15' if care_room else '-1.65 .0 1.25')
     root.find('statistic').set('extent', '1.2')
     # The thin local sensor requires a smaller timestep than EBiM's 1 ms.
     # Use sparse Jacobians for the loaded spoon, six beans and elastic fingertips.
@@ -163,12 +207,14 @@ def feeding_scene(cfg, layout):
     option.set('solver', 'CG')
     option.set('jacobian', 'sparse')
     option.set('noslip_iterations', '0')
+    if cfg.get('skin_dof') == 'trilinear':
+        option.set('integrator', 'discrete')
     return ET.tostring(root, encoding='unicode')
 
 
 class PandaFeedingEnv(PandaPickCubeTactileEnv):
     task_name = 'feeding'
-    workspace = np.array([[-2.01, -.36, TABLE_TOP+.026], [-1.26, .52, 1.68]])
+    workspace = np.array([[-2.01, -.36, -np.inf], [-1.26, .52, 1.68]])
     contact_geometry = 'spoon'
 
     def __init__(self, cfg=None, pollen=False):
@@ -176,9 +222,26 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         for key, value in dict(cap_top_inner_fraction=.85, fem_internal_contact=True,
                                fem_contact_radius_m=.0002, fem_contact_timeconst_s=.0002).items():
             cfg.setdefault(key, value)
-        cfg.setdefault('scene_design', 'ebim_task3_fixed_panda')
+        cfg.setdefault('feeding_setting', 'care_room')
+        cfg.setdefault('feeding_delivery', delivery_config())
+        if cfg.get('gripper') == 'robotiq_2f85':
+            upstream = json.loads((ASSETS/'config.json').read_text())
+            cfg.setdefault('feeding_preload', dict(
+                source='EBiM task3 teleop.py:update_gripper, revision 161db49e9eafd34be31e5bdada72d8e2f796c16a',
+                scope='reset only; flex external normal forces replace source rigid-pad force sums',
+                update_period_s=upstream['scene']['timestep_s'],
+                **{k: v for k, v in upstream['controller'].items() if k.startswith('gripper_')}))
+        self.delivery = DeliveryEvaluator(cfg['feeding_delivery'])
+        head_position, _ = head_placement(cfg['feeding_setting'])
+        cfg['scene_design'] = ('local_care_room_v2_delivery' if cfg['feeding_setting'] == 'care_room'
+                               else 'ebim_task3_fixed_panda')
+        self.workspace = type(self).workspace.copy()
+        if cfg['feeding_setting'] == 'care_room':
+            self.workspace[1, 0] = -1.0  # Allow approaching the seated person's face.
         cfg.setdefault('gripper_control_mode', 'panda_menagerie_position')
         cfg['silicone_numerics'] = 'edge-contact mesh + internal constraints; material uncalibrated'
+        if cfg.get('skin_dof') == 'trilinear':
+            cfg['silicone_numerics'] = 'Trilinear reduced skin, bottom nodes pinned; material uncalibrated'
         super().__init__(cfg, pollen=pollen, xml_factory=feeding_scene,
                          contact_body='dynamic_spoon2', contact_geom='spoon_collision_original_stem_mesh_00',
                          object_joint=None)
@@ -187,22 +250,28 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
                     ET.fromstring(self.xml).find(".//body[@name='dynamic_spoon2']").iter('body')}
         self.contact_geoms = {i for i in range(self.model.ngeom) if self.model.geom_bodyid[i] in body_ids}
         self.cfg.update(task='single_arm_feeding_scene',
-                        constraint_solver='CG', reset_constraint_solver='Newton', constraint_jacobian='sparse',
+                        constraint_solver='CG', reset_constraint_solver=('CG' if cfg.get('skin_dof') == 'trilinear' else 'Newton'), constraint_jacobian='sparse',
                         constraint_solver_source='Local user-requested override of EBiM Newton; source iteration limit retained',
                         ebim_revision=json.loads((ASSETS/'manifest.json').read_text())['revision'],
-                        bean_count=BEAN_COUNT, robot_base_world_m=ROBOT_POSITION, head_world_m=HEAD_POSITION,
+                        bean_count=BEAN_COUNT, robot_base_world_m=ROBOT_POSITION, head_world_m=head_position,
                         head_uniform_scale=HEAD_SCALE, head_height_with_neck_m=.2*HEAD_SCALE,
                         gripper_empty_gap_m=2*cfg['fem_contact_radius_m'], upstream_timestep_s=.001,
                         head_collision='local convex hulls of source skin and posterior completion; rigid, unvalidated',
                         head_completion_manifest=str(HEAD_COMPLETION/'head_back.json'),
+                        seated_human=('local static adult with rigid torso/limb/chair collision; no soft tissue or animation'
+                                      if cfg['feeding_setting'] == 'care_room' else 'absent'),
+                        room_decoration=('local visual-only background; original table collision retained'
+                                         if cfg['feeding_setting'] == 'care_room' else 'original station, no care-room decoration'),
+                        camera_scene_profile='feeding_care_room' if cfg['feeding_setting'] == 'care_room' else 'feeding',
                         feeding_start='physically gripped spoon with six free beans',
-                        grasp_assist=False, task_success_evaluator=False,
+                        grasp_assist=False, task_success_evaluator=self.delivery.config['schema'],
                         source_asset_manifest=str(ASSETS/'manifest.json'))
 
     def reset(self, seed=None):
         # Cold-start closure diverges with CG even at 50 us. Establish the
         # original physical grasp with Newton, then use CG for teleoperation.
-        self.model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
+        self.model.opt.solver = (mujoco.mjtSolver.mjSOL_CG if self.cfg.get('skin_dof') == 'trilinear'
+                                 else mujoco.mjtSolver.mjSOL_NEWTON)
         self.cg_fallbacks = 0
         try:
             return self._reset_loaded_spoon(seed)
@@ -211,10 +280,22 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
 
     def _reset_loaded_spoon(self, seed=None):
         super().reset(seed=seed)  # Unloaded magnetic baseline before closure.
+        self.delivery.reset()
         # Pinch the broad top/bottom of the handle, not its thin side edges.
         self.target_rotation = self.target_rotation@rotation_matrix([np.pi/2, 0., 0.])
+        spoon_yaw = 0.
+        if self.cfg['feeding_setting'] == 'care_room':
+            self.target_xyz = np.asarray(self.cfg['feeding_delivery']['initial_tcp_world_m']).copy()
+            self.servo_xyz = self.target_xyz.copy()
+            head_position, _ = head_placement(self.cfg['feeding_setting'])
+            toward = np.asarray(head_position)-self.target_xyz
+            spoon_yaw = np.arctan2(toward[1], toward[0])-np.pi/2
+            self.target_rotation = rotation_matrix([0., 0., spoon_yaw])@self.target_rotation
+            long_axis = np.array([np.cos(spoon_yaw+np.pi/2), np.sin(spoon_yaw+np.pi/2), 0.])
+            self.target_rotation = rotation_matrix(np.pi*long_axis)@self.target_rotation
+            self.joint_target = np.asarray(self.cfg['feeding_delivery']['initial_arm_joint_seed_rad']).copy()
         self.servo_rotation = self.target_rotation.copy()
-        for _ in range(30):
+        for _ in range(80):
             self.solve_ik()
         self.data.qpos[self.arm_q] = self.joint_target
         self.data.qvel[:] = 0.
@@ -231,26 +312,74 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         # Long axis points forward from the gripper. Only freejoint initial
         # conditions change; no weld, mocap, gravity cancellation or pose copy.
         rotation = np.array([[0., -1., 0.], [1., 0., 0.], [0., 0., 1.]])
+        rotation = rotation_matrix([0., 0., spoon_yaw])@rotation
         quat = np.zeros(4)
         mujoco.mju_mat2Quat(quat, rotation.ravel())
-        origin = self.data.site_xpos[self.tcp_site]-rotation@np.array([-.025, 0., .0059])
-        adr = self.model.jnt_qposadr[self.model.joint('dynamic_spoon2_freejoint').id]
-        self.data.qpos[adr:adr+7] = np.r_[origin, quat]
+        # Initial placement only. Historical configurations retain the old
+        # grasp; the current user-selected point is nearer the bowl.
+        grasp = np.asarray(self.delivery.config.get('initial_grasp_spoon_m', [-.025, 0., .0059]))
         self.data.qvel[:] = 0.
         # Start at handle contact, rather than waiting for the jaws to close
         # while an unsupported spoon falls. The pinch width comes from the
         # original stem mesh at the grasp section (not a force setting).
-        empty_gap = 2*(.04+mount_reference(self.cfg)['position_m'][1]-self.cfg['total_height_m'])
-        self.data.qpos[self.finger_q] = -(empty_gap-.0025)/2
-        self.command_gripper(True)
+        pinch = self.data.site_xpos[self.tcp_site].copy()
+        if self.cfg.get('gripper') == 'robotiq_2f85':
+            from .robotiq import initialize_gap
+            initial_angle = initialize_gap(self.model, self.data, self.cfg['total_height_m'], .0025)
+            # Unlike Panda's slide fingers, the source parallel linkage also
+            # moves the pads along the tool axis as it closes. Place the
+            # preloaded spoon at the actual initial pad midpoint.
+            surfaces = []
+            for name in ('wowskin_mount', 'silicone_mount'):
+                bid = self.model.body(name).id
+                surfaces.append(self.data.xpos[bid]+self.data.xmat[bid].reshape(3, 3) @
+                                np.array([0., 0., self.cfg['total_height_m']]))
+            pinch = np.mean(surfaces, axis=0)
+        else:
+            empty_gap = 2*(.04+mount_reference(self.cfg)['position_m'][1]-self.cfg['total_height_m'])
+            self.data.qpos[self.finger_q] = -(empty_gap-.0025)/2
+        origin = pinch-rotation@grasp
+        adr = self.model.jnt_qposadr[self.model.joint('dynamic_spoon2_freejoint').id]
+        self.data.qpos[adr:adr+7] = np.r_[origin, quat]
+        if self.cfg.get('gripper') == 'robotiq_2f85':
+            self.grip_target = initial_angle
+        else:
+            self.command_gripper(True)
         for i, bid in enumerate(self.bean_bodies):
             jadr = self.model.jnt_qposadr[self.model.body_jntadr[bid]]
             point = [.031+.009*(i//2), -.0035+.007*(i%2), .0005]
             self.data.qpos[jadr:jadr+3] = origin+rotation@point
         mujoco.mj_forward(self.model, self.data)
-        for _ in range(round(self.cfg.get('feeding_settle_s', .30)/self.cfg['timestep_s'])):
+        preload = self.cfg.get('feeding_preload') if self.cfg.get('gripper') == 'robotiq_2f85' else None
+        filtered = np.zeros(2)
+        confirmations, preloaded = 0, False
+        update_steps = 1 if preload is None else round(preload['update_period_s']/self.cfg['timestep_s'])
+        if preload and (update_steps < 1 or not np.isclose(
+                update_steps*self.cfg['timestep_s'], preload['update_period_s'])):
+            raise ValueError('Robotiq preload requires a physics step dividing the source 1 ms controller period')
+        for step in range(round(self.cfg.get('feeding_settle_s', .30)/self.cfg['timestep_s'])):
+            if preload and not preloaded and step % update_steps == 0:
+                # Port of EBiM's close ramp + confirmed force preload. Only
+                # pad force extraction changes from rigid geoms to flexes.
+                alpha = preload['gripper_force_filter_alpha']
+                filtered = alpha*self._external_pad_forces()+(1-alpha)*filtered
+                confirmations = (confirmations+1 if filtered.sum() >=
+                    preload['gripper_contact_force_threshold_n'] else 0)
+                endpoint = min(.735, preload['gripper_fixed_close_target_rad'],
+                    self.model.actuator_ctrlrange[self.gripper_control, 1],
+                    self.model.jnt_range[self.finger_joints[0], 1])
+                if confirmations >= preload['gripper_contact_confirmation_steps']:
+                    self.grip_target = min(endpoint, float(self.data.qpos[self.finger_q[0]])+
+                        preload['gripper_contact_hold_increment_rad'])
+                    preloaded = True
+                else:
+                    self.grip_target = min(endpoint, self.grip_target+
+                        preload['gripper_close_rate_rad_s']*preload['update_period_s'])
+                    preloaded = self.grip_target >= endpoint-1e-12
             self.control()
             mujoco.mj_step(self.model, self.data)
+        if preload and not preloaded:
+            raise RuntimeError('Source Robotiq preload did not finish within feeding_settle_s')
         mujoco.mj_forward(self.model, self.data)
         if np.any(self.data.warning.number):
             raise RuntimeError('Preloaded spoon reset produced a MuJoCo warning')
@@ -258,6 +387,30 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         self.data.time = self.zero_time = 0.
         self.last_row = None
         return self.observation(), {'uncalibrated': True}
+
+    def _external_pad_forces(self):
+        """Sum external normal contact forces for each flex, without cancellation."""
+        if not hasattr(self, '_robot_geom_ids'):
+            root = self.model.body('link0').id
+            bodies = {root}
+            for bid in range(root+1, self.model.nbody):
+                if self.model.body_parentid[bid] in bodies:
+                    bodies.add(bid)
+            self._robot_geom_ids = {i for i, bid in enumerate(self.model.geom_bodyid) if bid in bodies}
+        forces = np.zeros(2)
+        flexes = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_FLEX, name)
+                  for name in ('skin', 'silicone')]
+        wrench = np.zeros(6)
+        for index, contact in enumerate(self.data.contact):
+            for side, fid in enumerate(flexes):
+                if fid not in contact.flex:
+                    continue
+                other = 1-int(np.flatnonzero(contact.flex == fid)[0])
+                if contact.flex[other] in flexes or contact.geom[other] in self._robot_geom_ids:
+                    continue
+                mujoco.mj_contactForce(self.model, self.data, index, wrench)
+                forces[side] += abs(float(wrench[0]))
+        return forces
 
     def sample(self, controller=None):
         if self.model.opt.solver != mujoco.mjtSolver.mjSOL_CG:
@@ -272,7 +425,7 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         try:
             return super().sample(controller)
         except RuntimeError as error:
-            if not any(message in str(error) for message in ('MuJoCo instability/warning', 'FEM invalid')):
+            if not any(message in str(error) for message in ('MuJoCo instability/warning', 'FEM invalid', 'Silicone mesh inverted/nonfinite')):
                 raise
             # Restore the full integration/solver state before retrying. The
             # Cartesian action was already applied by step(): do NOT apply it
@@ -281,6 +434,9 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
             for name, value in saved.items():
                 setattr(self, name, value)
             self.rng.bit_generator.state = rng
+            if self.cfg.get('skin_dof') == 'trilinear':
+                # Newton does not support these interpolated flex nodes.
+                raise
             self.model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
             self.cg_fallbacks += 1
             print('CG unstable: restored last sample boundary; retrying with Newton. '
@@ -323,6 +479,10 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
 
     def viewer_camera(self, close=False, operator=False):
         cam = mujoco.MjvCamera()
+        if self.cfg.get('feeding_setting') == 'care_room':
+            cam.lookat[:] = [-1.33, .01, 1.31] if close else [-1.39, .02, 1.07]
+            cam.distance, cam.azimuth, cam.elevation = (1.22, 95, -12) if close else (2.65, 95, -17)
+            return cam
         # Side view keeps the enlarged head from hiding spoon/pad contact.
         cam.lookat[:] = [-1.55, .08, 1.28] if close else [-1.60, .04, 1.28]
         cam.distance, cam.azimuth, cam.elevation = (1.05, 0, -22) if close else (2.05, 0, -28)
@@ -334,7 +494,8 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         row['spoon_xyz_m'] = row.pop('cube_xyz_m')
         row['spoon_lift_m'] = row.pop('lift_m')
         row['bean_positions_m'] = self.data.xpos[self.bean_bodies].copy()
-        row['success'] = self.success = False
+        row.update(self.evaluate_delivery(row))
+        row['success'] = self.success = self.delivery.success
         row.update(head_contact_force_n=self.head_force_n, head_interval_peak_n=self.head_interval_peak_n,
                    head_peak_force_n=self.head_peak_n, head_net_force_n=self.head_net_force.copy(),
                    head_contact_impulse_ns=self.head_contact_impulse_ns)
@@ -347,6 +508,42 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         row['joint_limit_margin_deg'] = float(np.rad2deg(np.minimum(q-bounds[:, 0], bounds[:, 1]-q)).min())
         row['constraint_solver'] = 'CG' if self.model.opt.solver == mujoco.mjtSolver.mjSOL_CG else 'Newton fallback'
         row['cg_fallbacks'] = self.cg_fallbacks
-        row['task_status'] = 'delivery only; local rigid head contact metric; outcome manually labelled'
+        row['task_status'] = 'delivered to mouth approach region' if self.success else 'delivery in progress'
         self.last_row = row
-        return self.observation(), 0., False, False, row
+        return self.observation(), float(self.success), False, False, row
+
+    def evaluate_delivery(self, row):
+        head = self.model.body('configurable_visual_head').id
+        rotation = self.data.xmat[self.probe_body].reshape(3, 3)
+        point = self.data.xpos[self.probe_body]+rotation@np.asarray(self.delivery.config['bowl_center_spoon_m'])
+        jac = np.zeros((3, self.model.nv))
+        mujoco.mj_jac(self.model, self.data, jac, None, point, self.probe_body)
+        contacts = sum(any(g in self.head_geoms for g in c.geom) and c.dist <= 0
+                       for c in self.data.contact)
+        return self.delivery.update(float(self.data.time), head_pos=self.data.xpos[head],
+            head_rotation=self.data.xmat[head].reshape(3, 3), spoon_pos=self.data.xpos[self.probe_body],
+            spoon_rotation=rotation, bean_positions=self.data.xpos[self.bean_bodies],
+            bowl_speed=np.linalg.norm(jac@self.data.qvel), grasped=row['grasped'], head_contacts=contacts)
+
+    def evaluation_metrics(self, row=None):
+        metrics = self.evaluate_delivery(row or dict(grasped=False)) if row is None else row
+        keys = ('delivery_success', 'delivery_eligible', 'delivery_dwell_s', 'delivery_distance_m',
+                'delivery_inside_target', 'beans_in_spoon', 'spoon_grasped', 'spoon_tilt_deg',
+                'spoon_approach_angle_deg', 'spoon_bowl_speed_m_s', 'head_contact_count')
+        return dict({key: metrics[key] for key in keys}, head_peak_force_n=self.head_peak_n,
+                    head_contact_force_n=self.head_force_n,
+                    head_interval_peak_n=self.head_interval_peak_n,
+                    head_net_force_n=self.head_net_force.copy(),
+                    head_contact_impulse_ns=self.head_contact_impulse_ns)
+
+    def task_evaluation(self):
+        return self.delivery.summary()
+
+    def update_viewer_options(self, handle):
+        if self.cfg['feeding_setting'] == 'care_room':
+            # Cut away only the visual room shell when the free camera orbits
+            # outside it. Fixed acquisition cameras and all physics are intact.
+            az, el = np.deg2rad([handle.cam.azimuth, handle.cam.elevation])
+            eye = handle.cam.lookat+handle.cam.distance*np.array([
+                -np.cos(el)*np.cos(az), -np.cos(el)*np.sin(az), -np.sin(el)])
+            handle.opt.geomgroup[4] = int(eye[0] < .35 and eye[1] < 1.20)

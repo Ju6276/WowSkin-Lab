@@ -113,5 +113,121 @@ def build():
     print(json.dumps(meta, indent=2))
 
 
+def build_seated_face():
+    """Local visual-only neck fit; leave the pinned OBJ unchanged.
+
+    Preserve source UVs; normals are recomputed by MuJoCo after deformation.
+    Keep the original mouth; tuck the source shoulder flaps into the shirt collar.
+    """
+    lines, vertices = [], []
+    for line in SOURCE.read_text().splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        if fields[0] == 'v':
+            x, y, z = map(float, fields[1:4])
+            neck = np.clip((-z-.033)/.023, 0, 1)
+            x = (1-neck)*x+neck*np.clip(x, -.027, .027)
+            y = (1-neck)*y+neck*np.clip(y, -.010, .043)
+            vertices.append([x, y, z])
+            lines.append('v '+' '.join(f'{v:.10g}' for v in (x, y, z)))
+        elif fields[0] == 'vn':
+            continue
+        elif fields[0] == 'f':
+            lines.append('f '+' '.join('/'.join(f.split('/')[:2]) for f in fields[1:]))
+        else:
+            lines.append(line)
+    path = DEST/'head_seated_visual.obj'
+    path.write_text('# Local neck fit; original face expression intact; source intact.\n'+'\n'.join(lines)+'\n')
+    (DEST/'head_seated_visual.json').write_text(json.dumps(dict(
+        source=str(SOURCE.relative_to(ROOT)), source_sha256=hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
+        output_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        purpose='Visual tapered neck; original face expression unchanged; collision remains the original rigid hull',
+        swallowing_or_oral_cavity_physics=False), indent=2)+'\n')
+    print(path)
+
+def build_hair():
+    """Thin short-hair surface fitted to the source scalp and completed occiput.
+
+    Local appearance asset only. No hat primitive, collision or anatomy change.
+    """
+    arrays, triangles = [], []
+    for path in (SOURCE, DEST/'head_back.obj'):
+        points, faces = [], []
+        for line in path.read_text().splitlines():
+            p = line.split()
+            if p and p[0] == 'v':
+                points.append(list(map(float, p[1:4])))
+            elif p and p[0] == 'f':
+                face = [int(v.split('/')[0])-1 for v in p[1:]]
+                faces.extend([[face[0], face[i], face[i+1]] for i in range(1,len(face)-1)])
+        triangles.extend(np.asarray(faces)+len(arrays))
+        arrays.extend(points)
+    original = np.asarray(arrays)
+    vertices, inverse = np.unique(np.round(original, 9), axis=0, return_inverse=True)
+    faces = inverse[np.asarray(triangles)]
+    center = np.array([0., .014, .052])
+    normals = np.zeros_like(vertices)
+    for f in faces:
+        a,b,c = vertices[f]
+        n = np.cross(b-a,c-a)
+        if np.dot(n,(a+b+c)/3-center)<0:
+            n *= -1
+        normals[f] += n
+    normals /= np.maximum(np.linalg.norm(normals,axis=1,keepdims=True),1e-12)
+    # Higher forehead, tapered temples and a lower nape. This follows the
+    # actual head instead of placing a thick ellipsoid cap over it.
+    theta = np.arctan2(vertices[:,1]-.014, vertices[:,0])
+    front = (1-np.sin(theta))/2
+    ears = np.abs(np.cos(theta))**8
+    hairline = .009+.055*front**1.7+.018*ears
+    hairline += .0015*np.sin(3*theta)+.0006*np.sin(11*theta)
+    distance = vertices[:,2]-hairline
+    out, out_normals, out_faces = [], [], []
+    for face in faces:
+        polygon = [(vertices[i],normals[i],distance[i]) for i in face]
+        clipped=[]
+        for a,b in zip(polygon,polygon[1:]+polygon[:1]):
+            if a[2]>=0: clipped.append(a)
+            if (a[2]>=0)!=(b[2]>=0):
+                t=a[2]/(a[2]-b[2])
+                clipped.append((a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1]),0.))
+        if len(clipped)<3: continue
+        start=len(out)
+        for p,n,d in clipped:
+            n=n/max(np.linalg.norm(n),1e-12)
+            thickness=.00035+.00035*min(1.,max(0.,d)/.005)
+            out.append(p+n*thickness);out_normals.append(n)
+        for i in range(1,len(clipped)-1):
+            tri=[start,start+i,start+i+1]
+            a,b,c=[out[j] for j in tri]
+            if np.dot(np.cross(b-a,c-a),sum(out_normals[j] for j in tri))<0:
+                tri[1],tri[2]=tri[2],tri[1]
+            out_faces.append(tri)
+    out, ns = np.asarray(out),np.asarray(out_normals)
+    uv=np.c_[(np.arctan2(out[:,1]-.014,out[:,0])/(2*np.pi)+.5),out[:,2]/.12]
+    path=DEST/'head_short_hair.obj'
+    with path.open('w') as f:
+        f.write('# Local fitted short hair; visual only, source head unchanged.\n')
+        for v in out:f.write('v '+' '.join(f'{x:.10g}' for x in v)+'\n')
+        for v in uv:f.write('vt '+' '.join(f'{x:.10g}' for x in v)+'\n')
+        for v in ns:f.write('vn '+' '.join(f'{x:.10g}' for x in v)+'\n')
+        for tri in out_faces:f.write('f '+' '.join(f'{i+1}/{i+1}/{i+1}' for i in tri)+'\n')
+    rng=np.random.default_rng(17)
+    y,x=np.mgrid[0:768,0:768]
+    grain=rng.normal(0,4.5,x.shape)
+    strands=3*np.sin(x*1.9+8*np.sin(y/130))+2*np.sin(x*.56+y*.4)
+    texture=np.clip(np.array([43.,37.,32.])+grain[...,None]+strands[...,None],0,255).astype('uint8')
+    Image.fromarray(texture).save(DEST/'head_short_hair.png')
+    (DEST/'head_short_hair.json').write_text(json.dumps(dict(
+        source=str(SOURCE.relative_to(ROOT)), source_sha256=hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
+        purpose='Local scalp-fitted short hair covering source/completion color seam; visual only',
+        thickness_m=[.00035,.0007],collision=False,seed=17,
+        mesh_sha256=hashlib.sha256(path.read_bytes()).hexdigest()),indent=2)+'\n')
+    print(path)
+
+
 if __name__ == '__main__':
     build()
+    build_seated_face()
+    build_hair()

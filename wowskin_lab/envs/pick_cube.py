@@ -6,9 +6,11 @@ attachment, pose copying, or object gravity compensation is used.
 """
 import argparse
 from contextlib import nullcontext
+from collections import deque
 import csv
 import json
 from pathlib import Path
+import textwrap
 import time
 import xml.etree.ElementTree as ET
 
@@ -22,11 +24,12 @@ from wowskin_lab.data.cameras import add_recording_cameras
 from wowskin_lab.teleop.command import CartesianCommand
 from wowskin_lab.envs.workcell import industrial_workcell
 from wowskin_lab.paths import ROOT
+from wowskin_lab.envs.task_evaluation import CubePickPlaceEvaluator, cube_corners, gripper_contacts, task_config
 
 TABLE_Z = .10
 CUBE_HALF = .020
 CUBE_MASS = .020
-WORKSPACE = np.array([[.24, -.18, .127], [.58, .18, .40]])
+WORKSPACE = np.array([[.24, -.18, -np.inf], [.58, .18, .40]])
 ROTATE_AXES = {
     ord('I'): (1, 0, 0), ord('K'): (-1, 0, 0),
     ord('L'): (0, 1, 0), ord('J'): (0, -1, 0),
@@ -72,10 +75,14 @@ def pick_scene(cfg, layout):
     # costly Newton factorization while preserving the same contact geometry.
     option = root.find("option")
     option.set("solver", "CG")
-    option.set("jacobian", "dense")
+    option.set("jacobian", cfg.get("constraint_jacobian", "dense"))
     option.set("iterations", "30")
     option.set("tolerance", "1e-8")
     option.set("noslip_iterations", "1")
+    if cfg.get('skin_dof') == 'trilinear':
+        # Required by MuJoCo 3.15's implicit flex elasticity integration.
+        option.set('integrator', 'discrete')
+        option.set('noslip_iterations', '0')
     world = root.find("worldbody")
     world.remove(world.find("body[@name='probe']"))
     floor = world.find("geom[@name='floor']")
@@ -97,7 +104,7 @@ def pick_scene(cfg, layout):
     z = .0584+mount_reference(cfg)["position_m"][2]
     ET.SubElement(hand, "site", name="tactile_tcp", pos=f"0 0 {z}", size=".001",
                   rgba=".1 .9 .7 .4")
-    add_recording_cameras(world, hand, z)
+    add_recording_cameras(world, hand, z, profile=cfg.get('camera_profile'))
     # The split tendon applies half its force to each finger. Retain the
     # sourced position servo unless the legacy force mode is explicit.
     act = root.find(".//general[@name='fingers_actuator']")
@@ -136,11 +143,10 @@ def pick_scene(cfg, layout):
         actuator_limit = 2*cfg.get('gripper_force_max_n', 1.)
         act.set("ctrlrange", f"{-actuator_limit} {actuator_limit}")
         act.set("forcerange", f"{-actuator_limit} {actuator_limit}")
-    # Prevent overlapping pads on empty closure, accounting for added thickness.
-    gap = 2*(.04+mount_reference(cfg)["position_m"][1]-cfg["total_height_m"])
-    lower = -(gap-.006)/2
-    root.find(".//default[@class='finger']/joint").set("range", f"{lower} 0")
-    industrial_workcell(root)
+    # Original Panda 40 mm finger stroke, expressed in local q_source - .04.
+    # Added pads stop through physical contact, not an artificial empty gap.
+    root.find(".//default[@class='finger']/joint").set("range", "-.04 0")
+    industrial_workcell(root, pick_place=cfg.get('task_success'))
     return ET.tostring(root, encoding="unicode")
 
 
@@ -157,6 +163,10 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
     def __init__(self, cfg=None, pollen=True, *, xml_factory=pick_scene,
                  contact_body="cube", contact_geom="cube", object_joint="cube_joint"):
         cfg = configuration() if cfg is None else dict(cfg)
+        self.pick_place = None
+        if self.task_name == 'pick_cube':
+            cfg.setdefault('task_success', task_config('pick_cube'))
+            self.pick_place = CubePickPlaceEvaluator(cfg['task_success'])
         gripper_cfg = json.loads((ROOT/'configs/gripper_control.json').read_text())
         for key, value in gripper_cfg.items():
             cfg.setdefault(key, value)
@@ -166,17 +176,31 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
             limits = [cfg['gripper_force_min_n'], cfg['gripper_force_per_finger_n'], cfg['gripper_force_max_n']]
             if not np.isfinite(limits).all() or not 0 < limits[0] <= limits[1] <= limits[2]:
                 raise ValueError('Gripper limits must be finite, positive and ordered min <= selected <= max')
-        elif cfg['gripper_control_mode'] not in ('panda_menagerie_position', 'panda_robosuite_position'):
+        elif cfg['gripper_control_mode'] not in ('panda_menagerie_position', 'panda_robosuite_position', 'ebim_robotiq_position'):
             raise ValueError('Unknown gripper controller')
-        # Task-specific resolution; bench resolution/parameters stay unchanged.
-        cfg.setdefault("mesh_outline_samples", 12)
+        # The reduced displacement field is inexpensive, but still needs a
+        # resolved collision/integration mesh. Twelve outline samples create
+        # long, thin skirt tetrahedra: a recorded cable motion gives V/V0=.148
+        # on that mesh, versus .763/.761 with 48/96 samples under the SAME
+        # trilinear deformation. Keep the material and volume check unchanged.
+        cfg.setdefault("mesh_outline_samples", 48 if cfg.get('skin_dof') == 'trilinear' else 12)
         cfg.setdefault("scene_design", "industrial_workcell_v1")
+        cfg.setdefault("camera_profile", "three_view")
+        if cfg.get('gripper') == 'robotiq_2f85':
+            from .robotiq import replace_gripper
+            original_factory = xml_factory
+            xml_factory = lambda c, l: replace_gripper(original_factory(c, l), c)
         TactileSim.__init__(self, cfg, xml_factory=xml_factory, mount_body="wowskin_mount",
                            contact_body=contact_body, contact_geom=contact_geom)
+        self.cfg.update(cfg)
         self.initialize_mounts_and_arm()
         self.tcp_site = self.model.site("tactile_tcp").id
         self.hand = self.model.body("hand").id
-        self.finger_joints = [self.model.joint(f"finger_joint{i}").id for i in (1, 2)]
+        if cfg.get('gripper') == 'robotiq_2f85':
+            from .robotiq import DRIVER
+            self.finger_joints = [self.model.joint(DRIVER).id]
+        else:
+            self.finger_joints = [self.model.joint(f"finger_joint{i}").id for i in (1, 2)]
         self.finger_q = self.model.jnt_qposadr[self.finger_joints]
         self.finger_v = self.model.jnt_dofadr[self.finger_joints]
         self.gripper_control = self.model.actuator("fingers_actuator").id
@@ -186,18 +210,23 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         if cfg['gripper_control_mode'] == 'panda_robosuite_position':
             self.cfg['transmission'] = 'Independent joint actuators, one per finger; no split-tendon force factor'
             self.cfg['gripper_source'] = json.loads((ROOT/'assets/reference/robosuite_panda/manifest.json').read_text())
-            self.cfg['gripper_force_status'] = 'Pinned robosuite Panda per-finger position actuator and joint dynamics; target uses local fingertip travel bounds. 20 N actuator cap per finger, not calibrated contact force.'
+            self.cfg['gripper_force_status'] = 'Pinned robosuite Panda per-finger position actuator and joint dynamics; native 40 mm stroke in translated coordinates. 20 N actuator cap per finger, not calibrated contact force.'
         self.cube_q = self.model.jnt_qposadr[self.model.joint(object_joint).id] if object_joint else None
         self.ik_data = mujoco.MjData(self.model)
         self.predictor = None
         if pollen:
             from wowskin_lab.baselines.pollen import PollenPredictor
             self.predictor = PollenPredictor()
-        self.reset()
         self.reskin_response = None
+        self.reset()
         if cfg.get('reskin_model'):
             from wowskin_lab.baselines.reskin_contact import ReskinContactResponse
             self.reskin_response = ReskinContactResponse(cfg['reskin_model'], cfg.get('reskin_extrapolate', False))
+            profile = json.loads((ROOT/'configs/magnetic_fit_pollen_nonslip.json').read_text())
+            if not np.isclose(profile['fit_magnetization_a_per_m'], cfg['magnetization_a_per_m']):
+                raise ValueError('Comparison fit uses a different magnetization reference')
+            self.comparison_gains = np.asarray(profile['gains'])
+            self.cfg['comparison_magnetic_fit_profile'] = profile
 
     def reset(self, seed=None):
         self.episode_id = getattr(self, "episode_id", -1)+1
@@ -224,6 +253,8 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
             mujoco.mj_step(self.model, self.data)
         mujoco.mj_forward(self.model, self.data)
         self.initial_cube_z = float(self.data.xpos[self.probe_body, 2])
+        if self.pick_place is not None:
+            self.pick_place.reset(cube_corners(self), TABLE_Z)
         self.baseline = self.magnetic_field().copy()
         self.filtered[:] = 0.
         self.delay.clear()
@@ -238,14 +269,20 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
                     tcp_rotvec_rad=rotation_vector(self.data.site_xmat[self.tcp_site]),
                     gripper_closed_fraction=self.gripper_fraction(),
                     cube_position_m=self.data.xpos[self.probe_body].copy(),
-                    magnetic_ut=(self.last_row["magnetic_ut"].copy() if self.last_row else np.zeros(15)),
+                    magnetic_ut=(self.last_row["magnetic_ut"].copy() if self.last_row else np.full(15, np.nan) if getattr(self, "reskin_response", None) else np.zeros(15)),
                     joint_positions=self.data.qpos[self.arm_q].copy())
 
+    def gripper_closed_target(self):
+        if self.cfg.get('gripper') == 'robotiq_2f85':
+            return self.cfg['robotiq_closed_angle_rad']
+        endpoint = 0
+        return float(self.model.jnt_range[self.finger_joints[0], endpoint])
+
     def command_gripper(self, close):
-        self.grip_target = float(self.model.jnt_range[self.finger_joints[0], 0]) if close else 0.
+        self.grip_target = float(self.gripper_closed_target()) if close else 0.
 
     def gripper_fraction(self, target=False):
-        lower = self.model.jnt_range[self.finger_joints[0], 0]
+        lower = self.gripper_closed_target()
         value = self.grip_target if target else self.data.qpos[self.finger_q].mean()
         return float(np.clip(value/lower, 0., 1.))
 
@@ -267,15 +304,17 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
                 self.mouse_wrench[sl] *= min(1., limit/max(norm, 1e-12))
 
     def solve_ik(self):
-        # Rate-limit the Cartesian target before solving; key repeats cannot
-        # teleport joints or command unbounded velocities.
+        # Optional local Cartesian slew limits; IK and physical actuator
+        # bounds remain active in both modes. No joint teleportation.
         delta = self.target_xyz-self.servo_xyz
         length = np.linalg.norm(delta)
         linear_step = self.cfg.get('tcp_speed_m_s', .08)/self.cfg['sample_hz']
         angular_step = self.cfg.get('tcp_angular_speed_rad_s', .8)/self.cfg['sample_hz']
-        self.servo_xyz += delta*min(1., linear_step/max(length, 1e-12))
+        unrestricted = self.cfg.get('disable_cartesian_limits', False)
+        self.servo_xyz += delta if unrestricted else delta*min(1., linear_step/max(length, 1e-12))
         delta_rotation = rotation_vector(self.servo_rotation.T @ self.target_rotation)
-        self.servo_rotation = self.servo_rotation @ rotation_matrix(limit_vector(delta_rotation, angular_step))
+        self.servo_rotation = self.servo_rotation @ rotation_matrix(
+            delta_rotation if unrestricted else limit_vector(delta_rotation, angular_step))
         m, d = self.model, self.ik_data
         d.qpos[:] = self.data.qpos
         d.qpos[self.arm_q] = self.joint_target
@@ -304,7 +343,9 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         torque = 600*(self.joint_target-d.qpos[self.arm_q])-45*d.qvel[self.arm_v]+d.qfrc_bias[self.arm_v]
         limits = m.actuator_ctrlrange[self.arm_controls]
         d.ctrl[self.arm_controls] = np.clip(torque, limits[:, 0], limits[:, 1])
-        if self.cfg.get('gripper_control_mode') in ('panda_menagerie_position', 'panda_robosuite_position'):
+        if self.cfg.get('gripper') == 'robotiq_2f85':
+            d.ctrl[self.gripper_control] = self.grip_target
+        elif self.cfg.get('gripper_control_mode') in ('panda_menagerie_position', 'panda_robosuite_position', 'ebim_robotiq_position'):
             # Both sourced controllers use opening targets in [0,.04].
             # Local joints use q=q_src-.04; command is the closure fraction.
             closure = (self.grip_target / -.04 if self.cfg['gripper_control_mode'] == 'panda_robosuite_position'
@@ -318,32 +359,49 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         if d.time < self.tug_until:
             d.xfrc_applied[self.probe_body, 2] -= .5
 
-    def step(self, action):
+    def apply_action_target(self, action):
         action = CartesianCommand.from_array(action).as_array()
-        applied = np.r_[np.clip(action[:3], -.005, .005), limit_vector(action[3:6], .03),
-                        np.clip(action[6], 0., 1.)]
-        before_pose = np.r_[self.data.site_xpos[self.tcp_site],
-                            rotation_vector(self.data.site_xmat[self.tcp_site])]
-        action_time = float(self.data.time)
-        target = np.clip(self.target_xyz+applied[:3], *getattr(self, 'workspace', WORKSPACE))
+        unrestricted = self.cfg.get('disable_cartesian_limits', False)
+        applied = (action.copy() if unrestricted else
+                   np.r_[np.clip(action[:3], -.005, .005), limit_vector(action[3:6], .03), action[6]])
+        applied[6] = np.clip(action[6], 0., 1.)
+        target = self.target_xyz+applied[:3]
+        if not unrestricted:
+            target = np.clip(target, *getattr(self, 'workspace', WORKSPACE))
         applied[:3] = target-self.target_xyz
         self.target_xyz = target
         self.target_rotation = self.target_rotation @ rotation_matrix(applied[3:6])
-        self.grip_target = float(applied[6]*self.model.jnt_range[self.finger_joints[0], 0])
+        self.grip_target = float(applied[6]*self.gripper_closed_target())
+        return applied
+
+    def step(self, action):
+        before_pose = np.r_[self.data.site_xpos[self.tcp_site],
+                            rotation_vector(self.data.site_xmat[self.tcp_site])]
+        action_time = float(self.data.time)
+        applied = self.apply_action_target(action)
         self.solve_ik()
         row = self.reading()
         if self.reskin_response:
             row['dipole_magnetic_ut'] = row['magnetic_ut'].copy()
             row['dipole_ideal_delta_ut'] = row['ideal_delta_ut'].copy()
             row['dipole_raw_field_ut'] = row['raw_field_ut'].copy()
+            # Side-by-side on this exact mechanical state. Keep native U order;
+            # analysis reorders to the network's candidate position grouping.
+            row['fitted_dipole_ideal_delta_ut'] = (row['ideal_delta_ut'].reshape(5, 3)
+                                                  * self.comparison_gains[:, None]).reshape(15)
             row.update(self.reskin_response.evaluate(self))
+            row['tactile_valid'] = bool(np.isfinite(row['magnetic_ut']).all())
+            if not row['tactile_valid']:
+                row['tactile_status'] = row.get('reskin_status', 'network observation unavailable')
         row["action"] = applied
         row["action_time_s"] = action_time
         row["tcp_pose_before_m_rad"] = before_pose
         row["tcp_rotvec_rad"] = rotation_vector(self.data.site_xmat[self.tcp_site])
         row["gripper_closed_fraction"] = self.gripper_fraction()
-        row['gripper_force_limit_per_finger_n'] = (20. if self.cfg.get('gripper_control_mode') == 'panda_robosuite_position' else float('nan') if self.cfg.get('gripper_control_mode') in ('panda_menagerie_position', 'panda_robosuite_position') else self.grip_force)
-        row['finger_actuator_force_n'] = self.data.qfrc_actuator[self.finger_v].copy()
+        row['gripper_force_limit_per_finger_n'] = (20. if self.cfg.get('gripper_control_mode') == 'panda_robosuite_position' else float('nan') if self.cfg.get('gripper_control_mode') in ('panda_menagerie_position', 'panda_robosuite_position', 'ebim_robotiq_position') else self.grip_force)
+        row['finger_actuator_force_n'] = (np.full(len(self.finger_v), np.nan) if self.cfg.get('gripper') == 'robotiq_2f85' else self.data.qfrc_actuator[self.finger_v].copy())
+        if self.cfg.get('gripper') == 'robotiq_2f85':
+            row['gripper_hinge_torque_nm'] = self.data.qfrc_actuator[self.finger_v].copy()
         row["cube_xyz_m"] = self.data.xpos[self.probe_body].copy()
         row["tcp_xyz_m"] = self.data.site_xpos[self.tcp_site].copy()
         row["pollen_probability"] = self.predictor.update(row["magnetic_ut"]) if self.predictor and np.isfinite(row['magnetic_ut']).all() else float("nan")
@@ -355,11 +413,31 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         row["phase"] = self.phase
         row["episode_id"] = self.episode_id
         row["success"] = bool(row["grasped"] and row["lift_m"] > .06)
-        self.success |= row["success"]
+        if self.pick_place is not None:
+            row.update(self.evaluate_pick_place(row))
+            row['success'] = self.success = self.pick_place.success
+        else:
+            self.success |= row['success']
         self.last_row = row
         reward = .3*np.exp(-20*np.linalg.norm(row["cube_xyz_m"]-row["tcp_xyz_m"]))+.7*min(row["lift_m"]/.06, 1.)
         # Continue teleoperation after success so the user can lower/open/tug.
         return self.observation(), float(reward), False, False, row
+
+
+    def evaluate_pick_place(self, row):
+        velocity = np.zeros(6)
+        mujoco.mj_objectVelocity(self.model, self.data, mujoco.mjtObj.mjOBJ_BODY,
+                                self.probe_body, velocity, 0)
+        return self.pick_place.update(float(self.data.time), corners=cube_corners(self),
+            grasped=row.get('grasped', False),
+            gripper_contact_count=gripper_contacts(self, {self.probe_geom}),
+            speed=np.linalg.norm(velocity[3:]), angular_speed=np.linalg.norm(velocity[:3]))
+
+    def evaluation_metrics(self, row=None):
+        return dict(self.pick_place.metrics)
+
+    def task_evaluation(self):
+        return self.pick_place.summary()
 
 
 def task_camera(env, close=False, operator=False):
@@ -389,7 +467,7 @@ def key_command(env, code):
         env.grip_target = (actual/-.04*env.model.jnt_range[env.finger_joints[0], 0]
                            if env.cfg.get('gripper_control_mode') == 'panda_menagerie_position' else actual)
     elif code in (ord("-"), ord("=")):
-        if env.cfg.get('gripper_control_mode') in ('panda_menagerie_position', 'panda_robosuite_position'):
+        if env.cfg.get('gripper_control_mode') in ('panda_menagerie_position', 'panda_robosuite_position', 'ebim_robotiq_position'):
             return  # Source position actuator; no invented per-finger limit.
         env.grip_force = float(np.clip(env.grip_force+(.1 if code == ord("=") else -.1),
                                       env.cfg['gripper_force_min_n'], env.cfg['gripper_force_max_n']))
@@ -401,7 +479,9 @@ def key_command(env, code):
 
 def hold_current_pose(env):
     """Cancel an outstanding Cartesian target when manual input ends/starts."""
-    env.target_xyz = np.clip(env.data.site_xpos[env.tcp_site].copy(), *getattr(env, 'workspace', WORKSPACE))
+    env.target_xyz = env.data.site_xpos[env.tcp_site].copy()
+    if not env.cfg.get('disable_cartesian_limits', False):
+        env.target_xyz = np.clip(env.target_xyz, *getattr(env, 'workspace', WORKSPACE))
     env.servo_xyz = env.target_xyz.copy()
     env.target_rotation = env.data.site_xmat[env.tcp_site].reshape(3, 3).copy()
     env.servo_rotation = env.target_rotation.copy()
@@ -423,9 +503,10 @@ def manual_action(env, held, was_moving, camera_azimuth=None):
     velocity = translation*env.cfg.get('keyboard_speed_m_s', .04)
     angular_velocity = direction(held, ROTATE_AXES)*.4
     moving = bool(np.any(velocity) or np.any(angular_velocity))
-    if moving != was_moving:
+    limited = not env.cfg.get('disable_cartesian_limits', False)
+    if limited and moving != was_moving:
         hold_current_pose(env)
-    if moving:
+    if limited and moving:
         actual = env.data.site_xpos[env.tcp_site]
         env.target_xyz = np.clip(env.target_xyz, actual-.006, actual+.006)
         actual_rotation = env.data.site_xmat[env.tcp_site].reshape(3, 3)
@@ -445,6 +526,22 @@ def save_records(rows, output):
         writer.writerow(["episode_id", "sim_time_s", "phase", *CHANNELS, "left_slip", "left_force_n", "right_force_n", "pollen_probability", *lift_header, "tug_force_n"])
         writer.writerows([r["episode_id"], r["time_s"], r["phase"], *r["magnetic_ut"], r["slip"], r["normal_force_n"],
                          r["passive_normal_force_n"], r["pollen_probability"], *[r[k] for k in lift_header], r["tug_force_n"]] for r in rows)
+
+
+def fault_overlay(fault, row, magnetic_response):
+    """Keep the failure and recovery keys inside the native text buffer."""
+    reason = fault.split('. Physics stopped', 1)[0]
+    if len(reason) > 400:
+        reason = reason[:360] + '... (full error in terminal)'
+    reason_lines = textwrap.wrap(reason, width=64) or ['Unknown error']
+    labels = ['Status', 'Reason', *['']*(len(reason_lines)-1),
+              'Recovery', 'Displayed data', 'Magnetic response', 'Last valid step']
+    values = ['PAUSED: local physics check', *reason_lines,
+              'R reset | P save diagnostics and exit',
+              f"Last valid sample at {row['time_s']:.2f} s; not live data",
+              magnetic_response,
+              f"{row.get('physics_and_sensor_wall_s', 0.)*1000:.1f} ms / 10 ms sim"]
+    return labels, values
 
 
 def scripted_action(env):
@@ -475,19 +572,38 @@ def scripted_action(env):
 
 def response_configuration(args):
     cfg = configuration(seed=getattr(args, 'seed', 0))
+    cfg['disable_cartesian_limits'] = bool(getattr(args, 'no_cartesian_limits', False))
+    cfg['gripper'] = getattr(args, 'gripper', 'panda')
+    if cfg['gripper'] == 'robotiq_2f85' and getattr(args, 'grip_force', None) is not None:
+        raise ValueError('Robotiq uses the sourced hinge servo; --grip-force is a Panda legacy option')
+    cfg['skin_dof'] = getattr(args, 'skin_dof', 'full')
+    if cfg['skin_dof'] == 'trilinear':
+        cfg.update(skin_model_status='Experimental trilinear interpolation; bounding-box bottom attachment; no internal contact',
+                   skin_model_source='https://github.com/google-deepmind/mujoco/blob/3.5.0/model/flex/gripper_trilinear.xml',
+                   integrator='discrete', noslip_iterations=0, fem_node_joint_damping=0.,
+                   engine_version=mujoco.__version__)
     if getattr(args, 'task', 'pick_cube') == 'cable':
         cfg['cable_layout'] = getattr(args, 'cable_layout', None) or 'routing'
     physics_step_us = getattr(args, 'physics_step_us', None)
-    if physics_step_us is None and getattr(args, 'task', 'pick_cube') in ('cable', 'feeding'):
+    task = getattr(args, 'task', 'pick_cube')
+    if task == 'feeding':
+        cfg['feeding_setting'] = getattr(args, 'feeding_setting', 'care_room')
+    if physics_step_us is None and task in ('pick_cube', 'cable', 'feeding'):
         # Feeding's recorded 6D spoon motion becomes unstable at 100 us and
         # passes at 50 us with this thin-silicone/contact configuration.
         # This costs throughput; the sensor/control clock remains 100 Hz.
-        physics_step_us = 50 if args.task == 'feeding' else 100
+        physics_step_us = 500 if cfg['skin_dof'] == 'trilinear' else (50 if task == 'feeding' else 100)
+    if physics_step_us is not None and physics_step_us > 100 and cfg['skin_dof'] != 'trilinear':
+        raise ValueError('Steps above 100 us are tested only with the reduced skin')
+    if task == 'pick_cube':
+        # Same full FEM/contact model; sparse CG avoids dense Jacobian work.
+        # Keep the selected integration step in acquisition metadata.
+        cfg['constraint_jacobian'] = 'sparse'
     if physics_step_us is not None:
         cfg['timestep_s'] = physics_step_us*1e-6
         cfg['timestep_source'] = 'Teleoperation numerical integration setting; 100 Hz sensor clock retained'
     if getattr(args, 'ideal', False):
-        cfg.update(noise_ut=0., drift_ut_per_s=0.)
+        cfg.update(noise_ut=0., drift_ut_per_s=0., filter_tau_s=0., delay_samples=0)
     if getattr(args, 'grip_force', None) is not None:
         cfg['gripper_control_mode'] = 'legacy_force_limited'
         cfg['gripper_force_per_finger_n'] = args.grip_force
@@ -549,7 +665,8 @@ def demo(args):
                   model="unchanged published Pollen weights and scaler" if env.predictor else None,
                   cube_mass_kg=CUBE_MASS, cube_edge_m=2*CUBE_HALF,
                   force_limit_per_finger_n=float(env.grip_force) if np.isfinite(env.grip_force) else None,
-                  mount=mount_reference(env.cfg), samples=len(rows), picked_up=bool(env.success),
+                  mount=mount_reference(env.cfg), samples=len(rows), picked_up=bool(np.any(values["grasped"] & (values["lift_m"] > .06))),
+                  task_evaluation=env.task_evaluation(),
                   config=env.cfg,
                   max_lift_m=float(values["lift_m"].max()),
                   slip_frames=int(labels.sum()), non_slip_frames=int((~labels).sum()),
@@ -582,6 +699,8 @@ def viewer(args):
     import mujoco.viewer
     from wowskin_lab.ui.physics_worker import PhysicsWorker
     from wowskin_lab.ui.camera_preview import CameraPreview
+    from wowskin_lab.ui.teleop_hud import operator_overlay, render_operator_panel, saved_recording_notice
+    from wowskin_lab.ui.task_guides import TaskGuides
     cfg = response_configuration(args)
     cfg['randomize_cube'] = args.randomize
     cable_task = getattr(args, 'task', 'pick_cube') == 'cable'
@@ -621,8 +740,14 @@ def viewer(args):
         env = PandaPickCubeTactileEnv(cfg, pollen=not args.no_pollen)
     title = ('PandaCable / single clip' if cable_task and env.cable_layout == 'single_clip'
              else 'PandaCable' if cable_task else 'PandaFeeding' if feeding_task else 'PandaPickCube')
-    source_gripper = env.cfg.get('gripper_control_mode') in ('panda_menagerie_position', 'panda_robosuite_position')
-    if source_gripper:
+    if cfg['disable_cartesian_limits']:
+        print('Cartesian limits OFF: no workspace, action increment, servo slew or target-lead limits. '
+              'Centered input retains the target; focus loss still cancels outstanding motion. '
+              'IK, joint ranges and actuator limits are unchanged.', flush=True)
+    source_gripper = env.cfg.get('gripper_control_mode') in ('panda_menagerie_position', 'panda_robosuite_position', 'ebim_robotiq_position')
+    if env.cfg.get('gripper') == 'robotiq_2f85':
+        print('Gripper: EBiM Robotiq 2F-85 hinge position servo; source torque limits retained', flush=True)
+    elif source_gripper:
         print('Gripper: robosuite Panda independent finger servos, 20 N actuator cap each' if env.cfg['gripper_control_mode'] == 'panda_robosuite_position' else 'Gripper: MuJoCo Menagerie Panda position servo; 100 N tendon actuator cap, NOT fingertip contact force; no 0.35 N limiter', flush=True)
     else:
         print(f"Gripper: local, uncalibrated per-finger drive limit {env.grip_force:.2f} N; "
@@ -632,32 +757,33 @@ def viewer(args):
     if cable_task and hud.reskin_mode:
         hud.subtitle = 'Experimental cable proxy [uT]'
         hud.footer = 'NOT calibrated | cable/probe mismatch'
-    keyboard = ViewerKeyboard(set(map(ord, "WASDEQXZCTFRVBNP-=,.")) | MOTION_KEYS | {ESC, ENTER, BACKSPACE},
+    keyboard = ViewerKeyboard(set(map(ord, "WASDEQXZCTFRVBNPH-=,.")) | MOTION_KEYS | {ESC, ENTER, BACKSPACE},
                               title_contains='PandaCable:' if cable_task else title+':')
     recorder = None
+    from wowskin_lab.data.recording import MissingTactileError
+    recording_notice = ''
     if args.record_dir and cfg.get('reskin_model') and not cfg.get('reskin_extrapolate'):
         print('Strict ReSkin mode: unsupported predictions are blank; synchronized training recording is disabled. Diagnostic rows are saved on exit.', flush=True)
     if args.record_dir and not (cfg.get('reskin_model') and not cfg.get('reskin_extrapolate')):
-        if args.record_format == 'ftf-raw':
-            from wowskin_lab.data.ftf_recording import FTFSimRecorder
-            recorder = FTFSimRecorder(env, args.record_dir, source=args.input)
-        elif args.record_format == 'visk-raw':
-            from wowskin_lab.data.visk_recording import ViSkSimRecorder
-            recorder = ViSkSimRecorder(env, args.record_dir, source=args.input)
-        elif args.record_format == 'both-raw':
-            from wowskin_lab.data.learning_recording import LearningSimRecorder
-            recorder = LearningSimRecorder(env, args.record_dir, source=args.input)
+        if args.record_format == 'lerobot':
+            from wowskin_lab.data.lerobot_recording import LeRobotSimRecorder
+            recorder = LeRobotSimRecorder(env, args.record_dir, source=args.input,
+                instruction=args.instruction, record_depth=args.record_depth)
         else:
-            from wowskin_lab.data.recording import MujocoRecorder
-            recorder = MujocoRecorder(env, args.record_dir, args.record_hz, source=args.input)
+            from wowskin_lab.data.learning_recording import LearningSimRecorder
+            recorder = LearningSimRecorder(env, args.record_dir, source=args.input,
+                instruction=args.instruction, record_depth=args.record_depth)
     pico = None
     if args.input == 'pico':
         from wowskin_lab.teleop.pico import PicoBridge
         pico = PicoBridge(args.pico_port, args.pico_scale, args.pico_speed, args.pico_angular_speed)
-    rows, close, fault, automatic = [], cable_task, "", False
+    rows = [] if args.diagnostic_log else deque(maxlen=200)
+    sampled_count = 0
+    close, fault, automatic = cable_task, "", False
     faults = []
     was_moving = False
     next_hud = 0.
+    show_diagnostics = False
     realtime_factor, loop_hz = 0., 0.
     deadline = time.monotonic()+args.seconds if args.seconds else float("inf")
     grip_help = env.cfg['gripper_control_mode'] if source_gripper else '-/= legacy force limit'
@@ -668,8 +794,42 @@ def viewer(args):
     with (mouse or nullcontext()), (pico or nullcontext()), (recorder or nullcontext()), mujoco.viewer.launch_passive(display_model, display_data, key_callback=keyboard.native_callback,
                                     show_left_ui=False, show_right_ui=False) as handle, keyboard, PhysicsWorker(
                                         env, handle, keyboard, display_model, display_data,
-                                        on_abort=getattr(recorder, 'abort', None)) as physics, CameraPreview(display_model, display_data, hud) as previews:
-        physics.on_present = previews.show
+                                        on_abort=getattr(recorder, 'abort', None)) as physics, CameraPreview(display_model, display_data, hud, TaskGuides(env)) as previews:
+        recording_busy, busy_started = False, 0.
+        def present(handle):
+            if recording_busy:
+                stage, detail = recorder.progress
+                elapsed = time.monotonic()-busy_started
+                quitting = ord('P') in keyboard.peek().commands or not handle.is_running()
+                hud.operator_panel = render_operator_panel(
+                    [stage, 'Elapsed', 'Controls'],
+                    [detail, f'{elapsed:.1f} s',
+                     'Exit requested; finishing current file write' if quitting else
+                     'Please wait | B/Enter/motion resume after completion'])
+            previews.show(handle)
+        physics.on_present = present
+        physics.on_status = lambda labels, values: setattr(hud, 'operator_panel', render_operator_panel(labels, values))
+        def recording_call(stage, detail, function, *args):
+            nonlocal recording_busy, busy_started, next_hud
+            recording_busy, busy_started = True, time.monotonic()
+            recorder.progress = (stage, detail)
+            previews.next_frame = 0.
+            physics.present()  # Publish acknowledgement before reset/encoding.
+            try:
+                return function(*args)
+            finally:
+                recording_busy = False
+                next_hud = 0.
+                keyboard.discard_busy_input()
+                if mouse:
+                    mouse.state.sample()  # Discard button presses made during saving.
+                    mouse_controller.reset()
+                if pico:
+                    pico.controller.reset()
+                    _, _, _, pending = pico.mailbox.sample()
+                    if ord('P') in pending:
+                        keyboard.event(ord('P'), True)
+                        keyboard.event(ord('P'), False)
         if mouse:
             env.cfg['spacemouse']['device'] = mouse.info
             print(f"SpaceMouse: {mouse.info['product_string']} | exclusive HID={mouse.info.get('exclusive_hid', False)} | push/tilt in camera frame | left close, right open | B/Enter/N record | click MuJoCo window to control", flush=True)
@@ -679,7 +839,7 @@ def viewer(args):
         apply_camera()
         if pico:
             pico.open_usb()
-        style = None if keyboard.continuous else ViewerStyleGuard(handle, "WASDEQXZCTFRVIJKLUO,.")
+        style = None if keyboard.continuous else ViewerStyleGuard(handle, "WASDEQXZCTFRVHIJKLUO,.")
         print("Keyboard: window-local press/release; native shortcuts consumed" if keyboard.continuous
               else "Keyboard: non-macOS single-step fallback (no held-key support)", flush=True)
         while handle.is_running() and time.monotonic() < deadline:
@@ -695,7 +855,10 @@ def viewer(args):
             held = snapshot.held
             fallback_motion = env.hold_action()
             for code in commands:
-                if pico and code == ord('G'):
+                if code == ord('H'):
+                    show_diagnostics = not show_diagnostics
+                    next_hud = 0.
+                elif pico and code == ord('G'):
                     frame, received, _, _ = pico.mailbox.sample(drain=False)
                     if time.monotonic()-received <= .25:
                         hold_current_pose(env)
@@ -708,15 +871,41 @@ def viewer(args):
                         hold_current_pose(env)
                         pico.controller.reset()
                     if recorder.active:
-                        recorder.finish('success' if code == ENTER else ('failure' if code == ord('N') else 'unreviewed'))
+                        try:
+                            outcome = 'success' if code == ENTER else ('failure' if code == ord('N') else 'unreviewed')
+                            saved = recording_call('SAVING', 'Finishing recording; preparing file write', recorder.finish, outcome)
+                            recording_notice = saved_recording_notice(recorder, saved, outcome)
+                        except (OSError, ValueError, RuntimeError) as error:
+                            recording_notice = 'Recording save failed; see terminal; capture files retained'
+                            print(f'Recording save failed: {error}', flush=True)
                     elif code == ord('B'):
-                        physics.run(env.reset)
                         automatic, fault, was_moving = False, '', False
                         keyboard.clear()
                         held = frozenset()
-                        recorder.start()
+                        try:
+                            def start_recording():
+                                physics.run(env.reset)
+                                recorder.start()
+                            recording_call('PREPARING', 'Resetting scene before new recording', start_recording)
+                            recording_notice = f'STARTED {recorder.writer.path.name} | recording now'
+                        except MissingTactileError as error:
+                            if hasattr(recorder, 'abort'):
+                                recorder.abort(str(error))
+                            else:
+                                recorder.finish('interrupted')
+                            recording_notice = 'Unavailable tactile: recording not started'
+                            print(f'Recording unavailable: {error}', flush=True)
+                        except (OSError, ValueError, RuntimeError) as error:
+                            recording_notice = 'Recording not started; see terminal'
+                            print(f'Recording not started: {error}', flush=True)
                         if pico:
                             pico.controller.reset()
+                    else:
+                        recording_notice = 'No active recording | B starts recording'
+                    # Do not replay stale held keys or a second queued Enter/B
+                    # after an operation that took seconds to finish.
+                    held = frozenset()
+                    break
                 elif code == 256:
                     close = False
                     apply_camera()
@@ -788,14 +977,27 @@ def viewer(args):
                     if mouse:
                         row['spacemouse_axes'] = mouse_snapshot.axes.copy()
                         row['spacemouse_buttons'] = mouse_snapshot.buttons
-                    if recorder:
-                        recorder.step(row)
                     row['held_motion_keys'] = ' '.join(str(k) for k in sorted(held & MOTION_KEYS))
                     row['viewer_loop_wall_s'] = time.monotonic()-start
                     row['viewer_realtime_factor'] = max(0., float(env.data.time)-sample_start)/max(row['viewer_loop_wall_s'], 1e-9)
                     if automatic and env.data.time >= 8.5:
                         automatic = False
                     rows.append(row)
+                    sampled_count += 1
+                    # Keep invalid intervals in diagnostics (NaN measurements
+                    # plus validity/time fields), never in training episodes.
+                    if recorder:
+                        recorder.step(row)
+                except MissingTactileError as error:
+                    # An unsupported observation is not a failed physics step.
+                    # End this recording without FTF advancing a post-roll or
+                    # filling missing tactile samples; keep teleoperation live.
+                    if hasattr(recorder, 'abort'):
+                        recorder.abort(str(error))
+                    elif recorder:
+                        recorder.finish('interrupted')
+                    recording_notice = 'Unavailable tactile: recording interrupted'
+                    print(f'Recording interrupted: {error}', flush=True)
                 except RuntimeError as error:
                     if recorder:
                         # Invalid physics must not be stepped again for FTF's
@@ -817,56 +1019,25 @@ def viewer(args):
             if env.last_row and time.monotonic() >= next_hud:
                 next_hud = time.monotonic()+.1
                 row = env.last_row
-                labels = [title, "Move (camera plane + Z)", "Rotate (local XYZ)", "Gripper", "Test / view", "Left / right load [N]",
-                          "Pollen: LEFT 15 channels", "Physics: left slip", "Task" if other_task else "Lift / picked", "Target XYZ [m]", "Status"]
-                text = ["7D | WowSkin + plain silicone", "W/S forward/back | A/D left/right | E/Q up/down", "Hold I/K Rx | L/J Ry | U/O Rz (0.4 rad/s)", f"X close | Z open | C hold | -/= {env.grip_force:.2f} N limit",
-                        ("T tug | R reset | V view | Esc" if other_task else "F test | T tug | R reset | V view | Esc"), f"{row['normal_force_n']:.3f} / {row['passive_normal_force_n']:.3f}",
-                        (f"{row['pollen_probability']:.3f} (transfer unvalidated)" if env.predictor else 'disabled'), str(row['slip']),
-                        ("Loaded spoon | 6 beans | manual outcome" if feeding_task else
-                         ("Single clip | manual outcome" if env.cable_layout == 'single_clip' else "Manual outcome; routing not scored")
-                         if cable_task else f"{row['lift_m']*1000:.1f} mm / {env.success}"), " ".join(f"{v:.3f}" for v in env.target_xyz),
-                        ("PAUSED: physics invalid | R reset | P save/exit" if fault else
-                         (env.phase if automatic else ("Moving / rotating" if was_moving else "Manual hold"))+" | uncalibrated")]
-                labels += ['Magnetic response']
-                text += [('Forward MLP (experimental)' if env.cfg.get('reskin_model') else
-                          'Dipole + Pollen/network fitted gains' if env.cfg.get('magnetic_fit') else
-                          'Dipole (unfitted)')]
-                labels += ['Simulation speed']
-                text += [f'{realtime_factor:.2f}x real time | {loop_hz:.1f} updates/s | keyboard {keyboard_speed*1000:.0f} mm/s sim']
-                if mouse:
-                    labels += ['SpaceMouse USB']
-                    text += [mouse_controller.status]
-                    text[1:5] = ['Push knob: camera XY | lift: world Z', 'Tilt / twist: camera-frame rotation',
-                                 f'Left close | right open | -/= {env.grip_force:.2f} N limit',
-                                 'B record | Enter success | N failure | R reset']
-                    text[-2] = f'{realtime_factor:.2f}x real time | {loop_hz:.1f} updates/s | max {mouse_controller.speed*1000:.0f} mm/s sim'
-                if pico:
-                    labels += ['Pico USB', 'Pico placement']
-                    text += [pico.controller.status, f'{pico.controller.mode or "waiting"} | right B switches mode | right A optional align']
-                    text[1:5] = ['Right GRIP + move | release stops', 'Right GRIP + rotate',
-                                 'Right TRIGGER closes | release GRIP holds closure', 'Left X record | Y success | stick failure | V/Esc view']
-                if recorder:
-                    labels += ['Dataset recording']
-                    text += [f'REC {recorder.writer.count} frames | Enter success / N failure' if recorder.active
-                             else 'B starts new episode | P saves and exits']
-                if source_gripper:
-                    text[3] = ('Left close | right open' if mouse else 'X close | Z open | C hold')+(' | robosuite Panda servo' if env.cfg['gripper_control_mode'] == 'panda_robosuite_position' else ' | Menagerie Panda servo')
-                if feeding_task:
-                    labels += ['Head load / episode peak [N]', 'IK condition / joint margin', 'Constraint solver']
-                    text += [f"{row['head_contact_force_n']:.3f} / {row['head_peak_force_n']:.3f} | local rigid proxy",
-                             f"{row['ik_weighted_condition']:.2f} / {row['joint_limit_margin_deg']:.1f} deg | rotation weight 0.2 m",
-                             row['constraint_solver']]
-                labels += ['Physics + sensor cost']
-                text += [f"{row.get('physics_and_sensor_wall_s', 0.)*1000:.1f} ms / 10 ms sim | {row.get('total_contacts', 0)} contacts, {row.get('constraint_rows', 0)} constraints"]
+                input_kind = 'SpaceMouse' if mouse else 'Pico' if pico else 'Keyboard'
+                input_status = (mouse_controller.status if mouse else pico.controller.status if pico else
+                                env.phase if automatic else 'Moving' if was_moving else 'Ready')
+                labels, text = operator_overlay(env, row, title=title, input_kind=input_kind,
+                    input_status=input_status, recorder=recorder, recording_notice=recording_notice,
+                    diagnostics=show_diagnostics, realtime_factor=realtime_factor, loop_hz=loop_hz)
                 if fault:
-                    # Keep recovery keys visible; the full exception can be
-                    # wider than the viewer and previously hid the reset hint.
-                    labels += ['Physics fault', 'Displayed data']
-                    text += [fault.split('. Physics stopped', 1)[0], 'Last valid sample; recording stopped']
+                    magnetic_response = ('Forward MLP (experimental)' if env.cfg.get('reskin_model') else
+                        'Dipole + fitted gains' if env.cfg.get('magnetic_fit') else 'Dipole (unfitted)')
+                    labels, text = fault_overlay(fault, row, magnetic_response)
                 if not handle.is_running():
                     break
-                handle.set_texts([(mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT,
-                                   "\n".join(labels), "\n".join(text))])
+                hud.operator_panel = render_operator_panel(labels, text, success=bool(row.get('success')), fault=bool(fault))
+                # MuJoCo mjr_drawPixels assumes 2-D GL state. An empty LIST
+                # skips mjr_overlay/init2D, leaving the 3-D depth test active
+                # and hiding image panels. One empty overlay initializes 2-D
+                # state without drawing duplicate white text over our bitmap.
+                handle.set_texts([(mujoco.mjtFont.mjFONT_NORMAL,
+                    mujoco.mjtGridPos.mjGRID_TOPLEFT, '', '')])
                 previews.show(handle, row)
             before_sync = display_data.time
             if style:
@@ -888,11 +1059,16 @@ def viewer(args):
             if rows and rows[-1] is env.last_row:
                 rows[-1]['viewer_loop_wall_s'] = elapsed
                 rows[-1]['viewer_realtime_factor'] = advance/max(elapsed, 1e-9)
-    if rows:
+    if rows and (args.diagnostic_log or faults):
         destination = Path(args.output)/time.strftime("teleop_%Y%m%d_%H%M%S")
         save_records(rows, destination)
+        if faults:
+            (destination/'faults.json').write_text(json.dumps({
+                'faults': faults,
+                'last_valid_sample_time_s': float(rows[-1]['time_s']),
+            }, indent=2)+'\n')
         print(f"Saved {len(rows)} simulated samples to {destination}", flush=True)
-    return dict(samples=len(rows), faults=faults)
+    return dict(samples=sampled_count, faults=faults)
 
 
 def main():
@@ -900,14 +1076,21 @@ def main():
     parser.add_argument("command", choices=["viewer", "demo"], nargs="?", default="viewer")
     parser.add_argument("--no-pollen", action="store_true")
     parser.add_argument("--render", action="store_true")
-    parser.add_argument("--seconds", type=float, default=0.)
+    parser.add_argument("--seconds", type=float, default=0.,
+                        help='Optional wall-clock limit; 0 runs until P/window close. Exiting interrupts an active recording.')
     parser.add_argument('--input', choices=['keyboard', 'pico', 'spacemouse'], default='keyboard')
+    parser.add_argument('--no-cartesian-limits', action='store_true',
+                        help='Simulation experiment: disable workspace, per-action, servo-speed and target-lead limits; retain input scale, IK, joint and actuator bounds')
     parser.add_argument('--task', choices=['pick_cube', 'cable', 'feeding'], default='pick_cube')
     parser.add_argument('--cable-layout', choices=['routing', 'single_clip'],
                         help='Cable fixture layout: original routing (default), or one reversed C-clip')
+    parser.add_argument('--feeding-setting', choices=['care_room', 'ebim_station'], default='care_room',
+                        help='Feeding setting: seated adult in a local care room (default), or previous isolated EBiM station')
     parser.add_argument('--grip-force', type=float, help='Explicitly enable the OLD local force-limited controller [N/finger]; default uses sourced Menagerie Panda position servo')
-    parser.add_argument('--ideal', action='store_true', help='Disable synthetic magnetic noise/drift; retain deformation response and filter/delay')
-    parser.add_argument('--physics-step-us', type=int, choices=[20, 50, 100], help='Integration step in microseconds; recorded in dataset metadata')
+    parser.add_argument('--ideal', action='store_true', help='Disable synthetic magnetic noise, drift, readout filtering and sample delay; retain contact mechanics and deformation response')
+    parser.add_argument('--physics-step-us', type=int, choices=[20, 50, 100, 500, 1000], help='Integration step in microseconds; 500/1000 require reduced skin; recorded in metadata')
+    parser.add_argument('--gripper', choices=['panda', 'robotiq_2f85'], default='panda', help='Panda or EBiM Robotiq 2F-85 with local tactile mounts')
+    parser.add_argument('--skin-dof', choices=['full', 'trilinear'], default='trilinear', help='Reduced skin for all three tasks (MuJoCo 3.15); full keeps the reference FEM')
     parser.add_argument('--keyboard-speed', type=float, help='Translation speed in m/s of simulation time; cable .12, cube .04; maximum .25')
     parser.add_argument('--spacemouse-speed', type=float, default=.12, help='Maximum translation m/s of simulation time')
     parser.add_argument('--spacemouse-angular-speed', type=float, default=.5, help='Maximum rotation rad/s of simulation time')
@@ -922,10 +1105,14 @@ def main():
     parser.add_argument('--magnetic-fit', type=Path, help='Simulation-only fitted dipole gain profile; alternative to --reskin-model')
     parser.add_argument('--reskin-extrapolate', action='store_true', help='EXPERIMENTAL preview: allow unvalidated cube-patch and out-of-domain predictions')
     parser.add_argument('--record-dir', type=Path, help='Enable synchronized episode recording with B/Enter/N')
-    parser.add_argument('--record-hz', type=int, default=10)
-    parser.add_argument('--record-format', choices=['local', 'ftf-raw', 'visk-raw', 'both-raw'], default='local',
-                        help='visk-raw: single-sensor/two fixed cameras; ftf-raw: original Franka-Teach writer; training is separate')
-    parser.add_argument("--output", default="outputs/pick_cube")
+    parser.add_argument('--instruction', help='Episode language instruction, stored verbatim; otherwise use the task template')
+    parser.add_argument('--record-depth', action=argparse.BooleanOptionalAction, default=True,
+                        help='Save synchronized lossless metric depth from all configured cameras (default: enabled)')
+    parser.add_argument('--record-format', choices=['lerobot', 'dataset'], default='lerobot',
+                        help='lerobot: official v2.1 plus full-rate raw attachment; dataset: raw only')
+    parser.add_argument("--diagnostic-log", action="store_true",
+                        help="Also save full-session NPZ/CSV diagnostics; default keeps only a 200-sample fault buffer")
+    parser.add_argument("--output", default="outputs/diagnostics/pick_cube")
     args = parser.parse_args()
     if args.cable_layout is not None and args.task != 'cable':
         parser.error('--cable-layout requires --task cable')
@@ -934,10 +1121,8 @@ def main():
     if args.task in ('cable', 'feeding'):
         if args.command != 'viewer' or args.randomize:
             parser.error('Cable/feeding support manual viewer; cube demo/randomization do not apply')
-        if args.record_dir and args.record_format == 'local':
-            parser.error('Cable/feeding recording requires both-raw, visk-raw or ftf-raw; legacy cube-point format is not supported')
-        if args.output == 'outputs/pick_cube':
-            args.output = 'outputs/cable_insert' if args.task == 'cable' and args.cable_layout == 'single_clip' else 'outputs/'+args.task
+        if args.output == 'outputs/diagnostics/pick_cube':
+            args.output = 'outputs/diagnostics/cable_insert' if args.task == 'cable' and args.cable_layout == 'single_clip' else 'outputs/diagnostics/'+args.task
     return (demo if args.command == "demo" else viewer)(args)
 
 

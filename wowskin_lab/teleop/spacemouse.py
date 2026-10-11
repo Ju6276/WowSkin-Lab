@@ -12,6 +12,12 @@ import time
 
 import numpy as np
 
+# Raw HID -> operator frame (screen right, tabletop away, world up).
+# Positive raw Rx is forward cap tilt on the connected Wireless BT. A
+# downward-facing tool must pitch away from the operator, so use +Rx here.
+# This is the user's control convention, not a robot or sensor calibration.
+HID_AXIS_SIGNS = np.array([1., -1., -1., 1., -1., 1.])
+
 
 @dataclass(frozen=True)
 class MouseSnapshot:
@@ -133,9 +139,10 @@ class SpaceMouseController:
     def settings(self):
         return dict(speed_m_s=self.speed, angular_speed_rad_s=self.angular_speed,
                     deadzone=self.deadzone, timeout_s=.25, full_scale=350,
-                    hid_axis_signs=[1,-1,-1,-1,-1,1],
+                    hid_axis_signs=HID_AXIS_SIGNS.tolist(),
                     translation_frame='camera ground plane + world Z',
                     rotation_frame='camera ground plane + world Z, converted to TCP-local rotvec',
+                    pitch_convention='Forward cap tilt pitches a downward-facing tool away from the viewer about screen right',
                     buttons='left close; right open; both hold')
 
     def action(self, env, snapshot, azimuth, focused=True, now=None):
@@ -148,7 +155,7 @@ class SpaceMouseController:
         fresh = np.repeat(now-snapshot.received <= .25, 3)
         stale_motion = np.any((np.abs(raw) > self.deadzone) & ~fresh)
         if not focused or snapshot.error or stale_motion:
-            if self.moving:
+            if self.moving or env.cfg.get('disable_cartesian_limits', False):
                 hold_current_pose(env)
             self.reset()
             self.status = snapshot.error or ('Click MuJoCo window, then center knob' if not focused
@@ -165,15 +172,16 @@ class SpaceMouseController:
             else:
                 env.command_gripper(press == 'close')
         axes = np.sign(raw)*np.maximum(np.abs(raw)-self.deadzone, 0)/(1-self.deadzone)
-        axes *= np.array([1,-1,-1,-1,-1,1])*fresh
+        axes *= HID_AXIS_SIGNS*fresh
         translation = view_translation(limit_vector(axes[:3], 1.), azimuth)*self.speed
         world_rotation = view_translation(limit_vector(axes[3:], 1.), azimuth)*self.angular_speed
         rotation = env.data.site_xmat[env.tcp_site].reshape(3,3)
         local_rotation = rotation.T @ world_rotation
         moving = bool(np.any(translation) or np.any(local_rotation))
-        if moving != self.moving:
+        limited = not env.cfg.get('disable_cartesian_limits', False)
+        if limited and moving != self.moving:
             hold_current_pose(env)
-        if moving:
+        if limited and moving:
             actual = env.data.site_xpos[env.tcp_site]
             env.target_xyz = np.clip(env.target_xyz, actual-.006, actual+.006)
             lead = rotation_vector(rotation.T @ env.target_rotation)

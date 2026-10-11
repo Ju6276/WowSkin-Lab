@@ -1,0 +1,23 @@
+{
+  "source": "Local task definitions requested for collection; scoring only, no forces, snaps or scripted assistance",
+  "pick_cube": {
+    "schema": "local_cube_pick_place_v1",
+    "source_center_xy_m": [0.40, 0.0],
+    "source_half_width_m": 0.065,
+    "target_center_xy_m": [0.49, 0.135],
+    "target_half_width_m": 0.045,
+    "marking_half_width_m": 0.0012,
+    "required_lift_m": 0.06,
+    "table_height_tolerance_m": 0.002,
+    "max_speed_m_s": 0.015,
+    "max_angular_speed_rad_s": 0.15,
+    "continuous_dwell_s": 0.3
+  },
+  "cable": {
+    "schema": "local_cable_clip_v1",
+    "collision_tolerance_m": 0.0003,
+    "continuous_dwell_s": 0.3,
+    "require_release": false,
+    "scope": "Cable spans the clip tunnel below its roof; routing around pegs and retention after release are not scored"
+  }
+}

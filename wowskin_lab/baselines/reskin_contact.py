@@ -1,9 +1,9 @@
 """Experimental single-probe surrogate for MuJoCo contact, not a calibrated skin.
 
 Uses actual FEM top-surface compression (never a guessed force-to-depth law).
-A cube patch is represented by its force-weighted contact centroid and maximum
+A contact patch is represented by its force-weighted contact centroid and maximum
 top-surface compression. The dataset does NOT validate this patch reduction.
-Strict mode therefore refuses a cube prediction; explicit preview extrapolation
+Strict mode therefore refuses unvalidated transfer; explicit preview extrapolation
 can inspect its failure modes without treating the output as validated data.
 """
 import mujoco
@@ -30,8 +30,9 @@ class ReskinContactResponse:
         positions, weights = [], []
         for i in range(d.ncon):
             contact = d.contact[i]
-            contact_geoms = getattr(sim, 'contact_geoms', {sim.probe_geom})
-            if not any(int(g) in contact_geoms for g in contact.geom) or sim.skin_flex not in contact.flex:
+            # The skin also senses the table/fixtures/opposite pad, not only
+            # the task object. Ignore internal self contacts, not external ones.
+            if sim.skin_flex not in contact.flex or all(int(f) == sim.skin_flex for f in contact.flex):
                 continue
             force = np.zeros(6)
             mujoco.mj_contactForce(m, d, i, force)
@@ -55,21 +56,22 @@ class ReskinContactResponse:
                       magnetic_channel_order='candidate_center_left_right_up_down',
                       magnetic_axes='source_ReSkin_XYZ_unverified',
                       reskin_patch_span_mm=span, reskin_contact_count=contacts,
-                      reskin_transfer_validated=False)
+                      reskin_transfer_validated=False,
+                      tactile_observation_valid=False,
+                      tactile_model_inputs='contact_centroid_xy_and_max_normal_depth_not_full_deformation')
         if query is None:
-            # A reference convention, NOT a model trained on unloaded examples.
-            return dict(common, magnetic_ut=np.zeros(15), ideal_delta_ut=np.zeros(15),
-                        raw_field_ut=np.asarray(self.model.meta['baseline_ut']),
-                        reskin_query_mm=np.full(3, np.nan), reskin_status='unloaded_reference_zero',
+            # This model has no unloaded/recovery supervision. Missing input
+            # is unknown, not a predicted zero or a switch to another backend.
+            return dict(common, magnetic_ut=np.full(15, np.nan), ideal_delta_ut=np.full(15, np.nan),
+                        raw_field_ut=np.full(15, np.nan),
+                        reskin_query_mm=np.full(3, np.nan), reskin_status='UNAVAILABLE:no_contact_query;unloaded_recovery_not_modelled',
                         reskin_in_training_domain=False, reskin_prediction_emitted=False)
         issues = self.model.domain_issues(query)
         within_domain = not any(s != 'unvalidated_depth_interpolation' for s in issues)
-        if getattr(sim, 'contact_geometry', '') == 'cable':
-            issues.append('cable_line_contact_not_training_probe')
-        elif m_is_box(sim):
-            issues.append('cube_patch_not_training_probe')
-        else:
-            issues.append('probe_geometry_transfer_unverified')
+        # The active task object does not identify what touched the sensor.
+        # Tables, fixtures, multiple objects and the other pad are equally
+        # observable, but none is validated by this single-probe training set.
+        issues.append('contact_shape_transfer_unverified')
         # No clipping of XY/depth, no invented shallow-contact scaling, no sum
         # over collision points (which would make amplitude mesh-dependent).
         emitted = self.extrapolate
@@ -79,7 +81,3 @@ class ReskinContactResponse:
                     raw_field_ut=values+np.asarray(self.model.meta['baseline_ut']),
                     reskin_query_mm=query, reskin_status=status,
                     reskin_in_training_domain=within_domain, reskin_prediction_emitted=emitted)
-
-
-def m_is_box(sim):
-    return sim.model.geom_type[sim.probe_geom] == mujoco.mjtGeom.mjGEOM_BOX

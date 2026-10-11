@@ -10,7 +10,7 @@
   "fps": 30,
   "intrinsic_convention": "MuJoCo pinhole; fx=fy=height/(2*tan(fovy/2)); cx=(width-1)/2, cy=(height-1)/2",
   "orientation_convention": "camera +Z points from target to position, +X=cross(world/local +Z, camera +Z), +Y=cross(camera +Z,+X)",
-  "default_profile": "two_fixed",
+  "default_profile": "three_view",
   "profiles": {
     "two_fixed": {
       "camera_ids": [
@@ -38,6 +38,21 @@
         52
       ],
       "status": "Saved previous local rig; FTF four-view training not integrated"
+    },
+    "three_view": {
+      "camera_ids": [
+        1,
+        2,
+        52
+      ],
+      "fixed_camera_ids": [
+        1,
+        2
+      ],
+      "moving_camera_ids": [
+        52
+      ],
+      "status": "Default for all tasks: two fixed cameras plus the preserved wrist camera"
     }
   },
   "cameras": [
@@ -180,6 +195,41 @@
     }
   ],
   "scene_overrides": {
+    "feeding_care_room": {
+      "1": {
+        "position_m": [
+          -2.25,
+          0.62,
+          1.7
+        ],
+        "target_m": [
+          -1.38,
+          0.0,
+          1.24
+        ]
+      },
+      "2": {
+        "position_m": [
+          -0.85,
+          -0.85,
+          1.72
+        ],
+        "target_m": [
+          -1.37,
+          0.0,
+          1.24
+        ]
+      },
+      "52": {
+        "position_m": [
+          0,
+          0.1,
+          0.075
+        ],
+        "mount_revision": "feeding_wrist_v2_lateral",
+        "reason": "Fixed lateral wrist mount. Old +X=0.10, Z=0.075 entered the head in a recorded approach; no dynamic camera avoidance or robot motion restriction."
+      }
+    },
     "feeding": {
       "1": {
         "position_m": [
@@ -216,6 +266,15 @@
           0.05,
           1.1
         ]
+      },
+      "52": {
+        "position_m": [
+          0,
+          0.1,
+          0.075
+        ],
+        "mount_revision": "feeding_wrist_v2_lateral",
+        "reason": "Fixed lateral wrist mount. Old +X=0.10, Z=0.075 entered the head in a recorded approach; no dynamic camera avoidance or robot motion restriction."
       }
     }
   },

@@ -811,6 +811,11 @@
       "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task3_mujoco/assets/head/head_eye_right.obj",
       "bytes": 19300,
       "sha256": "a61be86bbcd5d1258dcb7db2566267c35131bbcf39f3c531cd33c84772ce48f9"
+    },
+    "upstream_teleop.py": {
+      "url": "https://raw.githubusercontent.com/EBiM-Benchmark/benchmark/161db49e9eafd34be31e5bdada72d8e2f796c16a/task3_mujoco/teleop.py",
+      "bytes": 70342,
+      "sha256": "b26ec70b93742d21a030d1ba41109d1198597bf5da9cbd3c0ac3f6f22e803e57"
     }
   },
   "selected_bodies": [

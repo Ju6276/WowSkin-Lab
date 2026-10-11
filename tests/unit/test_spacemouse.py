@@ -24,6 +24,24 @@ def fake_env():
 
 
 class SpaceMouseChecks(unittest.TestCase):
+    def test_unlimited_mode_keeps_target_lead_and_centered_target_but_focus_loss_stops(self):
+        env, state, controller = fake_env(), MouseState(), SpaceMouseController()
+        env.cfg['disable_cartesian_limits'] = True
+        controller.action(env, state.sample(), 90, now=1.)
+        # The arm is lagging well behind its target.
+        env.target_xyz[0] = .48
+        state.feed(report(1, [350, 0, 0, 0, 0, 0]), 2.)
+        command = controller.action(env, state.sample(), 90, now=2.)
+        self.assertGreater(command[0], 0)
+        self.assertEqual(env.target_xyz[0], .48)
+        state.feed(report(1, [0]*6), 2.1)
+        controller.action(env, state.sample(), 90, now=2.1)
+        self.assertEqual(env.target_xyz[0], .48)
+        state.feed(report(1, [350, 0, 0, 0, 0, 0]), 2.2)
+        controller.action(env, state.sample(), 90, now=2.2)
+        controller.action(env, state.sample(), 90, focused=False, now=2.2)
+        np.testing.assert_allclose(env.target_xyz, env.data.site_xpos[0])
+
     def test_combined_split_signed_axes_and_status_does_not_refresh_motion(self):
         s = MouseState()
         s.feed(report(1, [350,-350,-175,70,-35,0]), 10.)
@@ -81,6 +99,27 @@ class SpaceMouseChecks(unittest.TestCase):
         s.feed(report(1,[0,0,0,0,0,350]),2.)
         a=controller.action(env,s.sample(),90,now=2.)
         np.testing.assert_allclose(a[3:6],[0,0,-.005],atol=1e-10)
+
+    def test_forward_cap_tilt_moves_downward_tool_away_in_each_view(self):
+        from scipy.spatial.transform import Rotation
+        # Check the physical motion of a tool tip, rather than just checking
+        # a sign array. Front/back and oblique views must agree on away.
+        for azimuth in (0, 90, 135, 180, 270):
+            for input_sign in (-1, 1):
+                env, s, controller = fake_env(), MouseState(), SpaceMouseController()
+                rotation = np.diag([1., -1., -1.])
+                env.data.site_xmat[:] = rotation.reshape(1, 9)
+                controller.action(env, s.sample(), azimuth, now=1.)
+                s.feed(report(1, [0, 0, 0, input_sign*350, 0, 0]), 2.)
+                command = controller.action(env, s.sample(), azimuth, now=2.)
+                next_rotation = rotation @ Rotation.from_rotvec(command[3:6]).as_matrix()
+                tip_motion = next_rotation[:, 2] - rotation[:, 2]
+                angle = np.deg2rad(azimuth)
+                away = np.array([np.cos(angle), np.sin(angle), 0.])
+                right = np.array([np.sin(angle), -np.cos(angle), 0.])
+                self.assertGreater(input_sign * np.dot(tip_motion, away), 0)
+                self.assertAlmostEqual(np.dot(tip_motion, right), 0)
+                np.testing.assert_array_equal(command[:3], np.zeros(3))
 
     def test_both_buttons_hold_uses_source_servo_coordinate_mapping(self):
         env, s, controller = fake_env(), MouseState(), SpaceMouseController()
