@@ -105,7 +105,7 @@ class TactileHUD:
         draw.text((16, 534), row.get("hud_timing", timing), font=self.small, fill=(171, 187, 204))
         return np.asarray(img)
 
-    def show(self, handle, row, probability=None, cameras=None):
+    def show(self, handle, row, probability=None, cameras=None, pointcloud=None):
         # A camera capture can outlive the viewer's final frame. The native
         # viewport/set_images accessors do not check exitrequest themselves.
         # Do not hold the viewer lock: set_images waits for its render thread.
@@ -124,21 +124,27 @@ class TactileHUD:
 
         pixels = self.render(row, probability)
         pixels, width, height = scaled(pixels, viewport.width*.28, viewport.height*.48)
-        # Tactile stays at bottom left; right column is acquisition cameras only.
+        # Tactile stays at bottom left; RGB and fused cloud share one right column.
         rectangle = mujoco.MjrRect(viewport.left+10, viewport.bottom+10, width, height)
         images = [(rectangle, pixels)]
         if self.operator_panel is not None:
             panel, panel_w, panel_h = scaled(self.operator_panel, viewport.width*.65, viewport.height*.46)
             images.append((mujoco.MjrRect(viewport.left+10,
                 viewport.bottom+viewport.height-panel_h-10, panel_w, panel_h), panel))
-        if cameras:
+        if cameras or pointcloud is not None:
             thumb_height = self.width*3//4
-            panel = Image.new('RGB', (self.width, len(cameras)*(thumb_height+24)), (21,27,34))
+            camera_height = len(cameras or [])*(thumb_height+24)
+            cloud_height = (round(pointcloud.shape[0]*self.width/pointcloud.shape[1])
+                            if pointcloud is not None else 0)
+            panel = Image.new('RGB', (self.width, camera_height+cloud_height), (21,27,34))
             draw = ImageDraw.Draw(panel)
-            for index, (label, frame) in enumerate(cameras):
+            for index, (label, frame) in enumerate(cameras or []):
                 y = index*(thumb_height+24)
                 draw.text((10,y+4), label, font=self.small, fill=(223,230,240))
                 panel.paste(Image.fromarray(frame).resize((self.width,thumb_height), Image.Resampling.LANCZOS), (0,y+24))
+            if pointcloud is not None:
+                panel.paste(Image.fromarray(pointcloud).resize((self.width,cloud_height),
+                            Image.Resampling.LANCZOS), (0,camera_height))
             camera_pixels, width, height = scaled(np.asarray(panel), viewport.width*.30, viewport.height-20)
             rectangle = mujoco.MjrRect(viewport.left+viewport.width-width-10,
                                        viewport.bottom+viewport.height-height-10, width, height)

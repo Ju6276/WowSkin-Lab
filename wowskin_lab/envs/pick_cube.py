@@ -757,7 +757,7 @@ def viewer(args):
     if cable_task and hud.reskin_mode:
         hud.subtitle = 'Experimental cable proxy [uT]'
         hud.footer = 'NOT calibrated | cable/probe mismatch'
-    keyboard = ViewerKeyboard(set(map(ord, "WASDEQXZCTFRVBNPH-=,.")) | MOTION_KEYS | {ESC, ENTER, BACKSPACE},
+    keyboard = ViewerKeyboard(set(map(ord, "WASDEQXZCTFRVBNPHMY09-=,.")) | MOTION_KEYS | {ESC, ENTER, BACKSPACE},
                               title_contains='PandaCable:' if cable_task else title+':')
     recorder = None
     from wowskin_lab.data.recording import MissingTactileError
@@ -791,10 +791,19 @@ def viewer(args):
     if recorder:
         print('Recording: B new/reset or stop (unreviewed) | Enter save SUCCESS | N save FAILURE | R interrupts | P save interrupted and exit', flush=True)
     display_model, display_data = PhysicsWorker.display(env)
+    from wowskin_lab.data.cameras import camera_profile
+    from wowskin_lab.data.robot_state import world_from_base
+    # Frame existing camera targets, without cropping points or changing physics.
+    targets = [c['target_m'] for c in camera_profile(scene=args.task) if c['parent'] == 'world']
+    center_world = np.mean(targets, axis=0)
+    base_world = np.linalg.inv(world_from_base(env))
+    cloud_options = dict(enabled=args.pointcloud, hz=args.pointcloud_hz,
+        stride=args.pointcloud_stride, voxel_m=args.pointcloud_voxel,
+        center=base_world[:3,:3] @ center_world+base_world[:3,3])
     with (mouse or nullcontext()), (pico or nullcontext()), (recorder or nullcontext()), mujoco.viewer.launch_passive(display_model, display_data, key_callback=keyboard.native_callback,
                                     show_left_ui=False, show_right_ui=False) as handle, keyboard, PhysicsWorker(
                                         env, handle, keyboard, display_model, display_data,
-                                        on_abort=getattr(recorder, 'abort', None)) as physics, CameraPreview(display_model, display_data, hud, TaskGuides(env)) as previews:
+                                        on_abort=getattr(recorder, 'abort', None)) as physics, CameraPreview(display_model, display_data, hud, TaskGuides(env), pointcloud=cloud_options) as previews:
         recording_busy, busy_started = False, 0.
         def present(handle):
             if recording_busy:
@@ -839,9 +848,10 @@ def viewer(args):
         apply_camera()
         if pico:
             pico.open_usb()
-        style = None if keyboard.continuous else ViewerStyleGuard(handle, "WASDEQXZCTFRVHIJKLUO,.")
+        style = None if keyboard.continuous else ViewerStyleGuard(handle, "WASDEQXZCTFRVHIJKLUOMY09,.")
         print("Keyboard: window-local press/release; native shortcuts consumed" if keyboard.continuous
               else "Keyboard: non-macOS single-step fallback (no held-key support)", flush=True)
+        print('Point cloud: M two/three/off | Y view | 0 RGB/source color | 9 zoom; preview only, no temporal accumulation', flush=True)
         while handle.is_running() and time.monotonic() < deadline:
             start = time.monotonic()
             sample_start = float(env.data.time)
@@ -855,7 +865,9 @@ def viewer(args):
             held = snapshot.held
             fallback_motion = env.hold_action()
             for code in commands:
-                if code == ord('H'):
+                if previews.key(code):
+                    next_hud = 0.
+                elif code == ord('H'):
                     show_diagnostics = not show_diagnostics
                     next_hud = 0.
                 elif pico and code == ord('G'):
@@ -1079,6 +1091,10 @@ def main():
     parser.add_argument("--seconds", type=float, default=0.,
                         help='Optional wall-clock limit; 0 runs until P/window close. Exiting interrupts an active recording.')
     parser.add_argument('--input', choices=['keyboard', 'pico', 'spacemouse'], default='keyboard')
+    parser.add_argument('--pointcloud', action='store_true', help='Show live three-view RGB-D fusion in robot base coordinates; M toggles even without this flag')
+    parser.add_argument('--pointcloud-hz', type=float, default=5., help='Maximum point-cloud preview capture Hz (wall time); does not change recording clocks')
+    parser.add_argument('--pointcloud-stride', type=int, default=4, help='Preview pixel sampling stride, 1 for every depth pixel; recording remains full resolution')
+    parser.add_argument('--pointcloud-voxel', type=float, default=.002, help='Preview voxel size [m], 0 to disable; recording is unchanged')
     parser.add_argument('--no-cartesian-limits', action='store_true',
                         help='Simulation experiment: disable workspace, per-action, servo-speed and target-lead limits; retain input scale, IK, joint and actuator bounds')
     parser.add_argument('--task', choices=['pick_cube', 'cable', 'feeding'], default='pick_cube')

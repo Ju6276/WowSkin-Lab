@@ -142,7 +142,7 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
         else:
             values += ['WASD + E/Q | I/K L/J U/O rotate', 'X close | Z open | C hold']
     labels += ['Keys']
-    values += [f"R reset | V view | H {'hide' if diagnostics else 'show'} details | P exit"]
+    values += [f"R reset | V view | M cloud | H {'hide' if diagnostics else 'show'} details | P exit"]
     if recording_notice:
         labels += ['Recording notice']
         values += [recording_notice]
