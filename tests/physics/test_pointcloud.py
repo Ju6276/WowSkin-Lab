@@ -63,7 +63,7 @@ class RenderedPointCloudTests(unittest.TestCase):
         finally:
             renderer.close()
 
-    @unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Use .venv-reduced for task scenes')
+    @unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Use .venv for task scenes')
     def test_live_preview_all_tasks_preserves_physics_and_rgb(self):
         from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration
         from wowskin_lab.envs.cable import PandaCableEnv

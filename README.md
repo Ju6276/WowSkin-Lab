@@ -1,134 +1,110 @@
 # WowSkin-Lab
 
-Franka + 触觉指腹的 MuJoCo 遥操作与数据采集。支持 Panda / Robotiq 2F-85、键盘 / SpaceMouse / PICO 4；所有任务录制两路固定相机＋一路腕部相机的 RGB-D、机器人状态和 15 路触觉。
+Franka 触觉遥操作、RGB-D 数据采集和 ViSk / FTF 算法接入。基于 MuJoCo，支持 Panda / Robotiq 2F-85、键盘 / SpaceMouse / PICO 4，提供方块搬运、线材插扣和喂食场景。
 
-**当前建议：先用 Panda cube 继续采集。** 触觉是未做真机标定的仿真信号；Robotiq 强夹持和线材压扣仍可能使软体网格失效。真实 Franka 后端未接入。
+**优先使用 Panda 方块任务采集。** ViSk 数据转换及 cube / feeding 仿真执行接口已接通；最终 cube 模型已在默认起点单次闭环成功，多初始条件成功率尚待验证。FTF 仍需视觉标注与跟踪。软指腹与磁场是本地近似模型，未完成真机标定，不能视为官方论文的完整复现。待完成项集中在 [TODO](TODO.md)。
 
-## 1. 启动 cube
+## 安装
 
-在本机终端执行：
-
-```bash
-cd /Users/judong/Desktop/WowSkin-Lab
-.venv-reduced/bin/mjpython -m wowskin_lab teleop --task pick_cube --input spacemouse --ideal
-```
-
-这条命令继续追加到 `data/episodes/pick_cube/`，保留已有两条示范。启动后先测试操作，**不会自动录制**。一次只开一个遥操作窗口。
-
-- **SpaceMouse**：点击仿真窗口、旋钮回中；推拉控制 XYZ，倾斜／扭转控制旋转。左侧键闭合、右侧键张开、两键同时按保持。此模式独占 HID，避免旋钮带动普通鼠标。
-- **键盘**：把命令中的 `--input spacemouse` 改为 `--input keyboard`，并加 `--record-dir data/episodes_keyboard`，避免混入已有 SpaceMouse 采集。W/S 前后、A/D 左右、E/Q 上下；I/K、L/J、U/O 旋转；X 闭合、Z 张开、C 保持。支持长按。
-- **Pico**：见下方 USB 启动步骤。
-
-## 2. 录制与保存
-
-1. 按 **B**：复位并准备录制；看到红色 `REC capture_…` 再开始操作。
-2. 将方块从黄框抓起，放到绿框并松开。左上角绿色 **SUCCESS** 是自动任务判定。
-3. 按 **Enter**：结束并标记成功；显示 `SAVING → VERIFYING → SAVED`。自动达标不会自行结束录制。
-4. 等到 **SAVED** 后，按 **B** 开始下一段；编号自动递增，重启也可追加。
-
-**N** 保存失败；录制中再按 **B** 结束为待审核；**R** 中断并复位；**P** 保存中断记录并退出。写入时不接受下一段录制，退出会等待当前写入结束。保存提示分别显示人工标签和自动判定，`SAVED` 不等于任务成功。
-
-**V** 切换主视角，**H** 展开诊断，逗号／句号调触觉显示比例。半透明成功区域只出现在操作窗口，不进入录制图像。
-
-在线点云预览（cube / cable / feeding 共用）：在启动命令后加 `--pointcloud`，点云显示在右侧三路 RGB 下方，与相机同列。也可在窗口按 **M** 切换两路固定相机／三路含腕部／关闭。**Y** 换观察角度，**0** 切换 RGB／相机来源色，**9** 缩放点云面板。融合使用同一仿真时刻的深度和逐帧相机外参，输出到机器人基座系；不跨时间累加、不直接从物体网格采样点，也不进行学习式点云补全。深度来自 MuJoCo 的理想渲染，目前没有模拟真实深度相机的噪声／缺测。
-
-预览默认最多 5 Hz，每隔 4 像素采样、每路做 2 mm 体素降采样，可用 `--pointcloud-hz`、`--pointcloud-stride`、`--pointcloud-voxel` 调整。融合和点图绘制在后台，RGB-D 渲染仍有额外开销；面板显示采图及融合耗时。原始 RGB-D 录制分辨率、时钟、控制参数不变，点云面板不会进入相机图像，也不额外写入数据集。
-
-## 3. 其他场景与夹爪
+已验证环境：Apple Silicon macOS、Python 3.12、MuJoCo 3.15。从源码目录运行；Linux / CUDA 尚未完成整套验收。
 
 ```bash
-# 原绕线布局
-.venv-reduced/bin/mjpython -m wowskin_lab teleop --task cable --input spacemouse --ideal
-# 简单插线：固定一端、一个反向 clip
-.venv-reduced/bin/mjpython -m wowskin_lab teleop --task cable --cable-layout single_clip --input spacemouse --ideal
-# Panda 喂食：初始化已夹勺、装好六颗豆子
-.venv-reduced/bin/mjpython -m wowskin_lab teleop --task feeding --input spacemouse --ideal
-# Robotiq 喂食：使用独立采集目录
-.venv-reduced/bin/mjpython -m wowskin_lab teleop --task feeding --gripper robotiq_2f85 --input spacemouse --ideal --record-dir data/episodes_robotiq
+git clone https://github.com/Ju6276/WowSkin-Lab.git
+cd WowSkin-Lab
+python3.12 scripts/setup_capture.py
+.venv/bin/python scripts/setup_upstream.py --only franka
 ```
 
-所有任务使用同一套 B / Enter / N 录制操作。更换夹爪、相机、控制或物理配置时使用新的 `--record-dir`；不要混入现有 cube 数据。Robotiq 初始化已完成接触预夹，直接送食即可；全闭合仍可能过压，未用隐藏行程截断规避。
+只使用一个 `.venv`，采集、遥操作、ViSk 训练和部署共用。安装入口是 `scripts/setup_capture.py`，根目录 `requirements.txt` 包含运行与学习依赖；只有 FTF notebook 的 `requirements/annotation.txt` 需按需加装到同一个环境。LeRobot 仅安装所用数据 API 及依赖，不是其全套机器人运行环境。
 
-## 4. PICO 4：佩戴／对面模式
+`pip check` 会报告 LeRobot 完整包所需但本项目未安装的八项依赖：`diffusers`、`cmake`、`opencv-python-headless`、`pynput`、`torchcodec`、`gymnasium`、`rerun-sdk`、`flask`。当前录制／读取使用 OpenCV 与 PyAV，已实际验证；这不代表完整 LeRobot 策略或硬件 API 可直接使用。
 
-USB 连接 Mac、开启头显 USB 调试并授权后：
+## 启动与录制
+
+从项目根目录运行，一次只开一个遥操作窗口：
 
 ```bash
-.tools/platform-tools/adb devices
-.venv-reduced/bin/mjpython -m wowskin_lab teleop --task pick_cube --input pico --ideal --record-dir data/episodes_pico
+# 无外设：键盘
+.venv/bin/mjpython -m wowskin_lab teleop --task pick_cube --input keyboard --ideal --record-dir data/episodes_keyboard
+# SpaceMouse：默认追加到 data/episodes/pick_cube/
+.venv/bin/mjpython -m wowskin_lab teleop --task pick_cube --input spacemouse --ideal
 ```
 
-程序通过 ADB 打开头显浏览器。选择**佩戴模式**或**对面模式**，点击“进入遥操作 / Enter VR”，松开右握键一次，再握住移动。
+启动后先测试操作，**不会自动录制**。SpaceMouse 左侧键闭合、右侧键张开；键盘 W/S 前后、A/D 左右、E/Q 上下，I/K、L/J、U/O 旋转，X/Z 闭合／张开、C 保持。点击仿真窗口后操作。
 
-- 佩戴模式：在头显中看画面；对面模式：头显朝向自己，在 Mac 看画面，停止额外传输头显视频。
-- 右握键按住跟随、松开停止；右扳机在握键按住时调夹爪。
-- 松开握键后，**右 B** 切模式；**右 A** 在手柄水平指向屏幕时重设操作前方。两种模式按同一画面方向约定控制。
-- **左 X** 开始／结束录制，**左 Y** 保存成功，按下左摇杆保存失败；录制操作前松开右握键。
-- 对面模式仍需先进入 WebXR，头显保持唤醒与手柄追踪；不是脱离头显的手柄模式。
+1. **B**：复位，看到红色 `REC capture_…` 后开始操作。
+2. 完成任务，左上角绿色 **SUCCESS** 提示自动达标。
+3. **Enter**：结束并标记成功，等待 `SAVING → VERIFYING → SAVED`。
+4. 显示 **SAVED** 后，按 **B** 开始下一条；编号自动递增，重启也能追加。
 
-两种模式的方向、切换、重连和三相机录制有自动测试。实际佩戴舒适度、遮挡与追踪仍需设备实测；当前没有连接 Pico，不能把软件测试说成本次硬件验收。
+**N** 保存失败，**R** 中断并复位，**P** 保存中断记录并退出。自动达标不会结束录制；人工标签与自动判定分别保存，`SAVED` 只表示写入完成。**H** 展开诊断，**V** 切主视角。不同夹爪／相机／控制配置使用新的 `--record-dir`。
 
-## 5. 数据检查与训练
+## 其他任务与输入
+
+```bash
+# 原绕线布局；简单插扣追加 --cable-layout single_clip
+.venv/bin/mjpython -m wowskin_lab teleop --task cable --input spacemouse --ideal
+# Panda 喂食：初始化已夹勺，并放好六颗豆子
+.venv/bin/mjpython -m wowskin_lab teleop --task feeding --input spacemouse --ideal
+# Robotiq 喂食，独立数据目录
+.venv/bin/mjpython -m wowskin_lab teleop --task feeding --gripper robotiq_2f85 --input spacemouse --ideal --record-dir data/episodes_robotiq
+# PICO 4：USB 调试已授权，adb 在 PATH 或 .tools/platform-tools/
+.venv/bin/mjpython -m wowskin_lab teleop --task pick_cube --input pico --ideal --record-dir data/episodes_pico
+```
+
+Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松开右握键一次后，按住跟随。完整按键、成功条件和故障处理见 [采集手册](docs/COLLECTION_ZH.md)。Robotiq 强夹持、线材压扣仍可能出现软指腹网格失效，不承诺任意接触稳定。
+
+右侧显示两路固定相机＋一路腕部相机。加 `--pointcloud` 可在其下预览 RGB-D 融合点云；逐帧外参将腕部视角变换到机器人基座系。使用 MuJoCo 理想深度，目前不模拟深度噪声。预览不写进相机图像；快捷键与开销见采集手册。
+
+## 数据与学习
 
 ```text
 data/episodes/pick_cube/
-  lerobot/       meta/ + data/*.parquet + videos/*.mp4 + depth/*.h5
-  raw/
-    capture_000000/  metadata.json + measurements.h5
-    capture_000001/  ...
+  lerobot/                   成功记录：Parquet + MP4 + meta/ + depth/*.h5
+  raw/capture_000000/         metadata.json + measurements.h5
 ```
 
-- **30 Hz**：三路 RGB、同步米制深度、instruction、对应 state/action。
-- **100 Hz raw**：基座系 TCP 位姿／速度、七关节位置／速度、夹爪反馈／指令、15 路磁场、基线、时间戳、相机标定与质量字段。成功保存后不另留 raw 图像副本。
-- `state` 保存实测值，`action` 保存实际下发目标。夹爪当前为连续闭合比例（0 开、1 闭），另存驱动关节及单位；**尚未增加米制宽度字段**。
-- 失败／中断保留 raw 和恢复用暂存媒体，不进入 LeRobot；写入或验证失败留下 `INCOMPLETE`，不会显示保存成功或继续追加。
-
-检查已有数据：
+- **名义 30 Hz**：三路 640×480 RGB、同步米制深度、instruction、对应 state/action；另存实际仿真时间戳。
+- **100 Hz raw**：TCP 基座系 XYZ＋rotvec、线／角速度、七关节位置／速度、夹爪反馈／目标、15 路触觉、基线及质量字段。不是 RPY。
+- **夹爪 state / action 分开**：实测闭合比例作观测，实际下发闭合目标作动作；0 开、1 闭。夹物体时反馈不到 1，动作仍可为 1。另存驱动关节及单位，尚无独立米制宽度字段。
+- LeRobot 的 action 是绝对 TCP／夹爪目标；ViSk 导出沿用官方位姿差分规则，得到基座系平移增量＋末端局部旋转增量＋绝对夹爪目标。两者不能直接混用。
+- 成功写入并验证后，图像只留在 LeRobot，raw 不重复存图像。失败／中断保留 raw 和暂存媒体；`INCOMPLETE` 表示写入未完成，不能用于训练。
 
 ```bash
-.venv-reduced/bin/python -m wowskin_lab dataset-check data/episodes/pick_cube/lerobot
+.venv/bin/python -m wowskin_lab dataset-check data/episodes/pick_cube/lerobot
 ```
 
-采集完成后，按 [ViSk / FTF 学习工作流](docs/LEARNING_WORKFLOWS_ZH.md)选择 episodes、转换和训练。ViSk 使用三视角＋单块触觉；FTF 还需要标注／跟踪。这里不自动启动训练，也没有可沿用的新三视角策略权重。
+[学习工作流](docs/LEARNING_WORKFLOWS_ZH.md)提供安装、选择 episodes、ViSk 转换／训练／部署、FTF 标注命令。ViSk 当前使用三视角＋单块 15 路触觉，动作块 10×7，**6 Hz 策略、100 Hz 控制**。夹爪指令已经进入其训练标签；数据可用不代表新模型已学会任务。本地示范、导出与训练权重不随 Git 提交。
 
-## 6. 安装与代码结构
+ViSk 训练只向 W&B 记录指标（默认项目 `WowSkin-Lab`），不生成 TensorBoard／CSV／文本训练日志。完成 3000、6000、9000 次更新分别保存 checkpoint，10000 次结束再保存最终权重。登录与训练命令见学习工作流。
 
-新电脑使用 Python 3.12；本机已有环境无需重复安装：
-
-```bash
-git clone git@github.com:Ju6276/WowSkin-Lab.git
-cd WowSkin-Lab
-python3.12 scripts/setup_capture.py
-.venv-reduced/bin/python scripts/setup_upstream.py --only franka
-```
-
-日常只用根目录 `requirements.txt`（自动引用 `requirements/runtime.txt`）；`requirements/learning.txt` 为学习可选依赖，`requirements/annotation.txt` 仅供 notebook 标注。Pico 另需把 Android Platform-Tools 解压为 `.tools/platform-tools/`，或将 `adb` 加入 PATH。
+## 代码入口与维护
 
 ```text
-wowskin_lab/   core/ 物理与磁场；envs/ 场景；teleop/ 输入；ui/ 显示
-               data/ 采集与转换；learning/ 官方算法接入；baselines/ 触觉模型
-configs/       相机、控制、任务判定、传感器与固定上游版本
-assets/        原始素材、派生模型、许可证与来源 manifest
-scripts/       安装、素材下载、训练、评估；diagnostics/ 可选模型分析
-tests/        unit/、physics/、official/、artifacts/；manual/ 手动窗口检查
-third_party/   本机下载的固定版本依赖
-data/         用户示范与导出（不上传 GitHub）
-outputs/       标定、必要磁场模型、诊断与以后训练结果（不上传 GitHub）
-docs/          操作与数据字段、学习流程、模型与标定
+wowskin_lab/
+  envs/       场景、夹爪与任务评分
+  core/       接触力学、磁场与控制
+  teleop/     键盘、SpaceMouse、Pico
+  ui/         操作窗口、触觉／相机／点云预览
+  data/       录制、LeRobot、算法导出、坐标变换
+  learning/   固定版本官方算法的接入层
+  baselines/  Pollen、ReSkin 等可选参考模型
+configs/      相机、控制、评分、传感器参数与上游版本
+assets/       原始／派生素材、来源 manifest 与许可证
+scripts/      安装、训练、评估；diagnostics/ 为可选实验
+tests/       unit、physics、official、artifacts、manual
+docs/        采集、学习、物理模型说明
 ```
 
-默认 `.venv-reduced` 使用 MuJoCo 3.15 降阶指腹＋拟合偶极子。`--ideal` 关闭合成噪声／滤波／延迟，不关闭接触力学。默认保留已测试的控制限制；参数、来源及关闭后的影响见 [模型说明](docs/MODEL_CALIBRATION_ZH.md)。此次整理不改这些物理参数或数据动作定义。
-
-普通遥操作不额外保存整场诊断录像／数据；需要时显式加 `--diagnostic-log`。发生物理故障时保留最多 200 条末尾样本和错误原因。正式示范始终通过 B 手动录制。
-
-完整网格参考实验仍使用独立的 MuJoCo 3.5 环境（本机 `.venv`）；不能把其测试直接放进 3.15 环境运行。日常采集统一使用 `.venv-reduced`，不依赖旧的 Python 3.9 安装入口。
-
-维护检查：
+默认采用 MuJoCo 3.15 降阶指腹＋拟合偶极子。`--ideal` 关闭合成触觉噪声、滤波和延迟，不关闭接触力学。控制限制、参数来源与物理失效规则集中在 [模型说明](docs/MODEL_CALIBRATION_ZH.md)，没有以改成功条件或补造触觉帧保证测试通过。历史完整网格对照针对 MuJoCo 3.5，未纳入当前 3.15 环境的验收；不要为它替换当前环境依赖。
 
 ```bash
-.venv-reduced/bin/python -m tests unit
-.venv-reduced/bin/python -m unittest tests.official.test_lerobot_recording tests.physics.test_pico_input
-.venv-reduced/bin/python -m tests all --list
+# 以下检查包含学习接口，先按学习文档获取固定版 ViSk
+.venv/bin/python -m tests unit
+.venv/bin/python -m unittest tests.official.test_visk_command_labels tests.official.test_lerobot_recording
+.venv/bin/python -m tests all --list
 ```
 
-[详细操作与字段](docs/PICK_CUBE_ZH.md) · [ViSk / FTF](docs/LEARNING_WORKFLOWS_ZH.md) · [参数来源、限制与论文](docs/MODEL_CALIBRATION_ZH.md)
+物理／artifact 测试可能需要指定 MuJoCo 版本或可选数据／模型，不能把跳过项算作通过。普通遥操作不保存整场诊断；需要时加 `--diagnostic-log`。
+
+[采集手册](docs/COLLECTION_ZH.md) · [ViSk / FTF](docs/LEARNING_WORKFLOWS_ZH.md) · [模型、参数与论文](docs/MODEL_CALIBRATION_ZH.md) · [TODO](TODO.md) · [第三方来源与发布事项](THIRD_PARTY.md)

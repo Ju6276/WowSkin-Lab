@@ -7,7 +7,7 @@ from wowskin_lab.envs.pick_cube import response_configuration
 from wowskin_lab.envs.cable import PandaCableEnv, CABLE_COUNT
 
 
-@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Run in .venv-reduced')
+@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Run in .venv')
 class ClipScoringTests(unittest.TestCase):
     def test_both_clip_layouts_use_rotated_local_tunnel(self):
         for layout in ('single_clip', 'routing'):

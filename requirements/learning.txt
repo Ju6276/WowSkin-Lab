@@ -1,4 +1,4 @@
-# Local original converter/loader and CPU training checks; not the official CUDA environment.
+# Original converters/loaders and Mac CPU/MPS training; included by requirements.txt.
 # ViSk imports original Open-Teach network helpers; see docs/LEARNING_WORKFLOWS_ZH.md.
 scipy==1.14.1
 hydra-core==1.3.2
@@ -9,7 +9,7 @@ hydra-submitit-launcher==1.2.0
 gym==0.26.2
 dm-env==1.6
 termcolor==3.1.0
-tensorboard==2.19.0
+tensorboard==2.19.0  # Upstream logger import only; our runner creates no TB writer.
 wandb==0.30.0
 tqdm==4.67.1
 requests==2.34.2

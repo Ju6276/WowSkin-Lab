@@ -7,6 +7,10 @@
     "url": "https://github.com/feel-the-force-ftf/feel-the-force.git",
     "revision": "954830f94e59e47c1668ad41c36b52626da975d0"
   },
+  "openteach": {
+    "url": "https://github.com/aadhithya14/Open-Teach.git",
+    "revision": "32a7d44b33953066ff27312a7b2b4c294f4f52c5"
+  },
   "franka": {
     "url": "https://github.com/Ju6276/franka_xbox",
     "revision": "a43327ad8446642acd8d64b6c20829fd135a9f28"

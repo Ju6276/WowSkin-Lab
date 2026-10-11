@@ -1,6 +1,6 @@
 # 遥操作与数据采集
 
-所有启动命令见 [README](../README.md)。在 项目根目录 运行，每次只启动一个遥操作窗口。图形入口使用 `.venv-reduced/bin/mjpython`。
+所有启动命令见 [README](../README.md)。在项目根目录运行，每次只启动一个遥操作窗口。图形入口使用 `.venv/bin/mjpython`。
 
 ## 场景选择
 
@@ -64,7 +64,15 @@ macOS 下此模式会独占打开 SpaceMouse，终端应显示 `exclusive HID=Tr
 
 对面模式只在 Mac 显示完整仿真，头显仍需保持唤醒和 WebXR 追踪。追踪中断或重定位后，松开再握住右握键恢复。右手控制单条 Franka，左手用于录制；此记录属于 FTF 机器人分支。
 
+Pico 另需 Android Platform-Tools：将 `adb` 加入 PATH，或解压为 `.tools/platform-tools/`。佩戴模式向头显传输画面，对面模式只显示桌面窗口；二者都需要先进入 WebXR，头显保持唤醒与追踪。软件测试覆盖方向、模式切换和重连，硬件表现需在目标设备上验收。
+
 连接排查：`.tools/platform-tools/adb devices -l` 应显示一台已授权设备。服务重启后重新进入 VR；旧页面连接失败时刷新页面。
+
+## 在线 RGB-D 点云
+
+在线点云预览（cube / cable / feeding 共用）：在启动命令后加 `--pointcloud`，点云显示在右侧三路 RGB 下方，与相机同列。也可在窗口按 **M** 切换两路固定相机／三路含腕部／关闭。**Y** 换观察角度，**0** 切换 RGB／相机来源色，**9** 缩放点云面板。融合使用同一仿真时刻的深度和逐帧相机外参，输出到机器人基座系；不跨时间累加、不直接从物体网格采样点，也不进行学习式点云补全。深度来自 MuJoCo 的理想渲染，目前没有模拟真实深度相机的噪声／缺测。
+
+预览默认最多 5 Hz，每隔 4 像素采样、每路做 2 mm 体素降采样，可用 `--pointcloud-hz`、`--pointcloud-stride`、`--pointcloud-voxel` 调整。融合和点图绘制在后台，RGB-D 渲染仍有额外开销；面板显示采图及融合耗时。原始 RGB-D 录制分辨率、时钟、控制参数不变，点云面板不会进入相机图像，也不额外写入数据集。
 
 ## 五个点的 XYZ 怎么看
 
@@ -114,7 +122,7 @@ H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机
 ## 自动采集
 
 ```bash
-.venv-reduced/bin/python -m wowskin_lab record-auto --output data/automated/my_run --episodes 2 --randomize --magnetic-fit configs/magnetic_fit_pollen_nonslip.json --ideal
+.venv/bin/python -m wowskin_lab record-auto --output data/automated/my_run --episodes 2 --randomize --magnetic-fit configs/magnetic_fit_pollen_nonslip.json --ideal
 ```
 
 使用新目录，并显式选择观察模型；不再自动选择网络并开启外推。网络缺失空载响应时，此入口会在创建数据目录前报错。该命令是方块脚本示教，不能用作线材/喂食自动成功验证，也不代表磁场已标定。
@@ -125,4 +133,4 @@ H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机
 
 正常遥操作只在按 B 后保存正式采集。完整 NPZ/CSV 诊断需显式 `--diagnostic-log`；故障自动保留最后最多 200 条样本，位于 `outputs/diagnostics/<task>/teleop_…/`。
 
-三路相机布局可用 `.venv-reduced/bin/python scripts/preview_cameras.py --help` 查看；原两路与四路参考布局保存在 `configs/cameras.json`，不会自动改动当前采集配置。切换配置必须用新数据目录。
+三路相机布局可用 `.venv/bin/python scripts/preview_cameras.py --help` 查看；原两路与四路参考布局保存在 `configs/cameras.json`，不会自动改动当前采集配置。切换配置必须用新数据目录。

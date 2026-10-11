@@ -57,7 +57,7 @@ class PseudoLabelArtifactChecks(unittest.TestCase):
                 self.assertTrue(((q[:,2]>0)&(q[:,2]<=2)).all())
 
     def test_saved_models_reproduce_report_without_claiming_measured_pseudo_depths(self):
-        from scripts.augment_pollen_response import predict
+        from scripts.diagnostics.augment_pollen_response import predict
         from wowskin_lab.baselines.reskin_forward import MAPPED_OUTPUT,ResponseModel
         baseline=ResponseModel(MAPPED_OUTPUT)
         output=ROOT/'outputs/diagnostics/pollen_pseudolabel_augmentation'
@@ -77,7 +77,7 @@ class PseudoLabelArtifactChecks(unittest.TestCase):
     @unittest.skipUnless((ROOT/'outputs/diagnostics/pollen_pseudolabel_augmentation/source_only_control/model.json').exists(),
                          'Optional source-only control not run')
     def test_source_only_control_saved_metrics(self):
-        from scripts.augment_pollen_response import predict
+        from scripts.diagnostics.augment_pollen_response import predict
         from wowskin_lab.baselines.reskin_forward import ResponseModel
         output=ROOT/'outputs/diagnostics/pollen_pseudolabel_augmentation'
         model=ResponseModel(output/'source_only_control')

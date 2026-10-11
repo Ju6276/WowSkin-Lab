@@ -1,0 +1,32 @@
+# 第三方来源与再分发
+
+本项目的本地接口和任务配置与上游实现不同。引用第三方算法不表示获得论文的实验结果。当前没有为原创代码选择根目录 LICENSE；准备公开发布前，由仓库所有者确定授权，并逐项核对素材条款。这里记录来源，不替上游重新授权。
+
+## 固定源码依赖
+
+[configs/upstream.json](configs/upstream.json) 保存 URL 与提交号。`scripts/setup_upstream.py` 下载到被 Git 忽略的 `third_party/`：
+
+- `franka_xbox`：Franka 模型／素材；是日常场景的安装依赖。
+- `visuoskin`：ViSk 原转换器、加载器、训练与推理；仅在独立工作目录应用记录在 manifest 中的数据／环境适配，参考 checkout 不修改。
+- `Open-Teach`：ViSk 原版 XArm 环境导入的网络工具；随 `--only visk` 一起获取。
+- `feel-the-force`：FTF 及其固定子模块，遵循各自许可证。
+
+参考 checkout 不随本仓库提交；各自的 LICENSE / NOTICE 保留在下载目录中。
+
+## 已包含的素材与代码
+
+- EBiM 线材、卡扣与 Robotiq：[来源 manifest](assets/ebim/manifest.json)、[许可证](assets/ebim/LICENSE)、[NOTICE](assets/ebim/NOTICE)。
+- EBiM 喂食：[来源 manifest](assets/ebim_feeding/manifest.json)、[许可证](assets/ebim_feeding/LICENSE)、[NOTICE](assets/ebim_feeding/NOTICE)、[上游说明](assets/ebim_feeding/upstream_README.md)。派生人体／布局不等于上游完整任务。
+- Panda 执行器参考：[Menagerie manifest](assets/reference/panda_menagerie/manifest.json) 与 [LICENSE](assets/reference/panda_menagerie/LICENSE)；[robosuite manifest](assets/reference/robosuite_panda/manifest.json) 与 [LICENSE](assets/reference/robosuite_panda/LICENSE)。
+- WowSkin 原厂可视化：[manifest](third_party/wowskin_visualizer/manifest.json)、[LICENSE](third_party/wowskin_visualizer/LICENSE)。
+- 鞭子参考模型：[manifest](assets/whip_reference/manifest.json)、[LICENSE](assets/whip_reference/LICENSE)。不是当前 cable 任务的线材后端。
+- 3D Cal / MagNet 源文件：[manifest](assets/3dcal/upstream/manifest.json)、[LICENSE](assets/3dcal/upstream/LICENSE)。目录中还包含官方 ReSkin 预训练权重；数据与该权重另见 [数据来源](assets/3dcal/manifest.json)，不能由源码许可证推定数据许可。
+- AnySkin CAD：[文件来源与 SHA256](assets/cad/manifest.json)、[几何说明](assets/cad/README_ZH.md)。来源清单未包含明确再分发许可，公开前须核对。
+
+`assets/` 中的原始文件、派生文件及用途应按所在目录 manifest 区分。保留作者、许可与来源，不因文件移动或格式转换删除归属信息。
+
+## 不随代码发布的内容
+
+`data/`、`outputs/`、虚拟环境、可选 Pollen 下载、本地训练 checkpoint、标定记录、W&B 凭据不进入 Git。示例命令中的数据／权重路径由使用者生成，不能假设 clone 后已有。
+
+Pollen 数据与模型来源见 [Pollen 说明](docs/baselines/POLLEN_ZH.md)。本地 ReSkin 前向网络、逆模型与 Pollen 幅值拟合是研究对照，默认拟合偶极子只需要已提交的增益配置，不要求这些可选权重存在。

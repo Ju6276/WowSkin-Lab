@@ -14,7 +14,7 @@ cd WowSkin-Lab
 
 原数据、权重、均值/尺度和来源 manifest 位于 `assets/pollen/`。本地使用原网络结构和权重，每条记录作为长度 1 的序列；不重新拟合 scaler。结果位于 `outputs/pollen_public/`。
 
-固定数据共 17 个 CSV、127445 帧，包含 18494 滑移帧及 108951 不滑移帧；`no_slip.csv` 为 22371 帧全零标签。已有回放结果见 [metrics.json](../../outputs/pollen_public/metrics.json)。这些数据与上游训练集重叠，不能当作独立测试或本机 WowSkin 精度。
+固定数据共 17 个 CSV、127445 帧，包含 18494 滑移帧及 108951 不滑移帧；`no_slip.csv` 为 22371 帧全零标签。执行 evaluate 后生成 `outputs/pollen_public/metrics.json`，结果文件不随仓库分发。这些数据与上游训练集重叠，不能当作独立测试或本机 WowSkin 精度。
 
 ## 仿真运行
 
@@ -24,14 +24,6 @@ cd WowSkin-Lab
 ```
 
 Pollen 使用左侧 15 路信号，右侧为普通硅胶。界面显示原模型分数，但不会据此自动张开夹爪；仿真与真实 AnySkin 的分布迁移未验证。
-
-独立压头检查：
-
-```bash
-.venv/bin/mjpython -m wowskin_lab franka-bench viewer --pollen
-```
-
-P 按压、S 切向滑动、L 卸载，B 切换左/右皮肤，V 切视角，Q 退出。右侧皮肤不提供磁场。
 
 ## 与其他项目的关系
 

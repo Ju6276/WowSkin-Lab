@@ -132,7 +132,7 @@ def standard_xml(cfg):
         raise ValueError('skin_dof must be full or trilinear')
     if dof == 'trilinear':
         if tuple(map(int, mujoco.__version__.split('.')[:2])) < (3, 15):
-            raise ValueError('Mounted trilinear skin requires the isolated MuJoCo 3.15 environment; use .venv-reduced/bin/mjpython')
+            raise ValueError('Mounted trilinear skin requires MuJoCo 3.15 in the project environment; use .venv/bin/mjpython')
         # MuJoCo's official gripper_trilinear pins interpolation nodes, NOT
         # mesh vertices. With local Z normal, these are the four lower nodes.
         # This approximates attachment by the cap bounding-box bottom plane;

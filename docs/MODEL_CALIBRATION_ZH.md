@@ -1,6 +1,6 @@
 # 传感器模型与标定
 
-本项目的 WowSkin 是本地物理近似模型，尚未完成实物材料与磁场标定。启动与录制见 [README](../README.md) 和 [操作说明](PICK_CUBE_ZH.md)。
+本项目的 WowSkin 是本地物理近似模型，尚未完成实物材料与磁场标定。启动与录制见 [README](../README.md) 和 [操作说明](COLLECTION_ZH.md)。
 
 ## 计算方式来自哪里
 
@@ -36,7 +36,7 @@ AnySkin 的磁化皮肤受接触后变形，改变下方五个三轴磁力计的
 
 现有倍率来自旧网格，降阶轮廓加密到 48 点后尚未重新拟合或验证幅值一致性。细化会改变磁场积分和接触离散，不能把旧拟合误差当成当前模型的验证结果。
 
-[拟合程序](../scripts/diagnostics/fit_pollen_dipole_amplitude.py) · [来源、划分和报告](../outputs/diagnostics/pollen_nonslip_dipole_fit/report.json)。重跑时指定新的 `--output`，不覆盖已有结果。
+[拟合程序](../scripts/diagnostics/fit_pollen_dipole_amplitude.py)保留用于重跑对照；必须显式提供 `--episode PATH/episode.npz` 和新的 `--output`。详细输入、划分与原始报告摘要保存在配置中；完整实验输出不随仓库分发，需要先准备 Pollen 数据与可选网络。默认遥操作只读取已提交的增益配置，不依赖这些权重。
 
 ## 参数来源
 
@@ -63,17 +63,17 @@ Robotiq 使用 EBiM 原始 0–0.8 rad 关节范围、kp=300、kv=20、关节驱
 
 ## 本地控制与失效检查
 
-### 采集配置选择（2026-10-11）
+### 默认控制配置的选择依据
 
 推荐保留默认笛卡尔限制，包含键盘／SpaceMouse 每轴 6 mm 领先量。用真实 `SpaceMouseController.action()` 输入处理链，脚本完成相同抓取、抬升、两框搬运、释放步骤；两个模式各用 3 个初始位置，均 3/3 成功，抬升约 99 mm。六段均录制三路 30 Hz RGB／深度及 100 Hz raw，官方 LeRobot 读取器验证通过。这是脚本控制器与录制验证，不是学习策略成绩；脚本没有移动物体状态、改变执行器或降低成功条件。
 
 另以完全相同的旋钮输入持续向桌面下压 3 秒、回中 0.5 秒、再向上操作：开启限制时最大目标／实测位置误差约 9.4 mm（欧氏长度，6 mm 是每轴、且在本次输入前截断），关闭时约 295.6 mm。向上操作 1 秒，实际回退分别约 74.3 mm 与 1.4 mm；关闭后输入先用于抵消积累目标，因而感觉推不动。两种模式这次均无求解警告。这支持保留默认模式，不证明所有动作都稳定，也没有分别证明每个限幅数值最优。
 
-比较摘要：`outputs/diagnostics/control_comparison_20261011/`；可重跑 `.venv-reduced/bin/python scripts/diagnostics/compare_cube_controls.py --output outputs/diagnostics/my_control_comparison --seeds 0 1 2`；接触压力测试加 `--stress --no-record` 并选新目录。输入轨迹另存 `control_trace.npz`，旧自动比较的 RGB-D 数据已清理，仅保留小型数值报告与轨迹；重跑会生成新数据，不混入人工演示目录。全量比较只覆盖 Panda cube；不外推为 Robotiq／线材接触稳定性结论。
+复查命令： `.venv/bin/python scripts/diagnostics/compare_cube_controls.py --output outputs/diagnostics/my_control_comparison --seeds 0 1 2`；接触压力测试加 `--stress --no-record` 并选新目录。输入轨迹另存 `control_trace.npz`；实验报告和 RGB-D 不随仓库分发，重跑应使用新目录，不混入人工示范。全量比较只覆盖 Panda cube；不外推为 Robotiq／线材接触稳定性结论。
 
 ### Robotiq 喂食初始化
 
-`--gripper robotiq_2f85` 现在支持喂食。依据源 joint equality 同时初始化六个连杆关节；勺柄的初始位置取实际两侧指腹中点。预夹采用 [EBiM task3 update_gripper](https://github.com/EBiM-Benchmark/benchmark/blob/161db49e9eafd34be31e5bdada72d8e2f796c16a/task3_mujoco/teleop.py)：1 rad/s 闭合、两侧外部法向力之和低通 α=0.25、连续 5 个 1 ms 周期达到 24 N 后，保持实测转轴角＋0.005 rad；预夹目标上限 0.735 rad。数值读取原始 `assets/ebim_feeding/config.json`，函数源码与哈希保存在同目录。这里只把刚性指垫接触力提取替换为两侧柔性指腹的外部接触力总和，因此是有说明的仿真接入，不是原场景完全不变。
+`--gripper robotiq_2f85` 支持喂食。依据源 joint equality 同时初始化六个连杆关节；勺柄的初始位置取实际两侧指腹中点。预夹采用 [EBiM task3 update_gripper](https://github.com/EBiM-Benchmark/benchmark/blob/161db49e9eafd34be31e5bdada72d8e2f796c16a/task3_mujoco/teleop.py)：1 rad/s 闭合、两侧外部法向力之和低通 α=0.25、连续 5 个 1 ms 周期达到 24 N 后，保持实测转轴角＋0.005 rad；预夹目标上限 0.735 rad。数值读取原始 `assets/ebim_feeding/config.json`，函数源码与哈希保存在同目录。这里只把刚性指垫接触力提取替换为两侧柔性指腹的外部接触力总和，因此是有说明的仿真接入，不是原场景完全不变。
 
 24 N 是预夹闭合过程的检测门槛，不是运行中的恒力指令或人脸力上限。当前初始化得到约 0.548 rad 的实际位置目标，送达试验两侧法向力约 3.5–4.2 N、最小体积比约 0.929，六颗豆子保留并触发成功。仅 reset 使用该流程，之后保持位置；原生 0–0.8 rad 行程、kp=300、kv=20 和执行器限制保留。再次下发全闭合仍可能过压，未通过隐藏截断解决该问题。无焊接、持续复制勺子位姿或附加托举力。
 
@@ -98,7 +98,7 @@ Robotiq 使用 EBiM 原始 0–0.8 rad 关节范围、kp=300、kv=20、关节驱
 - 输入处理仍有本地设定：SpaceMouse 死区 0.08、归一化量程 350、默认速度 0.12 m/s／角速度 0.5 rad/s；每组非零轴数据超过 0.25 s 未更新会停止。Pico 超过 0.25 s 的数据、单帧位置跳变超过 0.15 m 或旋转超过 0.8 rad 会中断跟随；这些开关不随 `--no-cartesian-limits` 关闭。
 - 网格 15% 警告与运动限幅无关；实际翻转、NaN 或求解器错误不能靠关掉诊断恢复有效物理。完整节点喂食路径还保留 CG 失败后恢复同一采样边界、改 Newton 重算的本地机制；降阶路径不执行这项切换。它没有补造测量，但也不是官方任务算法。
 
-本轮源码核对中，raw 保存的是处理后的动作；原始输入及逐次裁剪／重锚事件还未独立保存。因此不能声称已经具备完整的输入到执行审计。新增这些字段的剩余接入要求见[学习流程](LEARNING_WORKFLOWS_ZH.md)。
+raw 保存的是处理后的动作；原始输入及逐次裁剪／重锚事件还未独立保存。因此不能声称已经具备完整的输入到执行审计。新增这些字段的剩余接入要求见 [TODO](../TODO.md)。
 
 每次采集在 `metadata.json/controller_contract` 保存开关及实际生效值，`simulation_config` 保存输入倍率、物理和触觉配置。无上限字段为 null。两种模式不能混入同一采集目录；试验目录用 `data/episodes_unlimited/`。关闭这些限制不会给夹爪焊接物体、忽略碰撞或更改成功阈值。
 

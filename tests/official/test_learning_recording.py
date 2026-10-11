@@ -24,7 +24,7 @@ from wowskin_lab.data.visk_processing import process_visk_sim
 from wowskin_lab.paths import ROOT
 
 
-@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Run in .venv-reduced')
+@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Run in .venv')
 class JointAcquisitionChecks(unittest.TestCase):
     def env(self, task):
         cfg = response_configuration(SimpleNamespace(task=task, skin_dof='trilinear', ideal=True,

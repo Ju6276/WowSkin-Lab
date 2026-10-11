@@ -15,7 +15,7 @@ from wowskin_lab.learning.official import prepare
 from wowskin_lab.paths import ROOT
 
 
-@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Requires .venv-reduced')
+@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Requires .venv')
 class CubeDeliveryRecordingTests(unittest.TestCase):
     def test_two_box_success_recording_and_original_loader(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -9,7 +9,7 @@ from wowskin_lab.data.robot_state import robot_metadata
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration
 
 
-@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Requires .venv-reduced')
+@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Requires .venv')
 class CartesianLimitTests(unittest.TestCase):
     def test_targets_cross_old_workspace_and_servo_takes_full_target(self):
         for unrestricted in (False, True):

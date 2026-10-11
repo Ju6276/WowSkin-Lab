@@ -13,7 +13,7 @@ from wowskin_lab.ui.task_guides import TaskGuides, goal_regions
 from wowskin_lab.ui.teleop_hud import render_operator_panel
 
 
-@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Run in .venv-reduced')
+@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Run in .venv')
 class OperatorGuideTests(unittest.TestCase):
     def test_guides_leave_all_three_rgb_depth_and_physics_unchanged(self):
         for task, cls in (('pick_cube', PandaPickCubeTactileEnv),

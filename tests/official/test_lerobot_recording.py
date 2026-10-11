@@ -22,7 +22,7 @@ from wowskin_lab.paths import ROOT
 
 
 @unittest.skipUnless(mujoco.__version__ == '3.15.0' and importlib.util.find_spec('lerobot'),
-                     'Requires .venv-reduced and scripts/setup_capture.py')
+                     'Requires .venv and scripts/setup_capture.py')
 class LeRobotRecordingChecks(unittest.TestCase):
     def test_failed_final_verification_keeps_originals_and_blocks_append(self):
         cfg = response_configuration(SimpleNamespace(task='pick_cube', skin_dof='trilinear', ideal=True,

@@ -70,6 +70,28 @@ class OfficialWorkflowChecks(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('simplified pipeline has been removed', result.stderr)
 
+    def test_training_rejects_wrong_task_and_unrecorded_source_edits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workspace, output = root/'workspace', root/'training'
+            prepare('visk', workspace, root/'data', 'feeding')
+            command = [sys.executable, 'scripts/train_visk_mac.py', '--workspace', str(workspace),
+                       '--output', str(output), '--device', 'cpu']
+            result = subprocess.run(command+['--task', 'pick_cube'], text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Task differs from the workspace', result.stderr)
+            self.assertFalse(output.exists())
+            # The inferred feeding task should reach the missing-dataset check,
+            # rather than defaulting to cube or starting an optimization run.
+            result = subprocess.run(command, text=True, capture_output=True)
+            self.assertIn('Run official process-visk-sim', result.stderr)
+            source = workspace/'source/agent/bc.py'
+            source.write_text(source.read_text()+'\n# unexpected algorithm edit\n')
+            result = subprocess.run(command, text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('unrecorded source edits', result.stderr)
+            self.assertFalse(output.exists())
+
 
 if __name__ == '__main__':
     unittest.main()

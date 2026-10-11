@@ -35,7 +35,8 @@ def error(x, y):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--episode', type=Path, default=ROOT/'outputs/cable/teleop_20261010_010635/episode.npz')
+    p.add_argument('--episode', type=Path, required=True,
+                   help='Measured simulation diagnostic episode.npz to fit; no historical capture is bundled')
     p.add_argument('--output', type=Path, default=ROOT/'outputs/diagnostics/pollen_nonslip_dipole_fit')
     args = p.parse_args()
     if (args.output/'profile.json').exists():

@@ -19,7 +19,7 @@ from wowskin_lab.envs.pick_cube import response_configuration
 from wowskin_lab.paths import ROOT
 
 
-@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Requires .venv-reduced')
+@unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Requires .venv')
 class FeedingDeliveryRecordingTests(unittest.TestCase):
     def test_physical_delivery_and_save_all_views(self):
         self.check_delivery('panda')

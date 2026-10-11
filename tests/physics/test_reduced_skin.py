@@ -1,4 +1,4 @@
-"""Run using .venv-reduced/bin/python -m unittest tests.physics.test_reduced_skin."""
+"""Run using .venv/bin/python -m unittest tests.physics.test_reduced_skin."""
 from types import SimpleNamespace
 import unittest
 import mujoco

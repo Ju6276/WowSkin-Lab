@@ -16,11 +16,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--only', nargs='+', choices=list(manifest), help='Fetch only selected repositories')
     args = parser.parse_args()
-    folders = dict(visk='visuoskin', ftf='feel-the-force', franka='franka_xbox')
+    folders = dict(visk='visuoskin', ftf='feel-the-force', franka='franka_xbox', openteach='Open-Teach')
+    selected = set(args.only or manifest)
+    if 'visk' in selected:
+        selected.add('openteach')  # The original XArm environment imports its network helpers even offline.
     for name, spec in manifest.items():
-        if args.only and name not in args.only:
+        if name not in selected:
             continue
-        parent = ROOT/'third_party' if name == 'franka' else ROOT/'third_party/official'
+        parent = ROOT/'third_party'/('dependencies' if name == 'openteach' else 'official')
+        if name == 'franka':
+            parent = ROOT/'third_party'
         directory = parent/folders[name]
         if not directory.exists():
             parent.mkdir(parents=True, exist_ok=True)

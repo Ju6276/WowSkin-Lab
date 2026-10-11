@@ -1,6 +1,16 @@
 # ViSk 与 FTF：从当前采集开始
 
-采集入口见 [README](../README.md)。三个任务共享一套 LeRobot v2.1＋100 Hz raw 数值附件，不需要同时开两套录制器。当前 cube 示范保留在 `data/episodes/pick_cube/`；旧试验和策略权重已移出项目。以下训练命令需采集完成后手动运行。
+采集入口见 [README](../README.md)。三个任务共享一套 LeRobot v2.1＋100 Hz raw 数值附件，不需要同时开两套录制器。默认 cube 数据位于 `data/episodes/pick_cube/`。以下命令在项目根目录执行，训练与部署需要分别手动启动。
+
+## 安装学习依赖
+
+先完成 README 的统一 `.venv` 安装（已包含学习依赖），然后获取官方源码：
+
+```bash
+.venv/bin/python scripts/setup_upstream.py --only visk
+```
+
+ViSk 同时获取固定版本 Open-Teach：原版 XArm 环境即使在离线训练时也会导入它的网络工具。来源、版本见 `configs/upstream.json`；不要求连接 XArm。FTF 另执行 `scripts/setup_upstream.py --only ftf`，notebook 另安装 `requirements/annotation.txt`。
 
 ## 当前采集内容
 
@@ -21,10 +31,10 @@ B 复位后开始录制；绿色 SUCCESS 不会自动停录，Enter 保存成功
 以下命令在新采集成功后运行，输出目录必须不存在：
 
 ```bash
-.venv-reduced/bin/python -m wowskin_lab dataset-export data/episodes/pick_cube --format visk --output data/exports/visk_cube
-.venv-reduced/bin/python -m wowskin_lab official prepare visk \
+.venv/bin/python -m wowskin_lab dataset-export data/episodes/pick_cube --format visk --output data/exports/visk_cube
+.venv/bin/python -m wowskin_lab official prepare visk \
   --workspace data/exports/visk_cube/workspace --data-root data/exports/visk_cube --task pick_cube
-.venv-reduced/bin/python -m wowskin_lab official process-visk-sim \
+.venv/bin/python -m wowskin_lab official process-visk-sim \
   --workspace data/exports/visk_cube/workspace
 ```
 
@@ -40,27 +50,31 @@ ViSk 原转换器生成 `processed_data_pkl_aa/pick_cube.pkl`，其中含图像�
 - 论文四相机，本项目按用户要求三相机；自动读取导出元数据并生成 `THREE_VIEW_CAMERAS.patch`。先前四路布局仍保存在 `configs/cameras.json`。
 - 仿真反馈开度不能代替闭合指令。`MUJOCO_ACTION_LABELS.patch` 保留 measured gripper 作为状态，动作标签取录制的 `commanded_gripper`；缺少该字段会报错，不反推或强制全闭。公开数据对照可显式选择 `--visk-action-profile published-state`。
 - Franka/MuJoCo 是本地环境接口，不是论文的原 XArm 硬件。模型、损失、归一化、动作块和官方采样逻辑没有替换。
-- 部署频率尚未与论文对齐：论文 IV-A 写 10 Hz；当前 `visk_sim.py` 根据本地 30 Hz 图像和公开加载器默认 `subsample=5` 使用 6 Hz（仿真时间）。这属于本地执行时序选择，不是论文规定。改变它前需一并核对标签时间间隔，不能只改执行频率。
+- 本项目已选定 **6 Hz**：30 Hz 图像经公开加载器默认 `subsample=5` 后构造标签，部署按同一间隔执行。论文 IV-A 的 10 Hz 不作为当前配置；以后若改频率，需要同时重新转换标签与修改部署时钟，不能只加快执行。
 - 论文 III-A 在遥操作速度方向上加入小角度随机扰动；当前本地采集没有复现该示教扰动。`--ideal` 控制的是触觉读出噪声等，不是该方向扰动。任务与数据量也不是论文实验配置。[论文 III-A / IV-A](https://arxiv.org/html/2410.17246v2#S3.SS1)
 
 补丁、来源和 SHA256 保存在 workspace 的 `manifest.json`。官方参考 checkout 不修改。这是带明确数据／环境适配的官方算法流程，不能称为硬件、任务和论文成绩的完整复现。
 
-以下是以后训练用的命令，本次**不启动训练**：
+确认转换报告 `dataset_loader_validated=true` 后，可手动训练：
 
 ```bash
-.venv-reduced/bin/python scripts/train_visk_mac.py \
+.venv/bin/python scripts/train_visk_mac.py \
   --workspace data/exports/visk_cube/workspace \
   --output outputs/training/visk_cube_three_view --steps 10000 --save-every 3000
 ```
 
-默认 MPS、batch 256、subsample 5、动作块 10。调用原 `WorkspaceIL.train()` / `BCAgent.update()`；Mac 运行差异写入 `status.json`：不支持的 MPS 运算走 PyTorch CPU fallback，float64 在传入 MPS 前转为原 update 要求的 float32，DataLoader 默认单进程。它们不保证与官方 CUDA 位级一致。按原循环零起始步号，`3000.pt` 在第 3001 次更新后保存；另存最后更新完成的 `10000.pt`。TensorBoard／CSV 与 checkpoint 频率独立。
+训练启动前校验 prepared workspace 的源码哈希，并从 manifest 读取任务名；喂食不会再误用默认 cube 任务。默认 MPS、batch 256、subsample 5、动作块 10。调用原 `WorkspaceIL.train()` / `BCAgent.update()`；Mac 运行差异写入 `status.json`：不支持的 MPS 运算走 PyTorch CPU fallback，float64 在传入 MPS 前转为原 update 要求的 float32，DataLoader 默认单进程。它们不保证与官方 CUDA 位级一致。保存调度按已完成的优化器更新计数：`3000.pt`、`6000.pt`、`9000.pt`、最终 `10000.pt`，不保存 `0.pt`。仍调用官方 `save_snapshot()`，没有改权重格式；关闭原来的零起始保存调度，避免多算一次更新。
+
+训练指标直接写入 W&B（默认 `WowSkin-Lab`），无 TensorBoard、CSV 或额外文本训练日志。首次使用运行 `.venv/bin/wandb login`，可用 `--wandb-project` / `--wandb-entity` 指定项目与团队。运行链接和进度位于训练目录的 `status.json`；`config.yaml` 与 checkpoint 为部署必需，仍保留。不会上传视频、数据集或权重。W&B 自身会保留同步缓存及 SDK 诊断文件。
+
+上游 `use_tb` 同时控制是否返回 loss 指标，所以它在配置中保留 `true`；本地在创建 workspace 前替换 Logger，实际不创建 TensorBoard writer。TensorBoard 包仅用于满足上游模块的导入，不启动服务。
 
 ## ViSk MuJoCo 实时闭环
 
 训练完成后：
 
 ```bash
-.venv-reduced/bin/mjpython scripts/eval_visk_sim.py \
+.venv/bin/mjpython scripts/eval_visk_sim.py \
   --training outputs/training/visk_cube_three_view \
   --checkpoint outputs/training/visk_cube_three_view/snapshot/10000.pt \
   --output outputs/evaluation/visk_cube_three_view_01 --viewer
@@ -68,9 +82,9 @@ ViSk 原转换器生成 `processed_data_pkl_aa/pick_cube.pkl`，其中含图像�
 
 执行原版 `WorkspaceIL.eval()`、`BCAgent.act()`、checkpoint 归一化和时间聚合。每次从实时三路图像与触觉产生一个 7 维动作，再分摊到 100 Hz 控制周期，持续累积运动目标。零增量保持目标，不在每次推理时丢弃尚未跟上的位移。反馈开度不覆盖预测的夹爪命令；底层限幅、实际执行量和评分写入结果。原训练片段不参与闭环回放。
 
-读取采集元数据中的物理／控制配置；评估和采集共用任务成功判定。显示用独立 MuJoCo data，窗口 reset 不改写运行中的策略物理状态。目前支持 cube 和喂食闭环；线材策略执行入口尚未接入。旧错误夹爪标签的模型不能通过更换接口变成正确模型；新采集仍需要新训练和独立测试。控制器对照能完成动作不等于策略学会任务。
+读取采集元数据中的物理／控制配置；评估和采集共用任务成功判定。显示用独立 MuJoCo data，窗口 reset 不改写运行中的策略物理状态。目前支持 cube 和喂食闭环；线材策略执行入口尚未接入。不同相机、动作标签或归一化统计量的旧模型不能直接沿用；新采集需要对应的训练和独立测试。控制器对照能完成动作不等于策略学会任务。
 
-接口回归覆盖：官方转换器／加载器保留实测夹爪状态并使用真实指令作为标签、旋转基座下的坐标转换、增量跨控制周期只执行一次、跟踪滞后和零增量时保留累计目标，以及显示窗口 reset 不修改真实物理状态。`tests/unit/test_visk_action_transport.py` 与 `tests/official/test_visk_command_labels.py` 共 4 项测试已于 2026-10-11 通过；它们不验证新三相机策略成功率，也不证明本地部署频率等同论文。
+接口回归覆盖：官方转换器／加载器保留实测夹爪状态并使用真实指令作为标签、旋转基座下的坐标转换、增量跨控制周期只执行一次、跟踪滞后和零增量时保留累计目标，以及显示窗口 reset 不修改真实物理状态。对应测试为 `tests/unit/test_visk_action_transport.py` 与 `tests/official/test_visk_command_labels.py`；它们不验证策略成功率。
 
 ## FTF：机器人记录到视觉点轨迹
 
@@ -79,15 +93,15 @@ FTF 使用**稀疏三维关键点轨迹＋触觉接触历史**，不是稠密点
 FTF 从同一份记录中选择固定相机 1、2，腕部数据仍留在公共数据集。深度不自动替代其原版双目三角化。
 
 ```bash
-.venv-reduced/bin/python -m wowskin_lab dataset-export data/episodes/pick_cube --format ftf --output data/exports/ftf_cube
-.venv-reduced/bin/python -m wowskin_lab official process-ftf-robot \
+.venv/bin/python -m wowskin_lab dataset-export data/episodes/pick_cube --format ftf --output data/exports/ftf_cube
+.venv/bin/python -m wowskin_lab official process-ftf-robot \
   --data-root data/exports/ftf_cube --task pick_cube
-.venv-reduced/bin/python -m wowskin_lab official convert-ftf-robot-initial \
+.venv/bin/python -m wowskin_lab official convert-ftf-robot-initial \
   --data-root data/exports/ftf_cube --task pick_cube \
   --calib-path data/exports/ftf_cube/extracted_data/pick_cube/demonstration_0/sim_camera_calibration.npy
-.venv-reduced/bin/python -m wowskin_lab official prepare-ftf-annotation \
+.venv/bin/python -m wowskin_lab official prepare-ftf-annotation \
   --data-root data/exports/ftf_cube --task pick_cube --output data/exports/ftf_cube/annotation
-.venv-reduced/bin/python -m notebook data/exports/ftf_cube/annotation/label_points.ipynb
+.venv/bin/python -m notebook data/exports/ftf_cube/annotation/label_points.ipynb
 ```
 
 预处理使用固定版本 `process_data_robot.py`、`convert_to_pkl_robot.py`。初始 PKL 只供标注，`training_ready=false`。短到未离开初始位姿的记录可能被官方预处理丢弃，不修改它的时间戳或姿态让其通过。
@@ -117,26 +131,17 @@ python collect_data.py collect_img=true collect_state=true collect_reskin=true d
 
 ## 来源与检查
 
-### 当前验证与尚未接入的功能
+### 验证范围
 
-录制回归覆盖多段追加、三视角 RGB-D、状态／指令与时间对齐、并发写入保护、最终验证失败保留原始媒体并阻止后续追加。Pico 的佩戴／对面模式、重连、方向和共享 LeRobot 录制也有测试；本次没有连接头显，未重新做硬件验收。测试命令见 README。
+录制回归覆盖多段追加、三视角 RGB-D、状态／指令与时间对齐、并发写入保护、最终验证失败保留原始媒体并阻止后续追加。最终媒体校验和元数据更新都完成后才清除 `INCOMPLETE`。Pico 的方向、模式切换和重连有软件测试，硬件使用仍需实测。
 
-保存提交已修复：最终媒体校验和元数据更新都完成后才清除 `INCOMPLETE`，失败时保留恢复文件。不自动丢帧或把未验证 episode 标为可用。
+当前 cube 数据可以导出给原版 ViSk 加载器，输出三路图像、15 维触觉和 10×7 动作块。夹爪的观测／命令分离、基座系转换、持续累计位姿目标已有回归覆盖。**这不等于新训练模型已在闭环完成任务。** 数据量、初始状态覆盖与失败率仍需实验评估。
 
-需要修复／接入的事项：
-
-- 采集追加签名比较配置值，但没有模型资产内容及控制／评分代码版本。只改变资产或实现、不改变配置时，仍可能混合不同环境的数据；应保存并比较相关版本／摘要。已有成功条件配置值在 signature 中，不能说完全没有校验评分配置。
-- 米制夹爪反馈／目标和七关节下发目标尚未接入；需同步升级 raw、LeRobot、算法导出、推理反变换和 schema，不能只改字段名，也不能把实测 qvel 当速度指令。
-- 当前 raw 的 `command_7d` 来自已处理的 `row['action']`；未独立记录原始输入请求及每次裁剪／重锚事件。虽然配置和实际指令已保留，仍不足以逐次还原输入被改变了多少，应补全审计字段。
-- ViSk 当前 6 Hz 与论文 10 Hz 的时序差异仍未解决；需联合检查标签时间间隔和部署时钟。线材 ViSk 闭环仍未接入，新三相机策略未训练。FTF 视觉跟踪与完整闭环未验证。
-- Robotiq 喂食已接入源连杆初始关节、实际指腹中点放勺和 EBiM 接触预紧初始化，保留三路相机；连续夹爪目标仍按实际下发值保存。预紧只用于 reset，不钳制后续策略／遥操作指令；再次全闭合与复杂线材接触的稳定性仍未解决。cube／喂食的 Panda 默认 Menagerie 伺服，线材的 Panda 默认 robosuite 伺服，Robotiq 保留 EBiM 转轴伺服，不能声称所有任务控制器参数相同。
-- 当前默认拟合偶极子的幅值系数来自旧网格和 Pollen 伪标签分布；48 点降阶网格、方块和勺子的响应仍缺独立验证，不能称为真机标定。材料／接触数值参数及网络局限见[模型与标定](MODEL_CALIBRATION_ZH.md)。
-
-控制限制的开启／关闭影响也记录在该文档；删除局部高度截断、冻结／补零不代表取消全部限制。后续修改应保留原始反馈、原始请求和实际下发命令，明确记录裁剪／重锚事件；旧 schema 不与新数据静默混用。
+接口、物理稳定性、FTF 与真机后端的未完成项统一见 [TODO](../TODO.md)，控制参数与限制见 [模型说明](MODEL_CALIBRATION_ZH.md)。
 
 ### π0.5 / NeoSim：采集协议核对（2026-10-11）
 
-以下是源码核对与后续接入要求，**没有修改当前录制协议，也没有启动训练**。π0.5 是策略模型，不规定所有机器人必须使用同一种夹爪单位或动作空间。
+以下是源码核对与后续接入要求，不改变上述 ViSk 采集协议。π0.5 是策略模型，不规定所有机器人必须使用同一种夹爪单位或动作空间。
 
 - **OpenPI 的 DROID 自定义数据示例**：原始 `trajectory.h5`＋各相机 MP4＋语言注释，经转换写成 LeRobot。示例保存两路外部 RGB 与一路腕部 RGB、7 维实测关节位置、1 维夹爪状态、8 维动作及任务文字，15 Hz；图像 feature 声明为 `image`，不能把它描述成必须使用 MP4 的 LeRobot 写法。动作来自 `action/joint_velocity`＋`action/gripper_position`，不是实测关节速度。固定版本：[转换脚本](https://github.com/Physical-Intelligence/openpi/blob/215abfb217dbac7d5f1273282331b9b1866c0479/examples/droid/convert_droid_data_to_lerobot.py)。
 - **DROID 夹爪是归一化宽度**：`g = 1 - width / max_width`，0 开、1 闭；下发时转换回 `target_width = max_width * (1-g)`。[DROID 驱动](https://github.com/droid-dataset/droid/blob/main/droid/franka/robot.py)。本项目当前是驱动关节行程比例，尤其 Robotiq 转轴角度的比例不能直接声称等于 DROID 的宽度比例。
@@ -153,11 +158,11 @@ python collect_data.py collect_img=true collect_state=true collect_reskin=true d
 - [FTF 项目](https://feel-the-force-ftf.github.io/)；本地 `third_party/official/feel-the-force`，提交 `954830f94e59e47c1668ad41c36b52626da975d0`；保留子模块固定版本。
 
 ```bash
-.venv-reduced/bin/python -m wowskin_lab official status
-.venv-reduced/bin/python -m wowskin_lab official verify data/exports/visk_cube/workspace
-.venv-reduced/bin/python -m wowskin_lab dataset-check data/episodes/pick_cube/lerobot
+.venv/bin/python -m wowskin_lab official status
+.venv/bin/python -m wowskin_lab official verify data/exports/visk_cube/workspace
+.venv/bin/python -m wowskin_lab dataset-check data/episodes/pick_cube/lerobot
 ```
 
-W&B 可在以后训练时独立同步指标：`scripts/watch_visk_wandb.py TRAINING_DIR --online --project WowSkin-Lab --entity YOUR_WORKSPACE`，只同步 loss、步数、耗时和配置，不上传视频／数据／权重。
+W&B 已集成到训练入口，无需另开监控脚本。
 
 物理局限、本地控制参数及 Robotiq 强夹持故障见 [模型与标定](MODEL_CALIBRATION_ZH.md)。采集接口测试通过不代表触觉已真实标定，也不代表两篇论文的完整成绩已复现。
