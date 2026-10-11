@@ -2,11 +2,11 @@
 
 Franka 触觉遥操作、RGB-D 数据采集和 ViSk / FTF 算法接入。基于 MuJoCo，支持 Panda / Robotiq 2F-85、键盘 / SpaceMouse / PICO 4，提供方块搬运、线材插扣和喂食场景。
 
-**优先使用 Panda 方块任务采集。** ViSk 数据转换及 cube / feeding 仿真执行接口已接通；最终 cube 模型已在默认起点单次闭环成功，多初始条件成功率尚待验证。FTF 仍需视觉标注与跟踪。软指腹与磁场是本地近似模型，未完成真机标定，不能视为官方论文的完整复现。待完成项集中在 [TODO](TODO.md)。
+建议从 Panda 方块任务开始。ViSk 提供数据转换、训练及 cube / feeding 仿真闭环入口；FTF 提供数据导出和标注入口，后续视觉跟踪需要 CUDA。软指腹与磁场是未完成真机标定的本地近似模型；本项目包含数据与环境适配，不是官方论文实验配置的完整复现。未完成项见 [TODO](TODO.md)。
 
 ## 安装
 
-已验证环境：Apple Silicon macOS、Python 3.12、MuJoCo 3.15。从源码目录运行；Linux / CUDA 尚未完成整套验收。
+当前安装入口面向 Apple Silicon macOS、Python 3.12、MuJoCo 3.15，从源码目录运行。Linux / CUDA 全流程支持仍在 TODO 中。
 
 ```bash
 git clone https://github.com/Ju6276/WowSkin-Lab.git
@@ -17,7 +17,7 @@ python3.12 scripts/setup_capture.py
 
 只使用一个 `.venv`，采集、遥操作、ViSk 训练和部署共用。安装入口是 `scripts/setup_capture.py`，根目录 `requirements.txt` 包含运行与学习依赖；只有 FTF notebook 的 `requirements/annotation.txt` 需按需加装到同一个环境。LeRobot 仅安装所用数据 API 及依赖，不是其全套机器人运行环境。
 
-`pip check` 会报告 LeRobot 完整包所需但本项目未安装的八项依赖：`diffusers`、`cmake`、`opencv-python-headless`、`pynput`、`torchcodec`、`gymnasium`、`rerun-sdk`、`flask`。当前录制／读取使用 OpenCV 与 PyAV，已实际验证；这不代表完整 LeRobot 策略或硬件 API 可直接使用。
+`pip check` 会报告 LeRobot 完整包所需但本项目未安装的八项依赖：`diffusers`、`cmake`、`opencv-python-headless`、`pynput`、`torchcodec`、`gymnasium`、`rerun-sdk`、`flask`。当前录制／读取使用 OpenCV 与 PyAV；完整 LeRobot 策略或硬件 API 需要另行补齐依赖。
 
 ## 启动与录制
 
@@ -74,7 +74,9 @@ data/episodes/pick_cube/
 .venv/bin/python -m wowskin_lab dataset-check data/episodes/pick_cube/lerobot
 ```
 
-[学习工作流](docs/LEARNING_WORKFLOWS_ZH.md)提供安装、选择 episodes、ViSk 转换／训练／部署、FTF 标注命令。ViSk 当前使用三视角＋单块 15 路触觉，动作块 10×7，**6 Hz 策略、100 Hz 控制**。夹爪指令已经进入其训练标签；数据可用不代表新模型已学会任务。本地示范、导出与训练权重不随 Git 提交。
+[学习工作流](docs/LEARNING_WORKFLOWS_ZH.md)提供完整命令：**采集成功 episodes → 数据检查 → 导出／官方预处理 → 训练 → MuJoCo 闭环评估**。ViSk 使用三视角＋单块 15 路触觉，动作块 10×7，**6 Hz 策略、100 Hz 控制**；夹爪标签使用实际下发的目标。
+
+仓库保留代码、测试、依赖、配置、素材来源和操作说明，不分发本机示范、训练权重、验证报告或录像。新使用者需先采集自己的数据，再按工作流训练和评估；仅克隆代码不能复现某次训练的具体数值结果。
 
 ViSk 训练只向 W&B 记录指标（默认项目 `WowSkin-Lab`），不生成 TensorBoard／CSV／文本训练日志。完成 3000、6000、9000 次更新分别保存 checkpoint，10000 次结束再保存最终权重。登录与训练命令见学习工作流。
 
@@ -96,7 +98,7 @@ tests/       unit、physics、official、artifacts、manual
 docs/        采集、学习、物理模型说明
 ```
 
-默认采用 MuJoCo 3.15 降阶指腹＋拟合偶极子。`--ideal` 关闭合成触觉噪声、滤波和延迟，不关闭接触力学。控制限制、参数来源与物理失效规则集中在 [模型说明](docs/MODEL_CALIBRATION_ZH.md)，没有以改成功条件或补造触觉帧保证测试通过。历史完整网格对照针对 MuJoCo 3.5，未纳入当前 3.15 环境的验收；不要为它替换当前环境依赖。
+默认采用 MuJoCo 3.15 降阶指腹＋拟合偶极子。`--ideal` 关闭合成触觉噪声、滤波和延迟，不关闭接触力学。控制限制、参数来源与物理失效规则见 [模型说明](docs/MODEL_CALIBRATION_ZH.md)。完整网格对照针对 MuJoCo 3.5，与当前默认环境不同。
 
 ```bash
 # 以下检查包含学习接口，先按学习文档获取固定版 ViSk

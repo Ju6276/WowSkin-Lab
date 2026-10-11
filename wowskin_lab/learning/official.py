@@ -313,11 +313,11 @@ def verify_workspace(path):
 def status():
     result = dict(platform=f'{platform.system()} {platform.machine()}', routes={},
                   reproduction_complete=False,
-                  simulation_policy_rollout='ViSk cube/feeding transport connected; final cube checkpoint passed one default-start rollout, generalization unverified; FTF/cable not connected',
+                  simulation_policy_rollout='ViSk cube/feeding transport available; FTF/cable policy transport not integrated',
                   ftf_human_data='independent human acquisition not integrated',
                   default_local_recorder='LeRobot v2.1: three 640x480 RGB-D views at nominal 30 Hz; base-frame state/joints/15-channel tactile at 100 Hz raw',
                   visk_policy_hz=6)
-    result['ftf_raw_acquisition'] = 'MuJoCo input -> original Franka-Teach writers -> original process_data_robot verified; visual tracking/training not completed'
+    result['ftf_raw_acquisition'] = 'MuJoCo input -> original Franka-Teach writers -> original process_data_robot; visual tracking is a separate required stage'
     result['visk_profile'] = 'paper-single: one AnySkin, 15 channels; explicit sensor-count and user-requested camera-list patches in prepared workspace'
     result['visk_acquisition'] = 'Shared base-frame dataset: three cameras (two fixed + wrist) at nominal 30 Hz; poses/joints/tactile at 100 Hz. dataset-export selects episodes; process-visk-sim runs the original converter and loader'
     try:

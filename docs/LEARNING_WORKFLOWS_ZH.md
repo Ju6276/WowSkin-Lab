@@ -63,7 +63,7 @@ ViSk 原转换器生成 `processed_data_pkl_aa/pick_cube.pkl`，其中含图像�
   --output outputs/training/visk_cube_three_view --steps 10000 --save-every 3000
 ```
 
-训练启动前校验 prepared workspace 的源码哈希，并从 manifest 读取任务名；喂食不会再误用默认 cube 任务。默认 MPS、batch 256、subsample 5、动作块 10。调用原 `WorkspaceIL.train()` / `BCAgent.update()`；Mac 运行差异写入 `status.json`：不支持的 MPS 运算走 PyTorch CPU fallback，float64 在传入 MPS 前转为原 update 要求的 float32，DataLoader 默认单进程。它们不保证与官方 CUDA 位级一致。保存调度按已完成的优化器更新计数：`3000.pt`、`6000.pt`、`9000.pt`、最终 `10000.pt`，不保存 `0.pt`。仍调用官方 `save_snapshot()`，没有改权重格式；关闭原来的零起始保存调度，避免多算一次更新。
+训练启动前校验 prepared workspace 的源码哈希，并从 manifest 读取任务名。默认 MPS、batch 256、subsample 5、动作块 10。调用原 `WorkspaceIL.train()` / `BCAgent.update()`；Mac 运行差异写入 `status.json`：不支持的 MPS 运算走 PyTorch CPU fallback，float64 在传入 MPS 前转为原 update 要求的 float32，DataLoader 默认单进程。它们不保证与官方 CUDA 位级一致。保存调度按已完成的优化器更新计数：`3000.pt`、`6000.pt`、`9000.pt`、最终 `10000.pt`，不保存 `0.pt`。仍调用官方 `save_snapshot()`，没有改权重格式；关闭原来的零起始保存调度，避免多算一次更新。
 
 训练指标直接写入 W&B（默认 `WowSkin-Lab`），无 TensorBoard、CSV 或额外文本训练日志。首次使用运行 `.venv/bin/wandb login`，可用 `--wandb-project` / `--wandb-entity` 指定项目与团队。运行链接和进度位于训练目录的 `status.json`；`config.yaml` 与 checkpoint 为部署必需，仍保留。不会上传视频、数据集或权重。W&B 自身会保留同步缓存及 SDK 诊断文件。
 
@@ -113,7 +113,7 @@ FTF 从同一份记录中选择固定相机 1、2，腕部数据仍留在公共�
 3. 检查轨迹、点数配置及官方机器人参考点与本地 TCP 配准。
 4. 机器人分支运行 `train.py agent=p3po suite=p3po dataloader=p3po`，之后对接官方触觉反馈控制。
 
-Mac 可做导出、视频预处理、初始 PKL 与标注。固定版本 DIFT/CoTracker 路径直接依赖 CUDA/xformers，当前 Mac 尚未跑完视觉处理，也未验证 FTF MuJoCo 策略闭环。不会用仿真物体真值、八个角点或简化跟踪器代替官方视觉流程。自建任务需准备点数一致的 YAML，用 `official prepare ftf-robot --task-config PATH.yaml` 生成可审查工作目录，命令见其 `COMMANDS.md`。
+Mac 可做导出、视频预处理、初始 PKL 与标注。固定版本 DIFT/CoTracker 路径直接依赖 CUDA/xformers，需要在 CUDA 环境继续处理；FTF MuJoCo 策略闭环尚未接入。自建任务需准备点数一致的 YAML，用 `official prepare ftf-robot --task-config PATH.yaml` 生成工作目录，命令见其 `COMMANDS.md`。
 
 ## FTF 人手示范分支
 
@@ -125,21 +125,26 @@ python teleop.py teleop_mode=human
 python collect_data.py collect_img=true collect_state=true collect_reskin=true demo_num=0
 ```
 
-输出 AVI／时间戳、触觉 H5、`states.pkl` 和 `commanded_states.pkl`。公开 human 入口仍调用机器人 reset／状态服务，当前没有在本机接好独立人手采集，不能称为已完成。
+输出 AVI／时间戳、触觉 H5、`states.pkl` 和 `commanded_states.pkl`。公开 human 入口仍调用机器人 reset／状态服务；本项目尚未接入独立人手采集服务。
 
 后续原流程：`process_data_human.py` → `convert_to_pkl_human.py` → 标注／跟踪（`--process_points --smooth_tracks`）→ `convert_pkl_human_to_robot.py --smooth_robot_tracks` → `train.py agent=point_policy suite=point_policy dataloader=point_policy`。人手三维运动还需 MediaPipe 和手部到机器人的映射。仿真 Franka 记录只覆盖机器人分支，不能作为人手示范。
 
 ## 来源与检查
 
-### 验证范围
+### 自检入口
 
-录制回归覆盖多段追加、三视角 RGB-D、状态／指令与时间对齐、并发写入保护、最终验证失败保留原始媒体并阻止后续追加。最终媒体校验和元数据更新都完成后才清除 `INCOMPLETE`。Pico 的方向、模式切换和重连有软件测试，硬件使用仍需实测。
+完成安装和官方源码准备后，可自行检查数据接口与动作传输：
 
-当前 cube 数据可以导出给原版 ViSk 加载器，输出三路图像、15 维触觉和 10×7 动作块。夹爪的观测／命令分离、基座系转换、持续累计位姿目标已有回归覆盖。**这不等于新训练模型已在闭环完成任务。** 数据量、初始状态覆盖与失败率仍需实验评估。
+```bash
+.venv/bin/python -m tests unit
+.venv/bin/python -m unittest tests.official.test_visk_command_labels tests.official.test_lerobot_recording
+```
+
+测试代码包含多段追加、三视角 RGB-D、时间对齐、夹爪观测／命令分离、坐标转换及累计位姿目标等检查。策略效果需使用自己的数据和 checkpoint 单独运行上述闭环评估；输出写入指定的 `outputs/evaluation/` 子目录。
 
 接口、物理稳定性、FTF 与真机后端的未完成项统一见 [TODO](../TODO.md)，控制参数与限制见 [模型说明](MODEL_CALIBRATION_ZH.md)。
 
-### π0.5 / NeoSim：采集协议核对（2026-10-11）
+### π0.5 / NeoSim：采集协议参考
 
 以下是源码核对与后续接入要求，不改变上述 ViSk 采集协议。π0.5 是策略模型，不规定所有机器人必须使用同一种夹爪单位或动作空间。
 
@@ -165,4 +170,4 @@ python collect_data.py collect_img=true collect_state=true collect_reskin=true d
 
 W&B 已集成到训练入口，无需另开监控脚本。
 
-物理局限、本地控制参数及 Robotiq 强夹持故障见 [模型与标定](MODEL_CALIBRATION_ZH.md)。采集接口测试通过不代表触觉已真实标定，也不代表两篇论文的完整成绩已复现。
+物理局限、本地控制参数及 Robotiq 强夹持问题见 [模型与标定](MODEL_CALIBRATION_ZH.md)。
