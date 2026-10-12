@@ -61,6 +61,8 @@ def goal_regions(env, model, data, row):
         rotation = data.xmat[clip].reshape(3, 3)
         return [Region('CABLE CENTRE HERE', data.xpos[clip]+rotation@bounds.mean(1),
                        half, rotation, color)]
+    if env.pick_place is None:
+        return []
     c, table = env.pick_place.config, env.pick_place.table_z
     h = float(model.geom_size[env.probe_geom, 2])
     # The target prism shows XY containment at the resting cube height.

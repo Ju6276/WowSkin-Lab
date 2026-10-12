@@ -1,6 +1,6 @@
 # WowSkin-Lab
 
-Franka 触觉遥操作、RGB-D 数据采集和 ViSk / FTF 算法接入。基于 MuJoCo，支持 Panda / Robotiq 2F-85、键盘 / SpaceMouse / PICO 4，提供方块搬运、线材插扣、喂食和 Peg Insert 场景。
+Franka 触觉遥操作、RGB-D 数据采集和 ViSk / FTF 算法接入。基于 MuJoCo，支持 Panda / Robotiq 2F-85、键盘 / SpaceMouse / PICO 4，提供方块搬运、线材插扣、喂食、Peg Insert，以及实验性薯片夹取场景。
 
 建议从 Panda 方块任务开始。ViSk 提供数据转换、训练及 各任务的仿真闭环入口；FTF 提供数据导出和标注入口，后续视觉跟踪需要 CUDA。软指腹与磁场是未完成真机标定的本地近似模型；本项目包含数据与环境适配，不是官方论文实验配置的完整复现。未完成项见 [TODO](TODO.md)。
 
@@ -79,7 +79,16 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 ## 脆性薯片试验
 
-独立的 MuJoCo 按压台，不替换上述机器人任务，也不自动录制：
+机器人场景沿用喂食的房间与 Franka，移除人体、勺子和豆子，保留 EBiM 原始托盘。薯片约 70×50 mm，两端上翘、两侧下弯，高低边缘相差 24 mm；实体碰撞面与外形一致。启动后空夹爪，按 **V** 切换薯片近景：
+
+```bash
+.venv/bin/mjpython -m wowskin_lab teleop --task chip_tray --input keyboard --ideal --record-dir data/episodes_chip_tray
+# 接上 SpaceMouse 后可改为 --input spacemouse
+```
+
+显示 `INTACT / BROKEN` 和碎片组数；沿用 B/Enter/N 手动录制操作。**本试验尚未定义自动成功条件**，Enter 是人工标记，不能把它当作自动验证的无损抓取。几何与求解设置见 [chip_tray.json](configs/chip_tray.json)；没有给薯片添加机器人固定约束。原来的喂食任务不变。
+
+独立按压台仍可使用，不自动录制：
 
 ```bash
 .venv/bin/mjpython -m wowskin_lab brittle-chip
@@ -87,7 +96,7 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 .venv/bin/python -m wowskin_lab brittle-chip --headless --video --output outputs/diagnostics/brittle_chip
 ```
 
-`Space` 执行一次按压／抬起，再按可停止压头目标；`D/U` 下压／抬起，`R` 重置，`P` 退出。24 个薄片刚体通过 32 条 weld 连接，每条连接按自己的力／力矩断开；分离后的碎片保留碰撞。形状、强度与密度均为[试验参数](configs/brittle_chip.json)，不是实测薯片。模型范围与内部接触处理见[说明](docs/MODEL_CALIBRATION_ZH.md#脆性薯片预分块试验)。尚未接入 Franka 夹取、AnySkin 或 LeRobot 录制。
+`Space` 执行一次按压／抬起，再按可停止压头目标；`D/U` 下压／抬起，`R` 重置，`P` 退出。24 个薄片刚体通过 32 条 weld 连接，每条连接按自己的力／力矩断开；分离后的碎片保留碰撞。形状、强度与密度均为[试验参数](configs/brittle_chip.json)，不是实测薯片。模型范围与内部接触处理见[说明](docs/MODEL_CALIBRATION_ZH.md#脆性薯片预分块试验)。机器人夹取版使用相同断裂计算，4 个内圈点与 16 个外圈点构成 24 块／28 条连接。断裂强度未标定，尚未确定可无损夹取的力范围。
 
 ## 数据与学习
 

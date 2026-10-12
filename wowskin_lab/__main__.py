@@ -65,8 +65,8 @@ def main(argv=None):
                 cable_layout = value.split('=', 1)[1]
             elif value == '--cable-layout' and i+1 < len(rest):
                 cable_layout = rest[i+1]
-        if task not in ('pick_cube', 'cable', 'feeding', 'peg_insert'):
-            parser.error('--task must be pick_cube, cable, feeding or peg_insert')
+        if task not in ('pick_cube', 'cable', 'feeding', 'peg_insert', 'chip_tray'):
+            parser.error('--task must be pick_cube, cable, feeding, peg_insert or chip_tray')
         if not any(a.split('=')[0] == '--record-format' for a in rest):
             rest = ['--record-format', 'lerobot', *rest]
         if '--pollen' in rest:

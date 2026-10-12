@@ -276,6 +276,53 @@
         "mount_revision": "feeding_wrist_v2_lateral",
         "reason": "Fixed lateral wrist mount. Old +X=0.10, Z=0.075 entered the head in a recorded approach; no dynamic camera avoidance or robot motion restriction."
       }
+    },
+    "chip_tray": {
+      "1": {
+        "position_m": [
+          -2.25,
+          0.57,
+          1.53
+        ],
+        "target_m": [
+          -1.78,
+          0.13,
+          1.13
+        ]
+      },
+      "2": {
+        "position_m": [
+          -1.15,
+          -0.28,
+          1.6
+        ],
+        "target_m": [
+          -1.78,
+          0.13,
+          1.13
+        ]
+      },
+      "51": {
+        "position_m": [
+          -1.78,
+          0.08,
+          1.95
+        ],
+        "target_m": [
+          -1.78,
+          0.13,
+          1.1
+        ]
+      },
+      "52": {
+        "position_m": [
+          0,
+          0.1,
+          0.075
+        ],
+        "mount_revision": "feeding_wrist_v2_lateral",
+        "reason": "Fixed lateral wrist mount. Old +X=0.10, Z=0.075 entered the head in a recorded approach; no dynamic camera avoidance or robot motion restriction."
+      }
     }
   },
   "notes": [

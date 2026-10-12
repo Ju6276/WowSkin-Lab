@@ -1,0 +1,13 @@
+{
+  "schema": "chip_tray_scene_v1",
+  "provenance": "Local experimental chip on the original EBiM task3 tray, in the existing care room. Tray mesh, inertial and contact properties are retained. Only its initial height is lowered to rest on the table.",
+  "chip_overrides": {
+    "saddle_height_m": 0.012,
+    "sectors": 4,
+    "outer_sectors": 16
+  },
+  "solver": {"iterations": 100, "tolerance": 1e-10},
+  "solver_note": "Sparse CG with the reduced-pad discrete integrator. 30 iterations did not converge sufficiently for the stiff fragment welds and caused spurious breakage at rest; strengths are unchanged.",
+  "shape_note": "70 x 50 mm oval, 1 mm vertical thickness; z=12 mm*((x/35 mm)^2-(y/25 mm)^2). Opposing edges rise and fall; 24 mm height difference. Physical and visible meshes are identical.",
+  "outcome": "Manual outcome; automatic intact-lift success threshold has not been defined. Broken bonds and fragment groups are recorded. No holding attachment to the robot."
+}

@@ -82,6 +82,10 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
                      f"Beans {row['beans_in_spoon']}/{config['required_beans']} | "
                      f"spoon {'IN' if row['delivery_inside_target'] else 'OUT'} | "
                      f"hold {row['delivery_dwell_s']:.1f}/{config['continuous_dwell_s']:g} s")
+    elif hasattr(env, 'fracture'):
+        task_text = (f"BROKEN | {row.get('chip_fragment_groups', 1)} fragment groups"
+                     if row.get('chip_broken_bonds', 0) else 'INTACT | saddle chip on tray')
+        task_text += ' | manual outcome'
     elif hasattr(env, 'peg_score'):
         task_text = ('SUCCESS: peg inserted' if env.success else
                      f"Insert {row.get('peg_depth_m', 0.)*1000:.1f}/{env.peg_score.config['required_insertion_m']*1000:g} mm | "

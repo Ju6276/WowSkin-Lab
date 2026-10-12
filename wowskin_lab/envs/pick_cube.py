@@ -256,6 +256,10 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         for _ in range(round(.25/self.cfg["timestep_s"])):
             self.control()
             mujoco.mj_step(self.model, self.data)
+            # Scene-specific loads must count during settling as well as play.
+            reset_step = getattr(self, 'after_reset_physics_step', None)
+            if reset_step is not None:
+                reset_step()
         mujoco.mj_forward(self.model, self.data)
         self.initial_cube_z = float(self.data.xpos[self.probe_body, 2])
         if self.pick_place is not None:
@@ -621,7 +625,7 @@ def response_configuration(args):
     task = getattr(args, 'task', 'pick_cube')
     if task == 'feeding':
         cfg['feeding_setting'] = getattr(args, 'feeding_setting', 'care_room')
-    if physics_step_us is None and task in ('pick_cube', 'cable', 'feeding', 'peg_insert'):
+    if physics_step_us is None and task in ('pick_cube', 'cable', 'feeding', 'peg_insert', 'chip_tray'):
         # Feeding's recorded 6D spoon motion becomes unstable at 100 us and
         # passes at 50 us with this thin-silicone/contact configuration.
         # This costs throughput; the sensor/control clock remains 100 Hz.
@@ -745,7 +749,8 @@ def viewer(args):
     cable_task = getattr(args, 'task', 'pick_cube') == 'cable'
     feeding_task = getattr(args, 'task', 'pick_cube') == 'feeding'
     peg_task = getattr(args, 'task', 'pick_cube') == 'peg_insert'
-    other_task = cable_task or feeding_task or peg_task
+    chip_task = getattr(args, 'task', 'pick_cube') == 'chip_tray'
+    other_task = cable_task or feeding_task or peg_task or chip_task
     keyboard_speed = getattr(args, 'keyboard_speed', None)
     keyboard_speed = (.12 if other_task else .04) if keyboard_speed is None else keyboard_speed
     if not np.isfinite(keyboard_speed) or not (0 < keyboard_speed <= .25):
@@ -777,13 +782,16 @@ def viewer(args):
     elif feeding_task:
         from wowskin_lab.envs.feeding import PandaFeedingEnv
         env = PandaFeedingEnv(cfg, pollen=not args.no_pollen)
+    elif chip_task:
+        from wowskin_lab.envs.chip_tray import PandaChipEnv
+        env = PandaChipEnv(cfg, pollen=not args.no_pollen)
     elif peg_task:
         from wowskin_lab.envs.peg_insert import PandaPegInsertEnv
         env = PandaPegInsertEnv(cfg, pollen=not args.no_pollen)
     else:
         env = PandaPickCubeTactileEnv(cfg, pollen=not args.no_pollen)
     title = ('PandaCable / single clip' if cable_task and env.cable_layout == 'single_clip'
-             else 'PandaCable' if cable_task else 'PandaFeeding' if feeding_task else 'PandaPegInsert' if peg_task else 'PandaPickCube')
+             else 'PandaCable' if cable_task else 'PandaFeeding' if feeding_task else 'PandaPegInsert' if peg_task else 'PandaChip' if chip_task else 'PandaPickCube')
     print('Arm controller: '+env.cfg.get('arm_controller', 'ik_pd'), flush=True)
     if cfg['disable_cartesian_limits']:
         print('Cartesian limits OFF: no workspace, action increment, servo slew or target-lead limits. '
@@ -1154,7 +1162,7 @@ def main():
                         help='Disable only the local TCP target bounding box; keep target lead, speed, joint and actuator limits')
     parser.add_argument('--workspace-limits', action='store_true',
                         help='Opt in to the legacy, locally chosen tabletop TCP target box; OFF by default')
-    parser.add_argument('--task', choices=['pick_cube', 'cable', 'feeding', 'peg_insert'], default='pick_cube')
+    parser.add_argument('--task', choices=['pick_cube', 'cable', 'feeding', 'peg_insert', 'chip_tray'], default='pick_cube')
     parser.add_argument('--cable-layout', choices=['routing', 'single_clip'],
                         help='Cable fixture layout: local two-post routing (default), or one reversed C-clip')
     parser.add_argument('--clip-model', choices=['rigid', 'elastic_beam'], default='rigid',
@@ -1197,9 +1205,9 @@ def main():
         parser.error('Choose --workspace-limits or --no-workspace-limits')
     if args.reskin_extrapolate and not args.reskin_model:
         parser.error('--reskin-extrapolate requires --reskin-model')
-    if args.task in ('cable', 'feeding', 'peg_insert'):
+    if args.task in ('cable', 'feeding', 'peg_insert', 'chip_tray'):
         if args.command != 'viewer' or args.randomize:
-            parser.error('Cable/feeding/peg support manual viewer; cube demo/randomization do not apply')
+            parser.error('Cable/feeding/peg/chip support manual viewer; cube demo/randomization do not apply')
         if args.output == 'outputs/diagnostics/pick_cube':
             args.output = 'outputs/diagnostics/cable_insert' if args.task == 'cable' and args.cable_layout == 'single_clip' else 'outputs/diagnostics/'+args.task
     return (demo if args.command == "demo" else viewer)(args)

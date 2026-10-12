@@ -129,7 +129,7 @@ def add_care_room(root):
                   care_floor='.54 .40 .27 1', care_frame='.29 .25 .20 1',
                   care_glass='.59 .76 .81 1', care_curtain='.75 .69 .56 1',
                   care_cabinet='.75 .70 .58 1', care_leaf='.22 .36 .21 1',
-                  care_pot='.57 .32 .23 1', care_paper='.94 .91 .81 1')
+                  care_pot='.57 .32 .23 1', care_paper='.94 .91 .81 1', care_book_blue='.24 .39 .46 1')
     for name, color in colors.items():
         ET.SubElement(asset, 'material', name=name, rgba=color, specular='.08', shininess='.15')
     # The table contact sizes, positions and friction remain the EBiM values.
@@ -167,7 +167,7 @@ def add_care_room(root):
     for x in (-.64, -.25):
         geom(room, f'care_cabinet_door_{x}', 'box', [x, .913, .77], [.183, .01, .286], 'care_trim')
         geom(room, f'care_cabinet_pull_{x}', 'box', [x, .896, .90], [.050, .008, .006], 'care_frame')
-    for i, mat in enumerate(('care_shirt', 'care_pot', 'care_wainscot')):
+    for i, mat in enumerate(('care_book_blue', 'care_pot', 'care_wainscot')):
         geom(room, f'care_book_{i}', 'box', [-.57+i*.065, 1.08, 1.19], [.025, .09, .08+i*.008], mat)
     geom(room, 'care_art_frame', 'box', [-.37, 1.30, 1.85], [.30, .027, .35], 'care_frame')
     geom(room, 'care_art_paper', 'box', [-.37, 1.267, 1.85], [.28, .005, .33], 'care_paper')

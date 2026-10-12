@@ -37,6 +37,9 @@ def validate_configuration(c):
             raise ValueError(f'{k} must be positive and finite')
     if int(c['sectors']) != c['sectors'] or not 4 <= c['sectors'] <= 10:
         raise ValueError('sectors must be an integer 4..10 (at most 30 collision-mask bits)')
+    outer = c.get('outer_sectors', c['sectors'])
+    if int(outer) != outer or outer < c['sectors'] or outer % c['sectors'] or outer+2*c['sectors'] > 30:
+        raise ValueError('outer_sectors must be a multiple of sectors; at most 30 fragments')
     if not 0 < c['inner_radius_fraction'] < 1:
         raise ValueError('inner_radius_fraction must lie between 0 and 1')
     diameters = np.asarray(c['diameters_m'], dtype=float)
@@ -56,8 +59,9 @@ def chip_mesh(c):
     n = int(c['sectors'])
     a, b = np.asarray(c['diameters_m']) / 2
     xy = [[0., 0.]]
-    for radius in (c['inner_radius_fraction'], 1.):
-        for angle in np.arange(n) * (2*np.pi/n):
+    outer = int(c.get('outer_sectors', n))
+    for radius, count in ((c['inner_radius_fraction'], n), (1., outer)):
+        for angle in np.arange(count) * (2*np.pi/count):
             xy.append([radius*a*np.cos(angle), radius*b*np.sin(angle)])
     xy = np.asarray(xy)
     z = c['saddle_height_m']*((xy[:, 0]/a)**2 - (xy[:, 1]/b)**2)
@@ -65,8 +69,10 @@ def chip_mesh(c):
     triangles = []
     for i in range(n):
         j = (i+1) % n
-        triangles.extend(((0, 1+i, 1+j), (1+i, 1+n+i, 1+n+j),
-                          (1+i, 1+n+j, 1+j)))
+        triangles.append((0, 1+i, 1+j))
+        for k in range(i*(outer//n), (i+1)*(outer//n)):
+            triangles.append((1+i, 1+n+k, 1+n+(k+1) % outer))
+        triangles.append((1+i, 1+n+((i+1)*(outer//n)) % outer, 1+j))
     # Outward winding: bottom -Z, top +Z; six rectangular-side triangles.
     faces = [[0, 2, 1], [3, 4, 5], [0, 1, 4], [0, 4, 3],
              [1, 2, 5], [1, 5, 4], [2, 0, 3], [2, 3, 5]]
@@ -82,6 +88,51 @@ def chip_mesh(c):
     bonds = [(owners[0], owners[1], points[list(edge)].mean(axis=0))
              for edge, owners in shared.items() if len(owners) == 2]
     return pieces, bonds
+
+
+def add_chip(root, c, position, prefix=''):
+    """Same triangulated surface for rendering, mass and contact geometry."""
+    asset, world = root.find('asset'), root.find('worldbody')
+    equality = root.find('equality')
+    if equality is None:
+        equality = ET.SubElement(root, 'equality')
+    pieces, bonds = chip_mesh(c)
+    for i, (center, vertices, faces) in enumerate(pieces):
+        name = f'{prefix}piece_{i}'
+        ET.SubElement(asset, 'mesh', name=name, vertex=_numbers(vertices), face=_numbers(faces))
+        body = ET.SubElement(world, 'body', name=name, pos=_numbers(center+position))
+        ET.SubElement(body, 'freejoint', name=name)
+        shade = .018*np.sin(i*2.4)
+        ET.SubElement(body, 'geom', name=name, type='mesh', mesh=name, group='1',
+                      density=str(c['density_kg_m3']), rgba=_numbers([.86+shade, .59+shade, .19, 1]),
+                      friction=_numbers(c['friction']), condim='3', contype='1', conaffinity='1',
+                      solref=f"{c['constraint_time_constant_s']} 1", solimp='.99 .999 .0001')
+    for i, (a, b, seam) in enumerate(bonds):
+        ET.SubElement(equality, 'weld', name=f'{prefix}bond_{i}', body1=f'{prefix}piece_{a}',
+                      body2=f'{prefix}piece_{b}', anchor=_numbers(seam-pieces[b][0]),
+                      torquescale=str(c['weld_torquescale_m']),
+                      solref=f"{c['constraint_time_constant_s']} 1", solimp=_numbers(c['weld_solimp']))
+    return pieces, bonds
+
+
+def constraint_blocks(model, data, rows, dofs):
+    """Extract only the requested small blocks, including sparse robot models."""
+    if not mujoco.mj_isSparse(model):
+        return data.efc_J.reshape(data.nefc, model.nv)[rows[:, :, None], dofs[:, None, :]]
+    indices = sparse_block_indices(data, rows, dofs)
+    return np.where(indices >= 0, data.efc_J[np.maximum(indices, 0)], 0.)
+
+
+def sparse_block_indices(data, rows, dofs):
+    indices = np.full((len(rows), 6, 6), -1, dtype=int)
+    for i, (rs, ds) in enumerate(zip(rows, dofs)):
+        for j, row in enumerate(rs):
+            start = data.efc_J_rowadr[row]
+            stop = start+data.efc_J_rownnz[row]
+            cols = data.efc_J_colind[start:stop]
+            selected = (cols >= ds[0]) & (cols <= ds[-1])
+            indices[i, j, cols[selected]-ds[0]] = np.arange(start, stop)[selected]
+    return indices
 
 
 def chip_scene(c):
@@ -112,22 +163,7 @@ def chip_scene(c):
                       size=str(c['support_radius_m']), rgba='.24 .28 .31 1')
         ET.SubElement(world, 'geom', type='box', pos=_numbers([x, 0, z/2]),
                       size=_numbers([.003, .020, z/2-.001]), rgba='.20 .23 .26 1')
-    pieces, bonds = chip_mesh(c)
-    for i, (center, vertices, faces) in enumerate(pieces):
-        ET.SubElement(asset, 'mesh', name=f'piece_{i}', vertex=_numbers(vertices), face=_numbers(faces))
-        pos = center + [0, 0, c['chip_center_height_m']]
-        body = ET.SubElement(world, 'body', name=f'piece_{i}', pos=_numbers(pos))
-        ET.SubElement(body, 'freejoint', name=f'piece_{i}')
-        # Subtle baked colour variation; the visible and collision meshes coincide.
-        shade = .03*np.sin(i*2.4)
-        ET.SubElement(body, 'geom', name=f'piece_{i}', type='mesh', mesh=f'piece_{i}',
-                      density=str(c['density_kg_m3']), rgba=_numbers([.86+shade, .59+shade, .19, 1]))
-    equality = ET.SubElement(root, 'equality')
-    for i, (a, b, seam) in enumerate(bonds):
-        ET.SubElement(equality, 'weld', name=f'bond_{i}', body1=f'piece_{a}', body2=f'piece_{b}',
-                      anchor=_numbers(seam-pieces[b][0]),
-                      torquescale=str(c['weld_torquescale_m']),
-                      solref=f"{c['constraint_time_constant_s']} 1", solimp=_numbers(c['weld_solimp']))
+    pieces, bonds = add_chip(root, c, np.array([0., 0., c['chip_center_height_m']]))
     probe = ET.SubElement(world, 'body', name='probe', pos=f"0 0 {c['probe_home_height_m']}", gravcomp='1')
     ET.SubElement(probe, 'joint', name='probe_z', type='slide', axis='0 0 1')
     ET.SubElement(probe, 'geom', name='probe', type='sphere', size=str(c['probe_radius_m']),
@@ -153,66 +189,40 @@ def weld_wrench(model, data, eq_id, body_id, point_world):
                           & (data.efc_id == eq_id))
     if len(rows) != 6:
         raise ValueError(f'Expected 6 active weld rows, got {len(rows)}')
-    if mujoco.mj_isSparse(model):
-        raise ValueError('Brittle chip requires a dense constraint Jacobian')
     start = model.jnt_dofadr[joint]
     dofs = np.arange(start, start+6)
-    jac = data.efc_J.reshape(data.nefc, model.nv)
-    generalized = jac[np.ix_(rows, dofs)].T @ data.efc_force[rows]
+    generalized = constraint_blocks(model, data, rows[None], dofs[None])[0].T @ data.efc_force[rows]
     jp, jr = np.zeros((3, model.nv)), np.zeros((3, model.nv))
     mujoco.mj_jac(model, data, jp, jr, np.asarray(point_world), body_id)
     return np.linalg.solve(np.vstack((jp[:, dofs], jr[:, dofs])).T, generalized)
 
 
-class BrittleChipBench:
-    def __init__(self, config=None):
-        self.config = configuration() if config is None else validate_configuration(dict(config))
-        self.xml, self.pieces, self.bonds = chip_scene(self.config)
-        self.model = mujoco.MjModel.from_xml_string(self.xml)
-        self.data = mujoco.MjData(self.model)
-        self.body_ids = [self.model.body(f'piece_{i}').id for i in range(len(self.pieces))]
-        self.eq_ids = [self.model.equality(f'bond_{i}').id for i in range(len(self.bonds))]
-        self.probe_geom = self.model.geom('probe').id
-        self.piece_geoms = {self.model.geom(f'piece_{i}').id for i in range(len(self.pieces))}
+class BreakableChip:
+    """Bind the fracture law to standalone or robot simulations.
+
+    Low collision bits belong to the host scene. Fragments reserve higher bits,
+    preserving robot/pad collision layers and all external object contacts.
+    """
+    def __init__(self, model, data, config, pieces, bonds, prefix='', external_bits=1):
+        self.model, self.data, self.config = model, data, config
+        self.pieces, self.bonds, self.prefix = pieces, bonds, prefix
+        self.external_bits = external_bits
+        if len(pieces)+external_bits > 31:
+            raise ValueError('Not enough independent collision layers for all chip fragments')
+        self.events, self.max_load_ratio, self._bond_cache = [], 0., None
+        self.body_ids = [self.model.body(f'{prefix}piece_{i}').id for i in range(len(self.pieces))]
+        self.eq_ids = [self.model.equality(f'{prefix}bond_{i}').id for i in range(len(self.bonds))]
+        self.piece_geoms = {self.model.geom(f'{prefix}piece_{i}').id for i in range(len(self.pieces))}
         self._seam_bodies = np.array([self.body_ids[a] for a, _, _ in self.bonds])
         self._seam_offsets = np.array([p-self.pieces[a][0] for a, _, p in self.bonds])
         self._seam_dofs = np.array([self.model.jnt_dofadr[self.model.body_jntadr[b]]+np.arange(6)
                                    for b in self._seam_bodies])
         self._update_fragment_collision_masks()
-        self._place_on_supports()
-        self.reset()
 
-    def _place_on_supports(self):
-        """Initial condition only: lower the intact chip to first geometric touch.
-
-        Uses actual convex collision shapes, not an invisible supporting weld.
-        No settling with fracture disabled; all loads count from the first step.
-        """
-        z_ids = [self.model.jnt_qposadr[self.model.body_jntadr[b]]+2 for b in self.body_ids]
-        supports = [self.model.geom(f'support_{s}').id for s in (-1, 1)]
-        initial_z = self.model.qpos0[z_ids].copy()
-        for _ in range(100):
-            mujoco.mj_forward(self.model, self.data)
-            gap = min(mujoco.mj_geomDistance(self.model, self.data, a, b, .1, None)
-                      for a in self.piece_geoms for b in supports)
-            if gap < -1e-7:
-                raise ValueError('Chip intersects supports in the initial configuration')
-            if gap < 1e-8:
-                self.model.qpos0[z_ids] = self.data.qpos[z_ids]
-                self.initial_support_shift_m = float(self.data.qpos[z_ids[0]]-initial_z[0])
-                return
-            self.data.qpos[z_ids] -= .9*gap
-        raise RuntimeError('Could not place chip on supports without initial overlap')
-
-    def reset(self):
-        mujoco.mj_resetData(self.model, self.data)
-        self.events = []
-        self.peak_probe_force_n = 0.
-        self.max_load_ratio = 0.
-        self.target_m = 0.
-        self._bond_cache = None
+    def reset_fracture(self):
+        self.events, self.max_load_ratio, self._bond_cache = [], 0., None
+        self.data.eq_active[self.eq_ids] = True
         self._update_fragment_collision_masks()
-        mujoco.mj_forward(self.model, self.data)
 
     def break_overloaded_bonds(self):
         """Evaluate all seams in one solved state; disable failed bonds together.
@@ -255,11 +265,19 @@ class BrittleChipBench:
             if any(len(r) != 6 for r in rows):
                 raise RuntimeError('Active seam does not have six weld constraint rows')
             self._bond_cache = ids, np.asarray(rows, dtype=int).reshape(-1, 6)
+            if mujoco.mj_isSparse(self.model):
+                # Equality rows lead the Jacobian; their free-body sparsity is
+                # fixed until a seam breaks. Contact-row changes cannot shift it.
+                self._sparse_entries = sparse_block_indices(
+                    self.data, self._bond_cache[1], self._seam_dofs[ids])
         ids, rows = self._bond_cache
         if not len(ids):
             return ids, np.empty((0, 6))
-        jac = self.data.efc_J.reshape(self.data.nefc, self.model.nv)
-        blocks = jac[rows[:, :, None], self._seam_dofs[ids, None, :]]
+        if mujoco.mj_isSparse(self.model):
+            indices = self._sparse_entries
+            blocks = np.where(indices >= 0, self.data.efc_J[np.maximum(indices, 0)], 0.)
+        else:
+            blocks = constraint_blocks(self.model, self.data, rows, self._seam_dofs[ids])
         qforce = np.einsum('bij,bi->bj', blocks, self.data.efc_force[rows])
         rotation = self.data.xmat[self._seam_bodies[ids]].reshape(-1, 3, 3)
         lever = np.einsum('bij,bj->bi', rotation, self._seam_offsets[ids])
@@ -280,23 +298,67 @@ class BrittleChipBench:
     def _update_fragment_collision_masks(self):
         """Suppress only internal surfaces of each connected rigid cluster.
 
-        One bit per prism; bit 0 is the environment. After a split, enable
+        One high bit per prism; low bits belong to the host scene. After a split, enable
         collisions across all separated clusters, including the new seam.
         Model body masks mirror the geom masks for MuJoCo's broad phase.
         External probe/support/floor contacts are always enabled.
         """
         roots = self._component_roots()
-        bits = [1 << (i+1) for i in range(len(roots))]
-        all_bits = (1 << (len(roots)+1))-1
+        bits = [1 << (i+self.external_bits) for i in range(len(roots))]
+        all_bits = (1 << (len(roots)+self.external_bits))-1
         for i, body in enumerate(self.body_ids):
             inside = sum(bits[j] for j, r in enumerate(roots) if r == roots[i])
-            geom = self.model.geom(f'piece_{i}').id
+            geom = self.model.geom(f'{self.prefix}piece_{i}').id
             self.model.geom_contype[geom] = self.model.body_contype[body] = bits[i]
             self.model.geom_conaffinity[geom] = self.model.body_conaffinity[body] = all_bits ^ inside
 
     def components(self):
         """Number of separate connected fragment groups (not merely broken seams)."""
         return len(set(self._component_roots()))
+
+
+class BrittleChipBench(BreakableChip):
+    def __init__(self, config=None):
+        self.config = configuration() if config is None else validate_configuration(dict(config))
+        self.xml, self.pieces, self.bonds = chip_scene(self.config)
+        self.model = mujoco.MjModel.from_xml_string(self.xml)
+        self.data = mujoco.MjData(self.model)
+        super().__init__(self.model, self.data, self.config, self.pieces, self.bonds)
+        self.probe_geom = self.model.geom('probe').id
+        self._place_on_supports()
+        self.reset()
+
+    def _place_on_supports(self):
+        """Initial condition only: lower the intact chip to first geometric touch.
+
+        Uses actual convex collision shapes, not an invisible supporting weld.
+        No settling with fracture disabled; all loads count from the first step.
+        """
+        z_ids = [self.model.jnt_qposadr[self.model.body_jntadr[b]]+2 for b in self.body_ids]
+        supports = [self.model.geom(f'support_{s}').id for s in (-1, 1)]
+        initial_z = self.model.qpos0[z_ids].copy()
+        for _ in range(100):
+            mujoco.mj_forward(self.model, self.data)
+            gap = min(mujoco.mj_geomDistance(self.model, self.data, a, b, .1, None)
+                      for a in self.piece_geoms for b in supports)
+            if gap < -1e-7:
+                raise ValueError('Chip intersects supports in the initial configuration')
+            if gap < 1e-8:
+                self.model.qpos0[z_ids] = self.data.qpos[z_ids]
+                self.initial_support_shift_m = float(self.data.qpos[z_ids[0]]-initial_z[0])
+                return
+            self.data.qpos[z_ids] -= .9*gap
+        raise RuntimeError('Could not place chip on supports without initial overlap')
+
+    def reset(self):
+        mujoco.mj_resetData(self.model, self.data)
+        self.events = []
+        self.peak_probe_force_n = 0.
+        self.max_load_ratio = 0.
+        self.target_m = 0.
+        self._bond_cache = None
+        self._update_fragment_collision_masks()
+        mujoco.mj_forward(self.model, self.data)
 
     def step(self, target_m=None, duration=.01):
         if target_m is not None:

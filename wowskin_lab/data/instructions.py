@@ -4,6 +4,7 @@ TASK_INSTRUCTIONS = {
     'cable': 'Route the connected cable along the marked sides of both guide posts.',
     'cable_insert': 'Insert the cable into the clip.',
     'peg_insert': 'Insert the grasped peg into the matching socket.',
+    'chip_tray': 'Pick up the saddle-shaped potato chip from the tray without breaking it.',
     'feeding': 'Move the loaded spoon towards the mouth.',
 }
 
