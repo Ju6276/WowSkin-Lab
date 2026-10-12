@@ -4,8 +4,8 @@
   "tray_visual_material_source": "mat_v2_OmniPBR",
   "grip_force_feedback": {
     "target_n": 0.05,
-    "admittance_m_per_ns": 0.02,
-    "max_finger_speed_m_s": 0.002,
+    "admittance_m_per_ns": 0.1,
+    "max_finger_speed_m_s": 0.01,
     "key_step_n": 0.01,
     "feedback_source": "MuJoCo all-contact normal force sums on left/right pads, not AnySkin magnetic calibration",
     "controlled_quantity": "max(left_pad_load, right_pad_load) in N; shared Panda actuator cannot regulate each side independently",

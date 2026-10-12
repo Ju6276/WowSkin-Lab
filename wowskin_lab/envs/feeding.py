@@ -18,7 +18,7 @@ from wowskin_lab.paths import ROOT
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, pick_scene, rotation_matrix
 from wowskin_lab.envs.franka import mount_reference
 from wowskin_lab.data.cameras import add_recording_cameras
-from wowskin_lab.envs.feeding_room import add_care_room, add_seated_adult
+from wowskin_lab.envs.feeding_room import add_care_room, add_seated_adult, update_care_room_view
 from wowskin_lab.envs.feeding_evaluation import DeliveryEvaluator, delivery_config
 
 ASSETS = ROOT/'assets/ebim_feeding'
@@ -546,9 +546,4 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
 
     def update_viewer_options(self, handle):
         if self.cfg['feeding_setting'] == 'care_room':
-            # Cut away only the visual room shell when the free camera orbits
-            # outside it. Fixed acquisition cameras and all physics are intact.
-            az, el = np.deg2rad([handle.cam.azimuth, handle.cam.elevation])
-            eye = handle.cam.lookat+handle.cam.distance*np.array([
-                -np.cos(el)*np.cos(az), -np.cos(el)*np.sin(az), -np.sin(el)])
-            handle.opt.geomgroup[4] = int(eye[0] < .35 and eye[1] < 1.20)
+            update_care_room_view(handle)

@@ -1,10 +1,12 @@
 """Force-loop regression against contact dynamics, not an object-width table."""
 import unittest
+import json
 
 import mujoco
 import numpy as np
 
 from wowskin_lab.core.grip_force import GripForceFeedback
+from wowskin_lab.paths import ROOT
 
 
 class GripForceTests(unittest.TestCase):
@@ -23,8 +25,8 @@ class GripForceTests(unittest.TestCase):
         </mujoco>''')
         data = mujoco.MjData(model)
         mujoco.mj_forward(model, data)
-        ctrl = GripForceFeedback(dict(target_n=.1, admittance_m_per_ns=.02,
-                                      max_finger_speed_m_s=.002, key_step_n=.01))
+        config = json.loads((ROOT/'configs/chip_tray.json').read_text())['grip_force_feedback']
+        ctrl = GripForceFeedback(dict(config, target_n=.1))
         ctrl.enabled = True
         return model, data, ctrl
 

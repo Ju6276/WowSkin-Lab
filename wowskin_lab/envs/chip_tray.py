@@ -14,7 +14,7 @@ import numpy as np
 from wowskin_lab.paths import ROOT
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, pick_scene, response_configuration
 from wowskin_lab.envs.feeding import ASSETS, TABLE_TOP, ROBOT_POSITION, selected_world, asset_subset
-from wowskin_lab.envs.feeding_room import add_care_room
+from wowskin_lab.envs.feeding_room import add_care_room, update_care_room_view
 from wowskin_lab.envs.brittle_chip import configuration, validate_configuration, add_chip, chip_mesh, BreakableChip
 from wowskin_lab.data.cameras import add_recording_cameras
 from wowskin_lab.core.grip_force import GripForceFeedback, pad_normal_forces
@@ -198,6 +198,9 @@ class PandaChipEnv(PandaPickCubeTactileEnv):
         row['success'] = self.success = False  # Do not inherit the cube's lift evaluator.
         self.last_row = row
         return self.observation(), 0., terminated, truncated, row
+
+    def update_viewer_options(self, handle):
+        update_care_room_view(handle)
 
     def viewer_camera(self, close=False, operator=False):
         cam = mujoco.MjvCamera()

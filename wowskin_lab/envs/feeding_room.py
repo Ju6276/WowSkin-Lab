@@ -122,6 +122,17 @@ def add_seated_adult(root, head_position, head_quat, skin_color):
     return body
 
 
+def update_care_room_view(handle):
+    """Show the room indoors; cut away its visual shell when orbiting outside.
+
+    Acquisition cameras use their own options and retain the complete room.
+    """
+    az, el = np.deg2rad([handle.cam.azimuth, handle.cam.elevation])
+    eye = handle.cam.lookat+handle.cam.distance*np.array([
+        -np.cos(el)*np.cos(az), -np.cos(el)*np.sin(az), -np.sin(el)])
+    handle.opt.geomgroup[4] = int(eye[0] < .35 and eye[1] < 1.20)
+
+
 def add_care_room(root):
     asset, world, visual = root.find('asset'), root.find('worldbody'), root.find('visual')
     colors = dict(care_wall='.84 .82 .75 1', care_wainscot='.65 .71 .65 1',
