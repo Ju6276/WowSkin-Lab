@@ -73,7 +73,8 @@ def pick_scene(cfg, layout):
         for child in list(parent):
             if child.tag == "camera":
                 parent.remove(child)
-    root.set("model", "WowSkin-Lab | PandaPickCube: WowSkin + plain silicone")
+    optical = cfg.get('sensor') == 'tacto'
+    root.set("model", "WowSkin-Lab | PandaPickCube: " + ("dual DIGIT / TACTO" if optical else "WowSkin + plain silicone"))
     # Broad box/flex contacts create hundreds of constraints. CG avoids the
     # costly Newton factorization while preserving the same contact geometry.
     option = root.find("option")
@@ -87,7 +88,9 @@ def pick_scene(cfg, layout):
         option.set('integrator', 'discrete')
         option.set('noslip_iterations', '0')
     world = root.find("worldbody")
-    world.remove(world.find("body[@name='probe']"))
+    probe = world.find("body[@name='probe']")
+    if probe is not None:
+        world.remove(probe)
     floor = world.find("geom[@name='floor']")
     floor.set("conaffinity", "7")
     ET.SubElement(world, "geom", name="table", type="box", pos=".43 0 .05",
@@ -98,7 +101,7 @@ def pick_scene(cfg, layout):
     ET.SubElement(cube, "geom", name="cube", type="box", size=f"{CUBE_HALF} {CUBE_HALF} {CUBE_HALF}",
                   mass=str(CUBE_MASS), rgba=".16 .55 .82 1", contype="4", conaffinity="3",
                   friction=f"{cfg['friction']} .005 .0001", solref=".002 1")
-    for name in ("standard_shell", "silicone_backing"):
+    for name in (() if optical else ("standard_shell", "silicone_backing")):
         shell = root.find(f".//geom[@name='{name}']")
         shell.set("contype", "1")
         # Skin contype=2/conaffinity=6: the former 1/5 shell masks excluded
@@ -107,7 +110,11 @@ def pick_scene(cfg, layout):
         shell.set("conaffinity", "7" if cfg.get('pad_backing_contact', False) else "5")
     # New TCP follows the shifted pads, not the upstream stock fingertips.
     hand = root.find(".//body[@name='hand']")
-    z = .0584+mount_reference(cfg)["position_m"][2]
+    if optical:
+        from .optical import digit_geometry
+        z = .0584+digit_geometry()['gel_center_z']
+    else:
+        z = .0584+mount_reference(cfg)["position_m"][2]
     ET.SubElement(hand, "site", name="tactile_tcp", pos=f"0 0 {z}", size=".001",
                   rgba=".1 .9 .7 .4")
     add_recording_cameras(world, hand, z, profile=cfg.get('camera_profile'))

@@ -1,0 +1,12 @@
+{
+  "url": "https://github.com/utn-air/mujoco-tacto",
+  "revision": "4c396eb802dcbd1f9e6647a31a011f37006c4fc1",
+  "license": "MIT",
+  "use": "Original Renderer optical model and unmodified OBJ assets downloaded separately; local CGLTactoRenderer scene initialization adapted from Renderer._init_pyrender. Local mounting/contact transforms do not alter upstream files.",
+  "source_sha256": {
+    "tacto/renderer.py": "8850ce432a008b601a4a03082c6b3297ac5ab8d8a2a53137a267da0678471724",
+    "tacto/cfg/config_digit.yml": "22b4010036f0c00bd4500a774ace66b246f7fefe405b52086265f57ab787556a",
+    "examples/xml/assets/digit_gripper/digit_stub_full_0.obj": "5ffe3f24e6a25a1d3336ee1da91cfffeabaf41630e9990efc6a51e8feb242410",
+    "examples/xml/assets/digit_gripper/digit_stub_full_1.obj": "c64bdf2a748555b89325925af47dbad3a70820e67ede0fc0b48e3605e1a481d1"
+  }
+}

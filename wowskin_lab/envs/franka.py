@@ -71,6 +71,10 @@ def build_scene(cfg, layout):
     ET.SubElement(world, "light", pos="0 -1 2", dir="0 0 -1", diffuse=".7 .7 .7")
     ET.SubElement(world, "geom", name="floor", type="plane", size="2 2 .01",
                   rgba=".32 .36 .4 1")
+    if cfg.get('sensor') == 'tacto':
+        from .optical import mount_digits
+        mount_digits(root, friction=cfg['friction'])
+        return ET.tostring(root, encoding="unicode")
     finger = root.find(".//body[@name='left_finger']")
     for name in ("left_finger", "right_finger"):
         body = root.find(f".//body[@name='{name}']")

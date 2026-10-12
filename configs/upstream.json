@@ -11,6 +11,10 @@
     "url": "https://github.com/aadhithya14/Open-Teach.git",
     "revision": "32a7d44b33953066ff27312a7b2b4c294f4f52c5"
   },
+  "tacto": {
+    "url": "https://github.com/utn-air/mujoco-tacto.git",
+    "revision": "4c396eb802dcbd1f9e6647a31a011f37006c4fc1"
+  },
   "franka": {
     "url": "https://github.com/Ju6276/franka_xbox",
     "revision": "a43327ad8446642acd8d64b6c20829fd135a9f28"

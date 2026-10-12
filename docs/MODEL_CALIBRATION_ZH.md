@@ -253,6 +253,22 @@ MuJoCo 没有设置“玻璃材质”就自动产生裂纹和碎片的内置模�
 
 薯片夹持仍待调整，未验证稳定无损抬升。后续接触与断裂检查统一列在 [TODO](../TODO.md#薯片夹持待调整暂不作为训练主线)，不通过提高默认破坏阈值或附着物体掩盖问题。
 
+## DIGIT / TACTO 光学选项
+
+`--sensor tacto` 使用固定版 [utn-air/mujoco-tacto](https://github.com/utn-air/mujoco-tacto)；安装和启动见 README。模型输出是内部相机 RGB 和相对空载光学面的深度，不是磁场，也不是力分布估计。当前只接独立探针和 Panda 方块预览，不接原 AnySkin 数据集录制或策略。
+
+**物理与光学分工。** MuJoCo 使用刚性 DIGIT 外壳/胶面网格的凸碰撞，以及已有 Panda IK＋关节 PD 和 Menagerie 夹爪位置伺服。物体自由运动、受重力，抓取靠接触与摩擦；无焊接、吸附或物体位置跟随。该分支没有四面体软胶，不会产生该类单元翻转，但也不模拟硅胶弹性对应的真实反力。这是另一种模型，不是对 AnySkin FEM 的修复。
+
+**沿用上游的部分。** 原始 `digit_stub_full_0/1.obj`、DIGIT 光源/相机、120×160 RGB、平面胶面及 `Renderer` 的光学计算。上游力近似将 0–100 N 线性映射到最多 5 mm 的物体光学位姿调整；超过该范围光学调整饱和，不限制 MuJoCo 的物理接触力。默认 RGB 噪声标准差 7（0–255 图像单位）；`--ideal` 只关闭此噪声。没有为获得更大的图像变化修改增益。空载深度由本次渲染减去空载渲染得到；数值数组不剪裁，预览灰度固定映射 0–5 mm。
+
+**本地接入与假设。** 由 OBJ 顶点确定前表面、中心和近端安装位置，刚性旋转到 Panda 手指坐标；两指对称，TCP 放在胶面中心高度。保留 Panda 指体原惯量，尚无实际 DIGIT 安装件质量标定。Panda 触面摩擦沿用当前任务配置（默认 0.6），接触 `solref=.002 1`；不是 DIGIT 材料标定。原几何约 18.6×25.2 mm，光学配置胶面为 20×30 mm，边缘覆盖差异尚未校准。独立台使用 5 mm 球压头、0.02 kg、位置伺服 `kp=3000, kv=5`、0.5 ms 时间步，属于明确的诊断设置，不是论文实验复现。
+
+适配层遍历与胶面接触的**全部刚性物体**，包括桌面和另一指，不只读取目标方块；按物体汇总 `mj_contactForce` 的法向力。它不使用上游接入代码中的 touch-grid 数组索引/首接触截取。光学几何和位姿在各自相机局部坐标系中通过旋转矩阵组合，两个传感器分别持有渲染器。对 plane 使用 10 m 宽的有限渲染代理（物理仍为无限平面），未支持的 flex 接触明确报错。
+
+Mac 采用本地 CGL 4.1 离屏上下文，替代会创建隐藏 NSWindow 的 pyglet 上下文，避免与 `mjpython` 仿真线程冲突；不修改光照/接触输出。上游 checkout 保持不变。可运行 `python -m unittest tests.physics.test_optical_tactile` 检查压入/卸载、多个接触物、双传感器隔离、全局旋转不变性及物理夹取/抬升/释放。自动探针和抓取诊断也可在启动命令中加 `--demo --output outputs/diagnostics/tacto`，结果不进入 Git。抓取回归不是 ViSk 策略评测。
+
+GelSight 与 DIGIT 都是视触觉传感器，但几何、胶面和光学标定不同。[FOTS](https://github.com/Rancho-zhao/FOTS/tree/FOTS-mujoco) 的 MuJoCo/Gym 示例是另一个候选；Gym 是环境 API，不是 Isaac Gym，也不替代 MuJoCo 求解器。尚未在本机运行 FOTS。[FEATS](https://arxiv.org/abs/2411.03315) 用 CalculiX 生成力分布标签，训练真实 GelSight Mini 图像到三分量力分布的模型，不是本分支的前向渲染器。
+
 ## 玻璃与连续裂纹：后续研究方向
 
 预分块模型可以接入现有机器人接触、碎片碰撞和录制流程，用于研究“碰撞后损坏／碎裂”的任务。但断裂只沿预定义界面发生；需显式定义界面强度、受拉／剪切判据、分块尺度及能量处理，不能把任意总接触力阈值称为实物玻璃强度。Houdini 的 [玻璃预破碎工具](https://www.sidefx.com/docs/houdini/destruction/glass.html) 和 [glue constraint 工作流](https://www.sidefx.com/docs/houdini/dyno/fracturing.html) 可供参考。

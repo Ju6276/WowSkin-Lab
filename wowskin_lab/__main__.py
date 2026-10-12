@@ -37,6 +37,13 @@ def main(argv=None):
                      'Use `official status` and docs/LEARNING_WORKFLOWS_ZH.md for the official pipelines.')
     command = parser.parse_args(argv[:1]).command
     rest = argv[1:]
+    if command in ('sensor', 'teleop'):
+        sensor_parser = argparse.ArgumentParser(add_help=False)
+        sensor_parser.add_argument('--sensor', choices=('anyskin', 'tacto'), default='anyskin')
+        sensor_args, rest = sensor_parser.parse_known_args(rest)
+        if sensor_args.sensor == 'tacto':
+            from .tools.optical_sensor import main as optical
+            return optical(rest, mounted=command == 'teleop')
     if command == 'dataset-export':
         from .data.dataset_export import main as export_data
         return export_data(rest)

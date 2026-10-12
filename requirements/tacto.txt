@@ -1,0 +1,8 @@
+# Optional optics, installed into the same .venv AFTER requirements.txt.
+# Install the pinned upstream tacto checkout separately with --no-deps;
+# its setup.py otherwise resolves pyrender from an unpinned branch.
+pyrender @ git+https://github.com/RobotControlStack/pyrender.git@33895b107a356c710ea0306f527078fc8f86ee59
+pyglet==1.5.28
+PyOpenGL==3.1.9
+trimesh==5.1.1
+freetype-py==2.5.1

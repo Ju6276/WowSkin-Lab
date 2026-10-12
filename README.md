@@ -17,7 +17,7 @@ python3.12 scripts/setup_capture.py
 .venv/bin/python scripts/setup_upstream.py --only franka
 ```
 
-只使用一个 `.venv`，采集、遥操作、ViSk 训练和部署共用。安装入口是 `scripts/setup_capture.py`，根目录 `requirements.txt` 包含运行与学习依赖；只有 FTF notebook 的 `requirements/annotation.txt` 需按需加装到同一个环境。LeRobot 仅安装所用数据 API 及依赖，不是其全套机器人运行环境。
+只使用一个 `.venv`，采集、遥操作、ViSk 训练和部署共用。安装入口是 `scripts/setup_capture.py`，根目录 `requirements.txt` 包含运行与学习依赖；FTF notebook 的 `requirements/annotation.txt` 和下述可选 TACTO 依赖按需加装到同一个环境。LeRobot 仅安装所用数据 API 及依赖，不是其全套机器人运行环境。
 
 `pip check` 会报告 LeRobot 完整包所需但本项目未安装的八项依赖：`diffusers`、`cmake`、`opencv-python-headless`、`pynput`、`torchcodec`、`gymnasium`、`rerun-sdk`、`flask`。当前录制／读取使用 OpenCV 与 PyAV；完整 LeRobot 策略或硬件 API 需要另行补齐依赖。
 
@@ -80,6 +80,26 @@ Cube、线材、喂食、Peg 均可加 `--gripper robotiq_2f85`，默认 Panda�
 Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松开右握键一次后，按住跟随。完整按键、成功条件和故障处理见 [采集手册](docs/COLLECTION_ZH.md)。Robotiq 强夹持、线材压扣仍可能出现软指腹网格失效，不承诺任意接触稳定。
 
 右侧显示两路固定相机＋一路腕部相机。加 `--pointcloud` 可在其下预览 RGB-D 融合点云；逐帧外参将腕部视角变换到机器人基座系。使用 MuJoCo 理想深度，目前不模拟深度噪声。预览不写进相机图像；快捷键与开销见采集手册。
+
+## 可选 DIGIT 视触觉预览
+
+默认仍为 AnySkin 磁场。`--sensor tacto` 选择 [mujoco-tacto](https://github.com/utn-air/mujoco-tacto) 的 DIGIT 光学模型：输出每个指尖的 RGB 和米制光学压入深度，不输出 15 路磁场。**目前支持独立按压台和 Panda 方块预览；尚未接入数据集录制、ViSk、其他任务／夹爪或 Pico。** 不支持的参数会报错，不会静默切回 AnySkin。
+
+```bash
+# 可选安装，仍用同一个 .venv
+.venv/bin/python scripts/setup_upstream.py --only tacto
+.venv/bin/python -m pip install -r requirements/tacto.txt
+.venv/bin/python -m pip install --no-deps -e third_party/mujoco-tacto
+
+# 独立按压台：Q 下降按压，E 抬起；W/S、A/D 平移探针；R 复位
+.venv/bin/mjpython -m wowskin_lab sensor --sensor tacto --ideal
+# Panda 双指 DIGIT：沿用原键盘操作；也可 --input spacemouse
+.venv/bin/mjpython -m wowskin_lab teleop --sensor tacto --task pick_cube --input keyboard --ideal
+# 无窗口接触/卸载及抬升回归
+.venv/bin/python -m unittest tests.physics.test_optical_tactile
+```
+
+右侧是每个传感器的 RGB／深度预览。`--ideal` 在此只关闭 TACTO 的 RGB 噪声；**不是把刚性接触改成 FEM**。物理碰撞由 MuJoCo 求解，光学形变采用上游力相关近似；本地接入、Mac CGL 后端和参数边界见[模型说明](docs/MODEL_CALIBRATION_ZH.md#digit--tacto-光学选项)。GelSight／FOTS 是另一个候选，尚未接入，不能把 DIGIT 模型称为已标定的 GelSight Mini。
 
 ## 脆性薯片试验
 

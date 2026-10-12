@@ -10,6 +10,7 @@
 - `visuoskin`：ViSk 原转换器、加载器、训练与推理；仅在独立工作目录应用记录在 manifest 中的数据／环境适配，参考 checkout 不修改。
 - `Open-Teach`：ViSk 原版 XArm 环境导入的网络工具；随 `--only visk` 一起获取。
 - `feel-the-force`：FTF 及其固定子模块，遵循各自许可证。
+- `mujoco-tacto`：可选 DIGIT 光学渲染器与双指 OBJ 素材（MIT）。参考 checkout 不修改；接触/坐标与 Mac CGL 接入在本地模块，初始化代码的许可见 [TACTO 记录](assets/reference/tacto/manifest.json) 和 [LICENSE](assets/reference/tacto/LICENSE)。pyrender 使用 RobotControlStack 的固定提交，见 `requirements/tacto.txt`。
 
 参考 checkout 不随本仓库提交；各自的 LICENSE / NOTICE 保留在下载目录中。
 
