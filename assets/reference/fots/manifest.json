@@ -13,7 +13,8 @@
     "mlp_calib/models/mlp_n2c_gelsight.pth": "78696b0d4ef88a72ebc8d99ba188f76da75743b493a273297df4484312e2d2f9",
     "assets/gel/gelsight_bg.npy": "fe4c4aaf4633cba0a39488497589481c01431b4f8484c9cd37899eb2f44f82b8",
     "utils/utils_data/ini_bg_fots_gelsight.npy": "19a73073d881a718b7c99487936e85e048a270389abdd31e4ee0696831f9a9f7",
-    "utils/utils_data/gelsight_pad.npy": "33cda23854b224dcae5b2d02c92aa145c6584a985b17c1f52dd368ecc28bd748"
+    "utils/utils_data/gelsight_pad.npy": "33cda23854b224dcae5b2d02c92aa145c6584a985b17c1f52dd368ecc28bd748",
+    "utils/marker_motion.py": "b218ec3c735bd8ca74213c4cb11c4a354ab0c38a5b0e2c0e4a764e9eafb33407"
   },
-  "local_adapter": "core/fots.py loads unmodified optical code with private imports, CPU weight loading and NumPy compatibility. Geometry adapter is not the DIGIT FOTS-mujoco branch."
+  "local_adapter": "Original MLP, planar shadow and MarkerMotion; private imports and CPU/NumPy compatibility. Per-sensor/per-geom relative-pose history and additive multi-object marker composition are local. Geometry is a flat calibration-window proxy, not author CAD or FEM. No upstream source edits."
 }

@@ -10,8 +10,8 @@
 - `visuoskin`：ViSk 原转换器、加载器、训练与推理；仅在独立工作目录应用记录在 manifest 中的数据／环境适配，参考 checkout 不修改。
 - `Open-Teach`：ViSk 原版 XArm 环境导入的网络工具；随 `--only visk` 一起获取。
 - `feel-the-force`：FTF 及其固定子模块，遵循各自许可证。
-- `mujoco-tacto`：可选 DIGIT 光学渲染器与双指 OBJ 素材（MIT）。参考 checkout 不修改；接触/坐标与 Mac CGL 接入在本地模块，初始化代码的许可见 [TACTO 记录](assets/reference/tacto/manifest.json) 和 [LICENSE](assets/reference/tacto/LICENSE)。pyrender 使用 RobotControlStack 的固定提交，见 `requirements/tacto.txt`。
-- `FOTS`：主分支 GelSight 光学 MLP、背景和像素标定，[固定版本及文件摘要](assets/reference/fots/manifest.json)。运行时加载原源码；CPU 权重加载、私有导入和 NumPy 2 兼容属于本地接口。作者 README 声明 MIT，但该提交没有实际 `LICENSE` 文件；不将源码、标定图和权重重新打包分发。作者 `FOTS-mujoco` 分支使用 DIGIT，不能作为本地 GelSight 外壳的来源。
+- `mujoco-tacto`：可选 DIGIT 光学渲染器与独立传感器 STL（MIT）。参考 checkout 不修改；STL 连通分量在加载时分离外壳和曲面胶体，附加到原手指末端。接触／坐标、实际曲面光学几何与 Mac CGL 接入在本地模块，初始化代码的许可见 [TACTO 记录](assets/reference/tacto/manifest.json) 和 [LICENSE](assets/reference/tacto/LICENSE)。pyrender 使用 RobotControlStack 的固定提交，见 `requirements/tacto.txt`。
+- `FOTS`：主分支 GelSight 光学 MLP、背景、像素标定、平面阴影与标记点算法，[固定版本及文件摘要](assets/reference/fots/manifest.json)。运行时加载原源码；CPU 权重加载、私有导入、NumPy 2 兼容、接触历史及多物体位移叠加属于本地接口。作者 README 声明 MIT，但该提交没有实际 `LICENSE` 文件；不将源码、标定图和权重重新打包分发。作者 `FOTS-mujoco` 分支使用 DIGIT，不能作为本地 GelSight 外壳的来源。
 
 参考 checkout 不随本仓库提交；各自的 LICENSE / NOTICE 保留在下载目录中。
 

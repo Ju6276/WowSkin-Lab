@@ -86,10 +86,12 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 通过 `--sensor` 选择：
 
 - `anyskin`：默认，原有磁场传感器和采集流程。
-- `tacto`：使用 [mujoco-tacto](https://github.com/utn-air/mujoco-tacto) 的 DIGIT 网格和 TACTO 光学模型。
+- `tacto`：使用 [mujoco-tacto](https://github.com/utn-air/mujoco-tacto) 的独立 DIGIT STL 和 TACTO 几何／灯光渲染。
 - `fots`：使用 [FOTS 主分支](https://github.com/Rancho-zhao/FOTS) 的 GelSight 预训练光学模型、背景与像素标定。安装外形是明确标注的矩形几何代理，不是官方 GelSight CAD。
 
-两种光学选项输出每指 RGB 和米制压入深度，**目前支持独立按压台和 Panda 方块预览；尚未接入数据集录制、ViSk、其他任务／夹爪或 Pico。** 不支持的参数会报错，不会静默切回 AnySkin。
+两种模块均**安装在原 Panda 指尖末端并向下延伸**；保留原手指外观、碰撞与关节行程，感应面朝向夹持区，TCP 随模块中心更新。DIGIT 是约 34 mm 的独立传感器，不使用带长柄的替代手指。GelSight 外壳仍为本地代理，安装件和惯量尚未实物校验。
+
+输出每指 240×320 RGB、米制光学深度和接触区域；FOTS 还输出 9×11 个标记点的二维像素位移与流图。**目前支持独立按压台和 Panda 方块；尚未接入数据集录制、ViSk、其他任务／夹爪或 Pico。** 不支持的参数会报错，不会静默切回 AnySkin。
 
 ```bash
 # 可选安装，仍用同一个 .venv
@@ -108,7 +110,11 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 .venv/bin/python -m unittest tests.physics.test_optical_tactile tests.physics.test_fots
 ```
 
-右侧是每个传感器的 RGB／深度预览。`--ideal` 关闭 TACTO 的 RGB 噪声；FOTS 不额外添加随机噪声，因此这个开关不改变其输出。两者物理碰撞均由 MuJoCo 求解，**没有硅胶 FEM**。TACTO 使用上游力相关光学位移近似；FOTS 使用接触几何重叠得到深度，再输入原作者光学网络。该重叠依赖 MuJoCo 接触参数，不是标定的真实胶面形变。FOTS 当前不输出标记点剪切流，平面阴影按作者演示默认关闭。本地接入与边界见 [TACTO](docs/MODEL_CALIBRATION_ZH.md#digit--tacto-光学选项)、[FOTS](docs/MODEL_CALIBRATION_ZH.md#gelsight--fots-光学选项)。
+右侧显示 RGB／深度，FOTS 另有标记流。按 **M** 在深度与接触区域之间切换。深度默认使用两指共享的自动灰度范围，标明 µm 和当前范围；`--depth-display-max-mm 5` 可固定为 0–5 mm。只调整显示对比度，原始浮点深度不放大、不改写。DIGIT 胶面外的无效像素显示蓝灰色，另存 `valid_mask` 及原始／空载相机深度，不把无效像素当成触觉。诊断 `--demo --output <目录>` 保存全部原始输出的 NPZ 和预览图；不是训练录制。
+
+TACTO 默认使用作者示例的空载背景和背景校正，叠加原高斯 RGB 噪声。`--ideal` 只关闭随机噪声，背景纹理仍保留；`--tacto-background <图片>` 可指定自己的空载图，`--no-tacto-background` 可对照纯光学渲染。相机、灯光、阴影、噪声和力近似配置可通过 `--tacto-config <DIGIT YAML>` 指定，默认读取固定上游配置。FOTS 背景来自作者标定图，不额外添加随机噪声；默认启用作者平面阴影，`--no-fots-shadow` 可对照。FOTS 的 RGB、阴影、标记图以及 TACTO 默认 RGB／深度／背景处理均有直接执行作者代码的对照测试。
+
+**传感器验收按功能链进行，不要求复现论文任务实验。** TACTO 的几何、光照、背景、噪声、力相关位移和 RGB／深度；FOTS 的标定 MLP、平滑、阴影、接触区域、标记膨胀／剪切／扭转，均在运行路径中。MuJoCo 负责物理碰撞，原算法不提供精确胶体 FEM；当前 FOTS 深度是几何重叠而非已标定的硅胶压缩量，GelSight 外壳仍为上述安装代理。这些模型差异与未完成的任务／录制接入分别列在 [TACTO](docs/MODEL_CALIBRATION_ZH.md#digit--tacto-光学选项)、[FOTS](docs/MODEL_CALIBRATION_ZH.md#gelsight--fots-光学选项)和 [TODO](TODO.md#独立视触觉选项digit--tactogelsight--fots)。
 
 ## 脆性薯片试验
 

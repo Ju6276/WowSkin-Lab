@@ -9,6 +9,7 @@ from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import torch
+from scipy.spatial.transform import Rotation
 
 from wowskin_lab.paths import ROOT
 from .optical_tactile import OpticalFrame, contact_forces, geom_mesh
@@ -51,13 +52,15 @@ def upstream():
     load('shadow_calib.planar_shadow', 'shadow_calib/planar_shadow.py',
          {'numpy': SimpleNamespace(**dict(vars(np), mat=np.asmatrix))})
     renderer = load('utils.fots_render', 'utils/fots_render.py')
-    return params, mlp.MLP, renderer.FOTSRender
+    marker = load('utils.marker_motion', 'utils/marker_motion.py',
+                  {'numpy': SimpleNamespace(**dict(vars(np), random=np.random.RandomState(42)))})
+    return params, mlp.MLP, renderer.FOTSRender, marker.MarkerMotion
 
 
 class FOTSRenderer:
     """Official GelSight calibration, native 240x320 BGR -> public RGB."""
     def __init__(self):
-        self.params, MLP, Render = upstream()
+        self.params, MLP, Render, self.MarkerMotion = upstream()
         self.model = MLP().cpu().eval()
         weights = FOTS_ROOT/'mlp_calib/models/mlp_n2c_gelsight.pth'
         self.model.load_state_dict(torch.load(weights, map_location='cpu', weights_only=True))
@@ -66,24 +69,54 @@ class FOTSRenderer:
             bg_render=np.load(FOTS_ROOT/'utils/utils_data/ini_bg_fots_gelsight.npy'),
             model=self.model)
 
-    def render(self, indentation_m):
+    def render(self, indentation_m, *, shadow=False):
         expected = (self.params.sensor_h, self.params.sensor_w)
         depth = np.asarray(indentation_m)
         if depth.shape != expected or not np.isfinite(depth).all() or (depth < 0).any():
             raise ValueError(f'FOTS requires finite nonnegative indentation in metres, shape {expected}')
         # Author's fots_test.py uses pixel-unit height and the same contact mask.
         with torch.inference_mode():
-            bgr = self.renderer.generate(depth*1000*self.params.mm_to_pixel, depth > 0, shadow=False)
+            bgr = self.renderer.generate(depth*1000*self.params.mm_to_pixel, depth > 0, shadow=shadow)
         return bgr[..., ::-1].copy()
+
+    def markers(self, rgb, contacts):
+        """Run original dilation/shear/twist, retaining numeric displacement.
+
+        Each contact has its own relative trajectory. Displacements from
+        simultaneous objects are summed on the common undeformed grid: this
+        multi-object composition is local, not a coupled elasticity solution.
+        Source coefficients, pixel quantization and +/-50 deg twist cap remain.
+        """
+        Original = self.MarkerMotion
+
+        class MeasuredMarkers(Original):
+            def _motion_callback(self, xx, yy):
+                result = super()._motion_callback(xx, yy)
+                self.displacement = np.stack([result[0]-xx, result[1]-yy], axis=-1)
+                return result
+
+        if not contacts:
+            contacts = [(np.zeros(rgb.shape[:2]), [])]
+        total = None
+        for depth, trajectory in contacts:
+            marker = MeasuredMarkers(frame0_blur=rgb[..., ::-1], depth=depth*1000,
+                                     mask=depth > 0, traj=trajectory,
+                                     lamb=[.00125, .00021, .00038])
+            image = marker._marker_motion()
+            total = marker.displacement.copy() if total is None else total+marker.displacement
+        if len(contacts) > 1:
+            image = marker._generate(marker.xx+total[..., 0], marker.yy+total[..., 1])
+        return image[..., ::-1].copy(), total
 
 
 class FOTSOptical:
     label = 'GelSight / FOTS (rigid geometry proxy)'
 
-    def __init__(self, model, sensors, *, ideal=False):
+    def __init__(self, model, sensors, *, ideal=False, shadow=True):
         import pyrender
         from .optical_depth import depth_renderer
         self.model, self.optics = model, FOTSRenderer()
+        self.shadow, self.history, self.last_time = shadow, {}, None
         p = self.optics.params
         self.sensors = {name: (model.site(site).id, model.geom(gel).id)
                         for name, (site, gel) in sensors.items()}
@@ -102,12 +135,20 @@ class FOTSOptical:
     def render(self, data):
         import pyrender
         frames = {}
+        if self.last_time is not None and data.time < self.last_time:
+            self.reset()
+        self.last_time = float(data.time)
         for name, (site, gel) in self.sensors.items():
             forces = contact_forces(self.model, data, gel)
             for node in list(self.nodes.values()):
                 if self.scene.has_node(node):
                     self.scene.remove_node(node)
             rotation = data.site_xmat[site].reshape(3, 3).T
+            history = self.history.setdefault(name, {})
+            for geom in set(history)-set(forces):
+                del history[geom]
+            contacts = []
+            indentation = np.zeros((self.optics.params.sensor_h, self.optics.params.sensor_w))
             for geom in forces:
                 if geom not in self.nodes:
                     mesh = pyrender.Mesh.from_trimesh(geom_mesh(self.model, geom), smooth=False)
@@ -118,13 +159,45 @@ class FOTSOptical:
                 pose[:3, :3] = rotation @ data.geom_xmat[geom].reshape(3, 3)
                 pose[:3, 3] = rotation @ (data.geom_xpos[geom]-data.site_xpos[site])
                 self.scene.set_pose(node, pose)
-            depth = self.r.render(self.scene, flags=pyrender.RenderFlags.DEPTH_ONLY)
-            # Intersect object surface with the author's flat gel plane.
-            # Background depth=0 is no geometry. No force scaling/whitelist.
-            indentation = np.where(depth > 0, np.maximum(self.camera_distance_m-depth, 0), 0)
-            frames[name] = OpticalFrame(self.optics.render(indentation), indentation,
-                                       sum(forces.values()), tuple(forces), float(data.time))
+                depth = self.r.render(self.scene, flags=pyrender.RenderFlags.DEPTH_ONLY)
+                self.scene.remove_node(node)
+                # Per-object surface overlap, then frontmost union for RGB.
+                overlap = np.where(depth > 0, np.maximum(self.camera_distance_m-depth, 0), 0)
+                indentation = np.maximum(indentation, overlap)
+                trajectory = self.trajectory(history, geom, pose, overlap)
+                if trajectory is not None:
+                    contacts.append((overlap, trajectory))
+            rgb = self.optics.render(indentation, shadow=self.shadow)
+            marker_image, displacement = self.optics.markers(rgb, contacts)
+            frames[name] = OpticalFrame(rgb, indentation, sum(forces.values()), tuple(forces),
+                                       float(data.time), marker_image, displacement,
+                                       contact_mask=indentation > 0,
+                                       valid_mask=np.ones(indentation.shape, dtype=bool))
         return frames
+
+    def trajectory(self, history, geom, pose, depth):
+        rows, cols = np.nonzero(depth > 0)
+        if not len(rows):
+            history.pop(geom, None)
+            return None
+        if geom not in history:
+            p = self.optics.params
+            anchor = np.array([(cols.mean()-p.sensor_w/2)/(1000*p.mm_to_pixel),
+                               (rows.mean()-p.sensor_h/2)/(1000*p.mm_to_pixel), 0.])
+            history[geom] = dict(pose=pose.copy(), anchor=anchor,
+                                 local=pose[:3, :3].T @ (anchor-pose[:3, 3]), angle=0.)
+        entry = history[geom]
+        moved = pose[:3, :3] @ entry['local']+pose[:3, 3]
+        relative = pose[:3, :3] @ entry['pose'][:3, :3].T
+        q = Rotation.from_matrix(relative).as_quat()
+        angle = 2*np.arctan2(q[2], q[3])
+        angle += 2*np.pi*round((entry['angle']-angle)/(2*np.pi))
+        entry['angle'] = angle
+        return [[*list(entry['anchor'][:2]*1000), 0.], [*list(moved[:2]*1000), angle]]
+
+    def reset(self):
+        self.history.clear()
+        self.last_time = None
 
     def close(self):
         self.r.delete()

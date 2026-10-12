@@ -1,11 +1,12 @@
 """Independent optical benches and Panda mounts, sharing the arm controller.
 
-Original DIGIT OBJ assets or an explicitly local flat GelSight proxy, rigid
+Original standalone DIGIT STL or an explicitly local flat GelSight proxy, rigid
 MuJoCo contact and upstream optics. No flex/magnetic model is constructed; frames are not passed
 off as the existing ViSk AnySkin observations.
 """
 from functools import lru_cache
 import json
+from pathlib import Path
 from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 
@@ -20,20 +21,25 @@ from wowskin_lab.core.arm_control import configure_controller
 
 @lru_cache(maxsize=1)
 def digit_geometry():
-    directory = ROOT/'third_party/mujoco-tacto/examples/xml/assets/digit_gripper'
-    paths = [directory/f'digit_stub_full_{i}.obj' for i in (0, 1)]
-    if not all(p.is_file() for p in paths):
+    import trimesh
+    path = ROOT/'third_party/mujoco-tacto/meshes/digit.STL'
+    if not path.is_file():
         raise FileNotFoundError('Run .venv/bin/python scripts/setup_upstream.py --only tacto')
-    vertices = [np.array([[float(x) for x in row.split()[1:4]]
-                          for row in p.read_text().splitlines() if row.startswith('v ')]) for p in paths]
-    housing, gel = vertices
-    # Source has distal direction -Z, sensing normal +Y. Rotate Rx(pi).
-    # Register source proximal tip to finger Z=0 and gel front to Y=0.
-    origin = np.array([(gel[:, 0].min()+gel[:, 0].max())/2,
-                       gel[:, 1].max(), housing[:, 2].max()])
-    position = -np.diag([1., -1., -1.]) @ origin
-    return dict(paths=paths, position=position,
-                gel_center_z=origin[2]-(gel[:, 2].min()+gel[:, 2].max())/2)
+    source = trimesh.load(path, force='mesh')
+    parts = list(source.split(only_watertight=False))
+    # The outermost +X connected component is the source CAD's curved gel.
+    index = max(range(len(parts)), key=lambda i: parts[i].bounds[1, 0])
+    gel = parts.pop(index)
+    housing = trimesh.util.concatenate(parts)
+    # Native +X normal -> finger -Y; native +Y -> finger +X.
+    rotation = np.array([[0., 1., 0.], [-1., 0., 0.], [0., 0., 1.]])
+    origin = [gel.bounds[1, 0], gel.bounds.mean(axis=0)[1], source.bounds[0, 2]]
+    transform = np.eye(4)
+    transform[:3, :3], transform[:3, 3] = rotation, -rotation @ origin
+    for mesh in (housing, gel):
+        mesh.apply_transform(transform)
+    return dict(path=path, meshes=(housing, gel), proximal_z=0.,
+                gel_center_z=float(gel.bounds.mean(axis=0)[2]))
 
 
 def add_digit(asset, body, name, *, friction=.6):
@@ -41,11 +47,22 @@ def add_digit(asset, body, name, *, friction=.6):
     for index, material in ((0, '.08 .09 .10 1'), (1, '.15 .17 .18 1')):
         mesh = f'digit_mesh_{index}'
         if asset.find(f"mesh[@name='{mesh}']") is None:
-            ET.SubElement(asset, 'mesh', name=mesh, file=str(geometry['paths'][index]))
+            source = geometry['meshes'][index]
+            ET.SubElement(asset, 'mesh', name=mesh,
+                          vertex=' '.join(map(str, source.vertices.ravel())),
+                          face=' '.join(map(str, source.faces.ravel())))
         ET.SubElement(body, 'geom', name=f'{name}_{"housing" if index == 0 else "gel"}',
-                      type='mesh', mesh=mesh, pos=' '.join(map(str, geometry['position'])),
-                      quat='0 1 0 0', rgba=material, contype='2', conaffinity='7',
+                      type='mesh', mesh=mesh, rgba=material, contype='2', conaffinity='7',
                       friction=f'{friction} .005 .0001', solref='.002 1', group='0')
+    # Source URDF gives 0.1 kg but placeholder inertia=1. Use its mass and an
+    # explicit uniform bounding-box inertia, not a fictitious calibrated tensor.
+    bounds = geometry['meshes'][0].bounds.copy()
+    bounds[0] = np.minimum(bounds[0], geometry['meshes'][1].bounds[0])
+    bounds[1] = np.maximum(bounds[1], geometry['meshes'][1].bounds[1])
+    size = bounds[1]-bounds[0]
+    inertia = .1/12 * np.array([size[1]**2+size[2]**2, size[0]**2+size[2]**2, size[0]**2+size[1]**2])
+    ET.SubElement(body, 'inertial', mass='.1', pos=' '.join(map(str, bounds.mean(axis=0))),
+                  diaginertia=' '.join(map(str, inertia)))
     # Inward camera at Y=22 mm; its -Z axis looks at the gel front Y=0.
     ET.SubElement(body, 'site', name=f'{name}_camera',
                   pos=f'0 .022 {geometry["gel_center_z"]}',
@@ -53,19 +70,16 @@ def add_digit(asset, body, name, *, friction=.6):
 
 
 def mount_digits(root, *, friction):
-    for side in ('left', 'right'):
-        finger = root.find(f".//body[@name='{side}_finger']")
-        for geom in list(finger.findall('geom')):
-            finger.remove(geom)
-        add_digit(root.find('asset'), finger, f'digit_{side}', friction=friction)
+    mount_modules(root, 'digit', add_digit, digit_geometry(), friction=friction)
 
 
 def gelsight_geometry():
     from wowskin_lab.core.fots import upstream
-    params, _, _ = upstream()
+    params, *_ = upstream()
     return dict(width=params.sensor_w/params.mm_to_pixel/1000,
                 height=params.sensor_h/params.mm_to_pixel/1000,
-                gel_center_z=.012)
+                gel_center_z=.012,
+                proximal_z=.012-params.sensor_h/params.mm_to_pixel/2000-.002)
 
 
 def add_gelsight(asset, body, name, *, friction=.6):
@@ -91,11 +105,25 @@ def add_gelsight(asset, body, name, *, friction=.6):
 
 
 def mount_gelsights(root, *, friction):
+    mount_modules(root, 'gelsight', add_gelsight, gelsight_geometry(), friction=friction)
+
+
+def mount_modules(root, prefix, add, geometry, *, friction):
+    """Append a fixed module at the stock distal tip; preserve every finger geom.
+
+    Sensing face stays on finger Y=0; housing extends away from the jaw gap.
+    Mount pose is a local assembly, not a verified manufacturing adapter.
+    """
+    import trimesh
+    paths = {item.get('name', Path(item.get('file', '')).stem): item.get('file')
+             for item in root.findall('asset/mesh')}
+    tip = max(trimesh.load(paths[name], force='mesh').bounds[1, 2]
+              for name in ('finger_0', 'finger_1'))
     for side in ('left', 'right'):
         finger = root.find(f".//body[@name='{side}_finger']")
-        for geom in list(finger.findall('geom')):
-            finger.remove(geom)
-        add_gelsight(root.find('asset'), finger, f'gelsight_{side}', friction=friction)
+        mount = ET.SubElement(finger, 'body', name=f'{prefix}_{side}_mount',
+                              pos=f'0 0 {tip-geometry["proximal_z"]}')
+        add(root.find('asset'), mount, f'{prefix}_{side}', friction=friction)
 
 
 class OpticalPandaEnv(PandaPickCubeTactileEnv):

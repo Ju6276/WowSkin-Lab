@@ -5,6 +5,7 @@ Renderer is unchanged. This adapter replaces its MuJoCo pose/contact plumbing:
 SE(3) composition, all contacting geoms, and independent per-sensor renderers.
 """
 from dataclasses import dataclass
+from pathlib import Path
 import sys
 
 import mujoco
@@ -19,6 +20,12 @@ class OpticalFrame:
     normal_force_n: float
     contacting_geoms: tuple
     time_s: float
+    marker_flow_rgb: np.ndarray | None = None
+    marker_displacement_px: np.ndarray | None = None
+    contact_mask: np.ndarray | None = None
+    valid_mask: np.ndarray | None = None
+    camera_depth_m: np.ndarray | None = None
+    baseline_depth_m: np.ndarray | None = None
 
 
 def contact_forces(model, data, gel):
@@ -69,19 +76,52 @@ def geom_mesh(model, geom_id):
 class OpticalTactile:
     label = 'DIGIT / TACTO'
 
-    def __init__(self, model, sensors, *, ideal=False, width=120, height=160):
+    def __init__(self, model, sensors, *, ideal=False, width=240, height=320,
+                 background='upstream', config_path=None):
         try:
             from tacto import Renderer, get_digit_config_path
             if sys.platform == 'darwin':
                 from .optical_cgl import CGLTactoRenderer as Renderer
         except ImportError as exc:
             raise RuntimeError('Install the optional TACTO dependencies using README.md') from exc
+        import cv2
+        from wowskin_lab.paths import ROOT
+        if background == 'upstream':
+            background = ROOT/'third_party/mujoco-tacto/tacto/assets/bg_digit_240_320.jpg'
+        self.background_path = str(Path(background).resolve()) if background is not None else None
+        background_bgr = cv2.imread(self.background_path) if background is not None else None
+        if background is not None and background_bgr is None:
+            raise FileNotFoundError(f'Cannot read TACTO empty-contact background: {background}')
+        self.config_path = str(config_path or get_digit_config_path())
         self.model, self.ideal = model, ideal
         self.sensors, self.renderers = {}, {}
+        reference = mujoco.MjData(model)
+        mujoco.mj_forward(model, reference)
         try:
             for name, (site, gel) in sensors.items():
-                self.sensors[name] = (model.site(site).id, model.geom(gel).id)
-                self.renderers[name] = Renderer(width, height, None, get_digit_config_path())
+                site_id, gel_id = model.site(site).id, model.geom(gel).id
+                self.sensors[name] = (site_id, gel_id)
+                renderer_class = Renderer
+                if model.geom_type[gel_id] == mujoco.mjtGeom.mjGEOM_MESH:
+                    surface = geom_mesh(model, gel_id)
+                    rotation = reference.site_xmat[site_id].reshape(3, 3).T
+                    pose = np.eye(4)
+                    pose[:3, :3] = rotation @ reference.geom_xmat[gel_id].reshape(3, 3)
+                    pose[:3, 3] = rotation @ (reference.geom_xpos[gel_id]-reference.site_xpos[site_id])
+                    surface.apply_transform(pose)
+                    # Use the actual CAD's outward curved surface, seen from
+                    # inside the sensor. No upstream mesh-loader 1.02 scaling.
+                    surface.update_faces(surface.face_normals[:, 2] < -1e-6)
+                    surface.faces = surface.faces[:, ::-1]
+
+                    class SensorRenderer(Renderer):
+                        def _generate_gel_trimesh(self, mesh=surface):
+                            return mesh.copy()
+
+                    renderer_class = SensorRenderer
+                self.renderers[name] = renderer_class(width, height, background_bgr, self.config_path)
+                if self.renderers[name].nb_cam != 1:
+                    raise ValueError('The DIGIT adapter requires one camera per module; it cannot discard extra cameras')
         except Exception:
             self.close()
             raise
@@ -107,8 +147,17 @@ class OpticalTactile:
                 # of sensordata, no pixel-grid layout assumption, no whitelist.
                 normal[key] = force
             colors, depths = renderer.render(poses, normal, noise=not self.ideal)
-            frames[name] = OpticalFrame(colors[0], renderer.depth0[0]-depths[0],
-                                         sum(forces.values()), tuple(forces), float(data.time))
+            # A ray outside the actual curved gel has baseline depth=0
+            # (renderer background sentinel), not a gel at the camera centre.
+            # Subtract only where both surfaces exist; keep raw depths and
+            # validity so outside-of-sensor pixels are never reported as data.
+            valid = (renderer.depth0[0] > 0) & (depths[0] > 0)
+            indentation = np.where(valid, renderer.depth0[0]-depths[0], 0.)
+            frames[name] = OpticalFrame(colors[0], indentation,
+                                         sum(forces.values()), tuple(forces), float(data.time),
+                                         contact_mask=valid & (indentation > 0), valid_mask=valid,
+                                         camera_depth_m=depths[0].copy(),
+                                         baseline_depth_m=renderer.depth0[0].copy())
         return frames
 
     def close(self):

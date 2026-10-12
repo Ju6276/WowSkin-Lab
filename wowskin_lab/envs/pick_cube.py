@@ -114,7 +114,9 @@ def pick_scene(cfg, layout):
     if optical:
         from .optical import digit_geometry, gelsight_geometry
         geometry = gelsight_geometry() if cfg['sensor'] == 'fots' else digit_geometry()
-        z = .0584+geometry['gel_center_z']
+        prefix = 'gelsight' if cfg['sensor'] == 'fots' else 'digit'
+        mount = root.find(f".//body[@name='{prefix}_left_mount']")
+        z = .0584+float(mount.get('pos').split()[2])+geometry['gel_center_z']
     else:
         z = .0584+mount_reference(cfg)["position_m"][2]
     ET.SubElement(hand, "site", name="tactile_tcp", pos=f"0 0 {z}", size=".001",
