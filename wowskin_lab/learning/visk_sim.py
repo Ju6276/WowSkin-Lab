@@ -111,6 +111,8 @@ class MuJoCoViSkEnv(dm_env.Environment):
         self.episode += 1
         self.rows = []
         self.step_index = self.tick_count = 0
+        self.episode_done = False
+        self.termination_reason = None
         self.env.reset(seed=self.seed+self.episode)
         # Match acquisition's actual pre-roll before the first demonstration
         # image, using its recorded duration rather than an invented delay.
@@ -132,6 +134,8 @@ class MuJoCoViSkEnv(dm_env.Environment):
         return dm_env.restart(self._observation())
 
     def step(self, action):
+        if getattr(self, 'episode_done', False):
+            raise RuntimeError('Episode finished; reset before applying another policy action')
         if self.handle is not None and not self.handle.is_running():
             raise KeyboardInterrupt('MuJoCo rollout window closed')
         e = self.env
@@ -147,20 +151,24 @@ class MuJoCoViSkEnv(dm_env.Environment):
         # zero predicted motion means hold its target, not erase tracking error.
         applied_world = np.zeros(3)
         applied_rotation = np.eye(3)
+        executed_ticks = 0
         for _ in range(ticks):
             row = e.step(command)[-1]
             self.tick_count += 1
+            executed_ticks += 1
             applied_world += row['action'][:3]
             applied_rotation = applied_rotation@Rotation.from_rotvec(row['action'][3:6]).as_matrix()
             if not np.allclose(row['action'], command, atol=1e-10, rtol=1e-7):
                 self.clipped_ticks += 1
             self.max_lift = max(self.max_lift, row.get('lift_m', 0.))
             self._sync_viewer()
+            if row.get('success', False):
+                break
         self.step_index += 1
         observation = self._observation()
         after = robot_sample(e)['cartesian_states']
         applied_base = world_from_base(e)[:3, :3].T@applied_world
-        self.rows.append(dict(policy_step=self.step_index, sim_time_s=float(e.data.time), control_ticks=ticks,
+        self.rows.append(dict(policy_step=self.step_index, sim_time_s=float(e.data.time), control_ticks=executed_ticks,
             action=raw_action.tolist(), applied_base_dxyz=applied_base.tolist(),
             applied_local_drotvec=Rotation.from_matrix(applied_rotation).as_rotvec().tolist(),
             measured_base_pose_before=before.tolist(), measured_base_pose_after=after.tolist(),
@@ -170,14 +178,15 @@ class MuJoCoViSkEnv(dm_env.Environment):
             tactile_delta_ut=(self._raw_touch()-self.baseline).tolist(),
             goal_achieved=observation['goal_achieved'], max_lift_m=self.max_lift,
             clipped_control_ticks=self.clipped_ticks))
-        # Same bounded episode as the official evaluator, with actual task
-        # success separate from reaching the time limit. No demonstration actions.
-        last = self.step_index >= self.max_steps
-        reward = float(observation['goal_achieved'])
-        if last:
-            self.save_episode('complete')
-        return dm_env.TimeStep(dm_env.StepType.LAST if last else dm_env.StepType.MID,
-                               reward, 1., observation)
+        success = bool(observation['goal_achieved'])
+        self.episode_done = success or self.step_index >= self.max_steps
+        reward = float(success)
+        if self.episode_done:
+            self.termination_reason = 'task_success' if success else 'time_limit'
+            self.save_episode('success' if success else 'failure')
+            return (dm_env.termination(reward, observation) if success else
+                    dm_env.truncation(reward, observation, discount=1.))
+        return dm_env.transition(reward, observation, discount=1.)
 
     def save_episode(self, status):
         if not self.rows:
@@ -187,6 +196,7 @@ class MuJoCoViSkEnv(dm_env.Environment):
             criterion='existing cube lift: simultaneous two-finger load > 0.01 N and lift > 0.06 m',
             success=bool(self.env.success), full_pick_and_place_scored=False)
         result = dict(episode=self.episode, status=status, steps=len(self.rows),
+            termination_reason=getattr(self, 'termination_reason', None),
             simulated_duration_s=float(self.env.data.time-self.start_time),
             tcp_displacement_m=float(np.linalg.norm(self.env.data.site_xpos[self.env.tcp_site]-self.initial_tcp)),
             max_lift_m=self.max_lift, task_evaluation=evaluation, clipped_control_ticks=self.clipped_ticks,
@@ -255,12 +265,18 @@ def main(argv=None):
     metadata = json.loads(metadata_path.read_text())
     if metadata['task'] != task or metadata.get('pose_frame') != 'robot_base':
         raise ValueError('Checkpoint task and recorded scene/base-frame contract differ')
-    if task not in ('pick_cube', 'feeding'):
-        raise ValueError('This first closed-loop transport supports pick_cube and feeding checkpoints')
+    if task not in ('pick_cube', 'feeding', 'cable', 'cable_insert', 'peg_insert'):
+        raise ValueError('No closed-loop environment for checkpoint task')
     environment_type = PandaPickCubeTactileEnv
     if task == 'feeding':
         from wowskin_lab.envs.feeding import PandaFeedingEnv
         environment_type = PandaFeedingEnv
+    elif task in ('cable', 'cable_insert'):
+        from wowskin_lab.envs.cable import PandaCableEnv
+        environment_type = PandaCableEnv
+    elif task == 'peg_insert':
+        from wowskin_lab.envs.peg_insert import PandaPegInsertEnv
+        environment_type = PandaPegInsertEnv
     utils.set_seed_everywhere(args.seed)
     env = environment_type(metadata['simulation_config'])
     output.mkdir(parents=True, exist_ok=False)
@@ -306,6 +322,7 @@ def main(argv=None):
         reset_hold_steps=reset_hold_steps,
         reset_source='Recorded acquisition pre-roll sample count minus initial observation; no recorded state/action replay',
         max_policy_steps=args.max_steps, requested_episodes=args.episodes,
+        termination='Stop on the first successful control tick; otherwise fail at max_policy_steps',
         training_dataset_read_during_rollout=False, policy_receives_object_ground_truth=False,
         limitations='Local Franka simulation and task scores; success must be measured in closed-loop evaluation; no paper success-rate claim')
     path = output/'report.json'

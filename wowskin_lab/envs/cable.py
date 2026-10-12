@@ -1,7 +1,8 @@
 """Single Panda cable workbench derived from pinned EBiM task-1 assets.
 
-Upstream fixture meshes/collision shapes and cable constitutive parameters are
-retained. Board layout, cable length/discretization and robot are local choices.
+Upstream fixture meshes and cable constitutive parameters are retained. The
+clip's three-box open-mouth collision proxy is aligned to the visible channel.
+Board layout, cable length/discretization and robot are local choices.
 No grasp-assist, clip-assist, automatic contact-force closure or EBiM scoring.
 """
 import argparse
@@ -72,6 +73,11 @@ def cable_scene(cfg, layout):
             # Reverse the original fixture about its vertical body axis.
             # The source mesh and its three collision boxes move together.
             body.set('quat', '0 0 0 1')
+        if name == 'cclip_0':
+            for suffix, geometry in cfg['clip_success'].get('collision_proxy', {}).items():
+                geom = body.find(f"geom[@name='cclip_0_{suffix}']")
+                for key in ('pos', 'size'):
+                    geom.set(key, ' '.join(map(str, geometry[key])))
         for geom in body.iter('geom'):
             if geom.get('contype', '1') != '0':
                 geom.set('contype', '1')
@@ -140,10 +146,13 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         base, back, roof = (m.geom(name).id for name in
                             ('cclip_0_base', 'cclip_0_backwall', 'cclip_0_hook_top'))
         p, z = m.geom_pos, m.geom_size
+        bounds = self.cfg['clip_success'].get('internal_bounds_clip_m')
+        if bounds is None:  # Preserve explicitly recorded v1 scene semantics.
+            bounds = [[p[roof,0]-z[roof,0], p[roof,0]+z[roof,0]],
+                      [p[roof,1]-z[roof,1]+radius, p[back,1]-z[back,1]-radius],
+                      [p[base,2]+z[base,2]+radius, p[roof,2]-z[roof,2]-radius]]
         self.clip_score = CableClipEvaluator(self.cfg['clip_success'],
-            x_bounds=[p[roof,0]-z[roof,0], p[roof,0]+z[roof,0]],
-            y_bounds=[p[roof,1]-z[roof,1]+radius, p[back,1]-z[back,1]-radius],
-            z_bounds=[p[base,2]+z[base,2]+radius, p[roof,2]-z[roof,2]-radius])
+            x_bounds=bounds[0], y_bounds=bounds[1], z_bounds=bounds[2])
         return result
 
     def evaluate_clip(self):

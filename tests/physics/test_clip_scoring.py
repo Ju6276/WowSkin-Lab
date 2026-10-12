@@ -29,6 +29,12 @@ class ClipScoringTests(unittest.TestCase):
                 env.data.time += .31
                 self.assertTrue(env.evaluate_clip()['clip_success'])
                 env.clip_score.reset()
+                # Entire visible cavity counts, including locations excluded
+                # by the previous 2 mm-high region derived from the proxy.
+                for height in (.006, .016):
+                    p[2] = height
+                    env.data.geom_xpos[gid] = env.data.xpos[clip]+rotation@p
+                    self.assertTrue(env.evaluate_clip()['clip_inside'])
                 # The same capsule above the top surface must fail.
                 env.data.geom_xpos[gid] += rotation@np.array([0.,0.,.02])
                 self.assertFalse(env.evaluate_clip()['clip_inside'])

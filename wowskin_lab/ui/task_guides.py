@@ -37,6 +37,15 @@ def goal_regions(env, model, data, row):
             regions.append(Region('', data.xpos[body]+rot@bounds.mean(0),
                                   (bounds[1]-bounds[0])/2, rot, amber))
         return regions
+    if hasattr(env, 'peg_score'):
+        c = env.peg_score.config
+        hole = model.body('hole').id
+        rotation = data.xmat[hole].reshape(3, 3)
+        lower = c['socket_entry_local_z_m']+c['required_insertion_m']
+        upper = c['socket_entry_local_z_m']+c['maximum_insertion_m']
+        local = np.r_[c['tip_local_m'][:2], (lower+upper)/2]
+        half = np.array([c['max_lateral_error_m']]*2+[(upper-lower)/2])
+        return [Region('PEG TIP TARGET', data.xpos[hole]+rotation@local, half, rotation, color)]
     if hasattr(env, 'clip_score'):
         c = env.clip_score
         bounds = np.array([c.x_bounds, c.y_bounds, c.z_bounds])

@@ -2,9 +2,15 @@
   "source": "Local task definitions requested for collection; scoring only, no forces, snaps or scripted assistance",
   "pick_cube": {
     "schema": "local_cube_pick_place_v1",
-    "source_center_xy_m": [0.40, 0.0],
+    "source_center_xy_m": [
+      0.4,
+      0.0
+    ],
     "source_half_width_m": 0.065,
-    "target_center_xy_m": [0.49, 0.135],
+    "target_center_xy_m": [
+      0.49,
+      0.135
+    ],
     "target_half_width_m": 0.045,
     "marking_half_width_m": 0.0012,
     "required_lift_m": 0.06,
@@ -14,10 +20,102 @@
     "continuous_dwell_s": 0.3
   },
   "cable": {
-    "schema": "local_cable_clip_v1",
+    "schema": "local_cable_clip_v2",
+    "internal_bounds_clip_m": [
+      [
+        0.0015,
+        0.0115
+      ],
+      [
+        0.0085,
+        0.02
+      ],
+      [
+        0.001,
+        0.0207
+      ]
+    ],
+    "geometry_source": "Local section of unchanged EBiM cclip.stl at x=6.5 mm. Bounds describe the full inner channel. Three-box open-mouth collision proxy is aligned to its base, back and roof; small retaining lips/rounded corners are not simulated as a snap-fit.",
+    "collision_proxy": {
+      "base": {
+        "pos": [
+          0.0065,
+          0.0125,
+          0.0005
+        ],
+        "size": [
+          0.013,
+          0.0088,
+          0.0005
+        ]
+      },
+      "backwall": {
+        "pos": [
+          0.0065,
+          0.0075,
+          0.01085
+        ],
+        "size": [
+          0.005,
+          0.001,
+          0.00985
+        ]
+      },
+      "hook_top": {
+        "pos": [
+          0.0065,
+          0.01385,
+          0.0212
+        ],
+        "size": [
+          0.005,
+          0.00725,
+          0.0005
+        ]
+      }
+    },
     "collision_tolerance_m": 0.0003,
     "continuous_dwell_s": 0.3,
     "require_release": false,
-    "scope": "Cable spans the clip tunnel below its roof; routing around pegs and retention after release are not scored"
+    "scope": "Cable centreline spans all three cross-sections of the full inner channel; no release, peg routing or snap-fit retention condition"
+  },
+  "peg_insert": {
+    "schema": "local_serl_peg_insert_v1",
+    "source": "SERL++ unchanged peg/socket meshes; local physically grasped task, not upstream TCP reward or welded peg",
+    "socket_origin_world_m": [
+      0.46,
+      0.045,
+      0.12109931
+    ],
+    "socket_entry_local_z_m": -0.028900691,
+    "initial_tcp_world_m": [
+      0.42,
+      0.0,
+      0.29
+    ],
+    "grasp_local_m": [
+      0.000634,
+      0.0,
+      -0.035
+    ],
+    "initial_pinch_width_m": 0.0636022,
+    "initial_settle_s": 0.3,
+    "tip_local_m": [
+      0.000634,
+      0.0,
+      0.053012302
+    ],
+    "required_insertion_m": 0.02,
+    "maximum_insertion_m": 0.05,
+    "max_lateral_error_m": 0.002,
+    "max_orientation_error_deg": 5.0,
+    "continuous_dwell_s": 0.3,
+    "parameter_provenance": "Mesh units in metres, source peg X width 63.6022 mm, grasp across X; source socket bottom placed on 100 mm table. Initial pose/grasp, 20 mm insertion, 2 mm alignment per X/Y axis, 5 degree orientation and 0.3 s dwell are explicit local task choices, not official SERL++ thresholds. Grasp centre raised 8 mm toward the peg top at user request.",
+    "tool_yaw_about_peg_rad": 1.5707963267948966,
+    "robotiq_initial_grasp": {
+      "initial_pinch_width_m": 0.0244624,
+      "tool_yaw_about_peg_rad": 0.0,
+      "reason": "With two 13.5 mm pads the Robotiq opening cannot admit the 63.6 mm peg width; grasp its 24.46 mm narrow faces with the same source hinge servo."
+    }
   }
 }

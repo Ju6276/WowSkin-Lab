@@ -14,8 +14,8 @@ class TactileDefaultsTests(unittest.TestCase):
             main(args)
         return captured
 
-    def test_all_three_scenes_use_fitted_dipole(self):
-        for task in ('pick_cube', 'cable', 'feeding'):
+    def test_all_scenes_use_fitted_dipole(self):
+        for task in ('pick_cube', 'cable', 'feeding', 'peg_insert'):
             args = self.command(['teleop', '--task', task])
             self.assertIn('--magnetic-fit', args)
             self.assertNotIn('--reskin-extrapolate', args)

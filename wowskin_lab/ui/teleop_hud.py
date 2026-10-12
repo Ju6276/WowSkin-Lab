@@ -81,6 +81,11 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
                      f"Beans {row['beans_in_spoon']}/{config['required_beans']} | "
                      f"spoon {'IN' if row['delivery_inside_target'] else 'OUT'} | "
                      f"hold {row['delivery_dwell_s']:.1f}/{config['continuous_dwell_s']:g} s")
+    elif hasattr(env, 'peg_score'):
+        task_text = ('SUCCESS: peg inserted' if env.success else
+                     f"Insert {row.get('peg_depth_m', 0.)*1000:.1f}/{env.peg_score.config['required_insertion_m']*1000:g} mm | "
+                     f"offset {row.get('peg_lateral_error_m', 0.)*1000:.1f} mm | "
+                     f"angle {row.get('peg_orientation_error_deg', 0.):.1f} deg | hold {row.get('peg_dwell_s', 0.):.1f} s")
     elif hasattr(env, 'cable_layout'):
         task_text = ('SUCCESS: cable in clip' if env.success else
                      f"Clip {row.get('clip_span_count', 0)}/3 | hold {row.get('clip_dwell_s', 0.):.1f}/"

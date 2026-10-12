@@ -9,6 +9,38 @@ from wowskin_lab.learning.visk_sim import MuJoCoViSkEnv, policy_increment_in_wor
 
 
 class ActionTransportTests(unittest.TestCase):
+    def test_success_stops_inside_control_block_and_timeout_is_failure(self):
+        for success_tick, max_steps, expected_ticks, status in (
+                (3, 10, 3, 'success'), (None, 2, 34, 'failure'), (17, 1, 17, 'success')):
+            with self.subTest(success_tick=success_tick, max_steps=max_steps):
+                env = SimpleNamespace(data=SimpleNamespace(time=0.), success=False,
+                                      gripper_fraction=lambda target=False: .6)
+                def step(command):
+                    env.data.time += .01
+                    env.success = success_tick is not None and round(env.data.time*100) >= success_tick
+                    return [dict(action=command.copy(), lift_m=0., success=env.success)]
+                env.step = step
+                transport = MuJoCoViSkEnv.__new__(MuJoCoViSkEnv)
+                transport.env, transport.handle = env, None
+                transport.sample_hz, transport.policy_hz = 100, 6
+                transport.step_index = transport.tick_count = transport.clipped_ticks = 0
+                transport.max_lift, transport.max_steps = 0., max_steps
+                transport.rows, transport.baseline = [], np.zeros(15)
+                transport._raw_touch = lambda: np.zeros(15)
+                transport._observation = lambda: {'goal_achieved': env.success}
+                module = 'wowskin_lab.learning.visk_sim'
+                with patch(module+'.robot_sample', return_value=dict(cartesian_states=np.zeros(6), commanded_pose=np.zeros(6))), \
+                     patch(module+'.world_from_base', return_value=np.eye(4)), \
+                     patch.object(transport, 'save_episode') as save:
+                    while not getattr(transport, 'episode_done', False):
+                        ts = transport.step([.01, 0, 0, 0, 0, 0, .6])
+                    self.assertTrue(ts.last())
+                    self.assertEqual(ts.reward, float(status == 'success'))
+                    self.assertEqual(transport.tick_count, expected_ticks)
+                    save.assert_called_once_with(status)
+                    with self.assertRaises(RuntimeError):
+                        transport.step(np.zeros(7))
+
     def test_viewer_reset_cannot_rewrite_live_robot_state(self):
         from wowskin_lab.ui.physics_worker import PhysicsWorker
         model = mujoco.MjModel.from_xml_string('<mujoco><worldbody><body><freejoint/><geom type="sphere" size=".1"/></body></worldbody></mujoco>')

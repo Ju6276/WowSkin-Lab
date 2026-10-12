@@ -1,8 +1,8 @@
 # WowSkin-Lab
 
-Franka 触觉遥操作、RGB-D 数据采集和 ViSk / FTF 算法接入。基于 MuJoCo，支持 Panda / Robotiq 2F-85、键盘 / SpaceMouse / PICO 4，提供方块搬运、线材插扣和喂食场景。
+Franka 触觉遥操作、RGB-D 数据采集和 ViSk / FTF 算法接入。基于 MuJoCo，支持 Panda / Robotiq 2F-85、键盘 / SpaceMouse / PICO 4，提供方块搬运、线材插扣、喂食和 Peg Insert 场景。
 
-建议从 Panda 方块任务开始。ViSk 提供数据转换、训练及 cube / feeding 仿真闭环入口；FTF 提供数据导出和标注入口，后续视觉跟踪需要 CUDA。软指腹与磁场是未完成真机标定的本地近似模型；本项目包含数据与环境适配，不是官方论文实验配置的完整复现。未完成项见 [TODO](TODO.md)。
+建议从 Panda 方块任务开始。ViSk 提供数据转换、训练及 各任务的仿真闭环入口；FTF 提供数据导出和标注入口，后续视觉跟踪需要 CUDA。软指腹与磁场是未完成真机标定的本地近似模型；本项目包含数据与环境适配，不是官方论文实验配置的完整复现。未完成项见 [TODO](TODO.md)。
 
 ## 安装
 
@@ -44,6 +44,8 @@ python3.12 scripts/setup_capture.py
 ```bash
 # 原绕线布局；简单插扣追加 --cable-layout single_clip
 .venv/bin/mjpython -m wowskin_lab teleop --task cable --input spacemouse --ideal
+# SERL++ Peg 素材：启动已物理夹持，插入孔座
+.venv/bin/mjpython -m wowskin_lab teleop --task peg_insert --input spacemouse --ideal
 # Panda 喂食：初始化已夹勺，并放好六颗豆子
 .venv/bin/mjpython -m wowskin_lab teleop --task feeding --input spacemouse --ideal
 # Robotiq 喂食，独立数据目录
@@ -51,6 +53,8 @@ python3.12 scripts/setup_capture.py
 # PICO 4：USB 调试已授权，adb 在 PATH 或 .tools/platform-tools/
 .venv/bin/mjpython -m wowskin_lab teleop --task pick_cube --input pico --ideal --record-dir data/episodes_pico
 ```
+
+线材当前使用 `local_cable_clip_v2`：透明框覆盖卡扣内部通道，碰撞代理对齐原网格。旧版记录使用独立目录保存；新采集可用 `--record-dir data/episodes_clip_v2`。Peg 使用原始 SERL++ 网格与凸分解，依靠接触夹持，不引入上游的 peg 焊接约束；本地抓法、评分与控制差异见采集手册。
 
 Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松开右握键一次后，按住跟随。完整按键、成功条件和故障处理见 [采集手册](docs/COLLECTION_ZH.md)。Robotiq 强夹持、线材压扣仍可能出现软指腹网格失效，不承诺任意接触稳定。
 

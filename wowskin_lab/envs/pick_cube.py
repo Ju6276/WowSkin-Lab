@@ -588,14 +588,14 @@ def response_configuration(args):
     task = getattr(args, 'task', 'pick_cube')
     if task == 'feeding':
         cfg['feeding_setting'] = getattr(args, 'feeding_setting', 'care_room')
-    if physics_step_us is None and task in ('pick_cube', 'cable', 'feeding'):
+    if physics_step_us is None and task in ('pick_cube', 'cable', 'feeding', 'peg_insert'):
         # Feeding's recorded 6D spoon motion becomes unstable at 100 us and
         # passes at 50 us with this thin-silicone/contact configuration.
         # This costs throughput; the sensor/control clock remains 100 Hz.
         physics_step_us = 500 if cfg['skin_dof'] == 'trilinear' else (50 if task == 'feeding' else 100)
     if physics_step_us is not None and physics_step_us > 100 and cfg['skin_dof'] != 'trilinear':
         raise ValueError('Steps above 100 us are tested only with the reduced skin')
-    if task == 'pick_cube':
+    if task in ('pick_cube', 'peg_insert'):
         # Same full FEM/contact model; sparse CG avoids dense Jacobian work.
         # Keep the selected integration step in acquisition metadata.
         cfg['constraint_jacobian'] = 'sparse'
@@ -705,7 +705,8 @@ def viewer(args):
     cfg['randomize_cube'] = args.randomize
     cable_task = getattr(args, 'task', 'pick_cube') == 'cable'
     feeding_task = getattr(args, 'task', 'pick_cube') == 'feeding'
-    other_task = cable_task or feeding_task
+    peg_task = getattr(args, 'task', 'pick_cube') == 'peg_insert'
+    other_task = cable_task or feeding_task or peg_task
     keyboard_speed = getattr(args, 'keyboard_speed', None)
     keyboard_speed = (.12 if other_task else .04) if keyboard_speed is None else keyboard_speed
     if not np.isfinite(keyboard_speed) or not (0 < keyboard_speed <= .25):
@@ -736,10 +737,13 @@ def viewer(args):
     elif feeding_task:
         from wowskin_lab.envs.feeding import PandaFeedingEnv
         env = PandaFeedingEnv(cfg, pollen=not args.no_pollen)
+    elif peg_task:
+        from wowskin_lab.envs.peg_insert import PandaPegInsertEnv
+        env = PandaPegInsertEnv(cfg, pollen=not args.no_pollen)
     else:
         env = PandaPickCubeTactileEnv(cfg, pollen=not args.no_pollen)
     title = ('PandaCable / single clip' if cable_task and env.cable_layout == 'single_clip'
-             else 'PandaCable' if cable_task else 'PandaFeeding' if feeding_task else 'PandaPickCube')
+             else 'PandaCable' if cable_task else 'PandaFeeding' if feeding_task else 'PandaPegInsert' if peg_task else 'PandaPickCube')
     if cfg['disable_cartesian_limits']:
         print('Cartesian limits OFF: no workspace, action increment, servo slew or target-lead limits. '
               'Centered input retains the target; focus loss still cancels outstanding motion. '
@@ -1097,7 +1101,7 @@ def main():
     parser.add_argument('--pointcloud-voxel', type=float, default=.002, help='Preview voxel size [m], 0 to disable; recording is unchanged')
     parser.add_argument('--no-cartesian-limits', action='store_true',
                         help='Simulation experiment: disable workspace, per-action, servo-speed and target-lead limits; retain input scale, IK, joint and actuator bounds')
-    parser.add_argument('--task', choices=['pick_cube', 'cable', 'feeding'], default='pick_cube')
+    parser.add_argument('--task', choices=['pick_cube', 'cable', 'feeding', 'peg_insert'], default='pick_cube')
     parser.add_argument('--cable-layout', choices=['routing', 'single_clip'],
                         help='Cable fixture layout: original routing (default), or one reversed C-clip')
     parser.add_argument('--feeding-setting', choices=['care_room', 'ebim_station'], default='care_room',
@@ -1106,7 +1110,7 @@ def main():
     parser.add_argument('--ideal', action='store_true', help='Disable synthetic magnetic noise, drift, readout filtering and sample delay; retain contact mechanics and deformation response')
     parser.add_argument('--physics-step-us', type=int, choices=[20, 50, 100, 500, 1000], help='Integration step in microseconds; 500/1000 require reduced skin; recorded in metadata')
     parser.add_argument('--gripper', choices=['panda', 'robotiq_2f85'], default='panda', help='Panda or EBiM Robotiq 2F-85 with local tactile mounts')
-    parser.add_argument('--skin-dof', choices=['full', 'trilinear'], default='trilinear', help='Reduced skin for all three tasks (MuJoCo 3.15); full keeps the reference FEM')
+    parser.add_argument('--skin-dof', choices=['full', 'trilinear'], default='trilinear', help='Reduced skin for all tasks (MuJoCo 3.15); full keeps the reference FEM')
     parser.add_argument('--keyboard-speed', type=float, help='Translation speed in m/s of simulation time; cable .12, cube .04; maximum .25')
     parser.add_argument('--spacemouse-speed', type=float, default=.12, help='Maximum translation m/s of simulation time')
     parser.add_argument('--spacemouse-angular-speed', type=float, default=.5, help='Maximum rotation rad/s of simulation time')
@@ -1134,9 +1138,9 @@ def main():
         parser.error('--cable-layout requires --task cable')
     if args.reskin_extrapolate and not args.reskin_model:
         parser.error('--reskin-extrapolate requires --reskin-model')
-    if args.task in ('cable', 'feeding'):
+    if args.task in ('cable', 'feeding', 'peg_insert'):
         if args.command != 'viewer' or args.randomize:
-            parser.error('Cable/feeding support manual viewer; cube demo/randomization do not apply')
+            parser.error('Cable/feeding/peg support manual viewer; cube demo/randomization do not apply')
         if args.output == 'outputs/diagnostics/pick_cube':
             args.output = 'outputs/diagnostics/cable_insert' if args.task == 'cable' and args.cable_layout == 'single_clip' else 'outputs/diagnostics/'+args.task
     return (demo if args.command == "demo" else viewer)(args)
