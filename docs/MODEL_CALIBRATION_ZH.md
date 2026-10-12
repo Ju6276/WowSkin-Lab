@@ -295,6 +295,8 @@ FOTS 的深度由同一 CAD 的曲面作为空载面，按来源 `19.58 px/mm` �
 
 数据用于验证和比较传感器接口，独立于 LeRobot 训练数据。`--demo` 另提供 Panda 物理夹取／抬升／释放测试。源码对照测试直接独立运行作者的 DIGIT 模型，逐像素比较 RGB、阴影、标记流；多姿态序列检查接触历史和释放恢复。
 
+**如何判断优劣。** [FOTS 论文 Table I](https://arxiv.org/html/2404.19217v2#S4.T1) 在作者真实 DIGIT 图像上报告：TACTO 的 MSE 为 201.872、SSIM 为 0.798；50 张标定图像训练、带阴影的 FOTS 为 52.451、0.894。作者对实物与仿真图像做了人工配准；这是对应硬件／标定与评价设置下的图像相似度结果，不是本机复测，也不是接触力精度。Table III 的 CPU 速度测试与本机 OpenGL／PyTorch 运行路径不同，不能直接套用。这里的同状态比较可以检查响应、释放恢复、数据接口和耗时；没有配对真实观测或同一策略的任务测试时，不能据此认定哪一种物理更准确、训练成功率更高。
+
 ## GelSight / 原生 MuJoCo 模型
 
 `--sensor gelsight` 使用 [rlamprell/GelSightMujoco](https://github.com/rlamprell/GelSightMujoco) 的 `gelsight_mountable0.xml` 和配套外壳、后盖、玻璃 STL；来源版本、SHA256 和许可证状态见 [manifest](../assets/reference/gelsight_mujoco/manifest.json)。源码／资产通过脚本单独下载，不复制进本仓库。该旧模型不能改称 GelSight Mini，也不与 FOTS 的 GelSight 硬件标定混用。
@@ -305,9 +307,13 @@ Panda 场景使用来源默认 Newton、100 次迭代、关闭额外 noslip；An
 
 光学执行原 `gelsight_driver.py`：形变平滑、四路光照、Phong 漫反射／高光、内部阴影、背景、纹理噪声均保留。`RobotArm__BaseEnv.py` 中的工厂参数直接读取，默认分辨率 160×120；不导入旧 Gym 控制环境。原 `mujoco_py` 读取的是 RGB 渲染后的 OpenGL 深度缓冲。本地用原生 `mjr_readPixels` 重现；现代 Renderer 的普通深度模式会把透明层当作不透明，因此不能直接替代这一读取路径。
 
+内部相机的近／远裁剪面固定到来源 PickAndPlace XML 编译出的米制值（约 1.481 mm／1481 m），同时保持原视场角。只改变独立的传感器渲染相机，不改变任务相机或物理参数。原光学算法直接使用非线性深度缓冲，因此继承新房间的 `extent`／裁剪面会错误地改变同一接触的光学响应；回归测试检查改变外部场景尺寸和裁剪设置后，原始深度与 RGB 保持一致。
+
 **单位区分：** `render_input_depth` 是来源使用的无量纲 `[0,1]` 缓冲；`render_deformation` 是原光学函数平滑后的同单位结果；`render_depth_unit=legacy_opengl_buffer`。`camera_depth_m`、`baseline_depth_m` 是根据真实近平面／远平面反投影后的米制深度；`indentation_m` 是两者之差，显示以 µm 标注。来源光学面与接触层相隔约 2 mm，因此图像深度可能接近 2 mm，即使刚性接触重叠很小；不能把它解读为已标定的硅胶弹性压缩。背景误差和浮点残差原样保存，不强行置零。
 
 `--ideal` 只关闭原纹理随机噪声，保留原背景。该方法没有 FOTS 的标记剪切／扭转模型，所以不虚构标记流输出。测试覆盖原光学函数逐像素一致、噪声所在环节、透明胶面按压／释放、Panda 夹取／抬升／释放；抬升同时检查双侧接触和有限位移，避免把弹飞误判为抓取成功。
+
+**复现证据范围。** 原 CAD 与原光学处理功能已经接入；源码对照证明相同输入下光学函数输出一致。还没有在作者旧 `mujoco_py` 引擎与当前原生 MuJoCo 上重放同一组接触并逐帧核对整条链路，因此不能把函数一致性称为跨版本传感器完全等价。安装姿态、碰撞位映射与引擎接口属于本地适配；实物力－压深／光学精度尚未验证。
 
 ## MuJoCo 软体求解与光学传感器
 

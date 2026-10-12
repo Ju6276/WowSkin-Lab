@@ -123,7 +123,7 @@ DIGIT 每指输出 RGB `320×240×3`、深度和有效区 `320×240`；DIGIT FOT
 
 `--ideal` 关闭 TACTO 的随机 RGB 噪声或 GelSight 的纹理噪声；真实背景本身的纹理仍保留。FOTS 不额外加入随机噪声。`--no-fots-shadow` 可关闭原平面阴影；TACTO 支持 `--tacto-config`、`--tacto-background` 和 `--no-tacto-background`。不人为放大输出，不用目标物体白名单过滤触觉。
 
-**本次 sensor 功能范围：独立台、Panda 方块、原算法光学功能和原始输出比较。** 不是只绘制示意图；源码对照测试检查原始 RGB、深度或标记值。光学图像尚未接入 LeRobot／ViSk，也未接其他任务、Robotiq 或 Pico；这些是单独的应用工作。原算法的刚性接触／光学形变近似不等于材料 FEM；MuJoCo 支持软体，但本次没有用未标定的胶体力学冒充作者模型。安装件和硬件标定状态见[模型说明](docs/MODEL_CALIBRATION_ZH.md#传感器硬件与光学算法)及 [TODO](TODO.md)。
+**本次 sensor 功能范围：独立台、Panda 方块、原算法光学功能和原始输出比较。** 不是只绘制示意图；源码对照测试检查原始 RGB、深度或标记值。GelSight 内部相机固定到来源的深度裁剪参数，避免外部场景尺寸改变光学响应；旧 `mujoco_py` 与当前引擎的整条链路等价性仍待验证。光学图像尚未接入 LeRobot／ViSk，也未接其他任务、Robotiq 或 Pico；这些是单独的应用工作。原算法的刚性接触／光学形变近似不等于材料 FEM；MuJoCo 支持软体，但本次没有用未标定的胶体力学冒充作者模型。安装件和硬件标定状态见[模型说明](docs/MODEL_CALIBRATION_ZH.md#传感器硬件与光学算法)及 [TODO](TODO.md)。
 
 ## 脆性薯片试验
 

@@ -139,6 +139,32 @@ class BackendChecks(unittest.TestCase):
         finally:
             optics.close()
 
+    def test_gelsight_depth_and_rgb_independent_of_host_scene_clipping(self):
+        env = OpticalBench(sensor='gelsight')
+        optics = make_optics(env, 'gelsight', ideal=True)
+        try:
+            env.data.ctrl[2] = -.012
+            for _ in range(150):
+                env.step(np.zeros(3))
+            key = next(iter(env.sensors))
+            before = optics.render(env.data)[key]
+            self.assertGreater(before.normal_force_n, .1)
+            # A different room size / task camera setup must not alter a
+            # stationary sensor's optical calibration or physical contacts.
+            env.model.stat.extent *= 10
+            env.model.vis.map.znear = .002
+            env.model.vis.map.zfar = 800
+            after = optics.render(env.data)[key]
+            self.assertEqual(before.normal_force_n, after.normal_force_n)
+            np.testing.assert_allclose(before.render_input_depth, after.render_input_depth, atol=1e-7, rtol=0)
+            np.testing.assert_allclose(before.camera_depth_m, after.camera_depth_m, atol=2e-7, rtol=0)
+            np.testing.assert_allclose(before.rgb, after.rgb, atol=1, rtol=0)
+            # Internal-camera overrides must not change task-camera settings.
+            self.assertAlmostEqual(env.model.vis.map.znear, .002)
+            self.assertEqual(env.model.vis.map.zfar, 800)
+        finally:
+            optics.close()
+
 
 if __name__ == '__main__':
     unittest.main()

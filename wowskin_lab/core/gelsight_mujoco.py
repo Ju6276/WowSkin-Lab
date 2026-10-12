@@ -17,6 +17,20 @@ SOURCE = ROOT/'third_party/GelSightMujoco/Test_bed/envs'
 
 
 @lru_cache(maxsize=1)
+def source_depth_planes():
+    """Preserve the source camera's depth-buffer calibration across scenes.
+
+    The original optical driver consumes nonlinear OpenGL depth, so copying
+    only its constants while inheriting the host scene's clipping planes
+    changes its input. Compile the pinned source to obtain its metric planes;
+    do not make the sensor's response depend on the Panda room's extent.
+    """
+    model = mujoco.MjModel.from_xml_path(str(SOURCE/'models/gripper_testbed_PickandPlace.xml'))
+    return tuple(float(np.float32(value*model.stat.extent))
+                 for value in (model.vis.map.znear, model.vis.map.zfar))
+
+
+@lru_cache(maxsize=1)
 def source_config():
     """Read the original factory's literals, without importing old Gym/ROS."""
     import ast
@@ -61,6 +75,7 @@ class GelSightMujocoOptical:
     def __init__(self, model, sensors, *, reference_data, ideal=False, width=160, height=120):
         self.model, self.sensors = model, sensors
         self.optics = GelSightRenderer(width, height, ideal=ideal)
+        self.near, self.far = source_depth_planes()
         self.renderer = mujoco.Renderer(model, height=height, width=width)
         # Modern Renderer depth mode makes transparent gel/glass opaque by
         # switching to segmentation. The source reads depth after normal RGB
@@ -72,18 +87,26 @@ class GelSightMujocoOptical:
 
     def depth(self, data, camera):
         self.renderer.update_scene(data, camera=camera)
+        # Change only this offscreen sensor camera. Preserve its field of view
+        # while fixing the source metric near/far planes; task cameras and the
+        # global model remain untouched.
+        for gl_camera in self.renderer.scene.camera:
+            if gl_camera.orthographic:
+                raise ValueError('The source GelSight camera must be perspective')
+            scale = self.near/gl_camera.frustum_near
+            for field in ('frustum_bottom', 'frustum_top', 'frustum_center', 'frustum_width'):
+                setattr(gl_camera, field, getattr(gl_camera, field)*scale)
+            gl_camera.frustum_near, gl_camera.frustum_far = self.near, self.far
         self.renderer.render()
         raw = np.empty((self.renderer.height, self.renderer.width), dtype=np.float32)
         mujoco.mjr_readPixels(None, raw, self.renderer._rect, self.renderer._mjr_context)
-        near = float(self.model.vis.map.znear*self.model.stat.extent)
-        far = float(self.model.vis.map.zfar*self.model.stat.extent)
+        near, far = self.near, self.far
         depth = near*far/(far-raw.astype(np.float64)*(far-near))
         return depth, raw
 
     def render(self, data):
         frames = {}
-        near = float(self.model.vis.map.znear*self.model.stat.extent)
-        far = float(self.model.vis.map.zfar*self.model.stat.extent)
+        near, far = self.near, self.far
         for name, (camera, gel) in self.sensors.items():
             depth, raw = self.depth(data, camera)
             rgb, native_deformation = self.optics.render(raw)
