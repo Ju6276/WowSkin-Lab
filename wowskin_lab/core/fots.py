@@ -1,4 +1,4 @@
-"""Pinned FOTS GelSight optics with a MuJoCo geometric-depth adapter.
+"""Pinned FOTS DIGIT/GelSight optics with a MuJoCo geometric-depth adapter.
 
 The upstream MLP, preprocessing and smoothing run unchanged. Depth is rigid
 contact overlap, not a force-to-indentation law or an elastic gel solution.
@@ -8,6 +8,7 @@ from functools import lru_cache
 from types import ModuleType, SimpleNamespace
 
 import numpy as np
+import mujoco
 import torch
 from scipy.spatial.transform import Rotation
 
@@ -17,8 +18,8 @@ from .optical_tactile import OpticalFrame, contact_forces, geom_mesh
 FOTS_ROOT = ROOT/'third_party/FOTS'
 
 
-@lru_cache(maxsize=1)
-def upstream():
+@lru_cache(maxsize=2)
+def upstream(hardware='gelsight'):
     """Load upstream's absolute imports privately, without altering sys.path.
 
     Old preproc assigns torch.seed = 42. A module-local facade prevents that
@@ -45,7 +46,14 @@ def upstream():
         modules[name] = module
         return module
 
+    if hardware not in ('gelsight', 'digit'):
+        raise ValueError('FOTS hardware must be gelsight or digit')
     params = load('params', 'params.py')
+    params.sensor_type = hardware
+    if hardware == 'digit':
+        # DIGIT marker grid published in params.py (the alternate block).
+        params.N, params.M = 9, 8
+        params.x0, params.y0, params.dx, params.dy = 40, 27, 27, 27
     mlp = load('mlp_calib.src.train.mlp_model', 'mlp_calib/src/train/mlp_model.py')
     preproc = load('utils.prepost_mlp', 'utils/prepost_mlp.py', {'torch': SimpleNamespace(**vars(torch))})
     preproc.device = torch.device('cpu')
@@ -58,15 +66,16 @@ def upstream():
 
 
 class FOTSRenderer:
-    """Official GelSight calibration, native 240x320 BGR -> public RGB."""
-    def __init__(self):
-        self.params, MLP, Render, self.MarkerMotion = upstream()
+    """Hardware-specific source calibration, native 240x320 BGR -> RGB."""
+    def __init__(self, hardware='gelsight'):
+        self.hardware = hardware
+        self.params, MLP, Render, self.MarkerMotion = upstream(hardware)
         self.model = MLP().cpu().eval()
-        weights = FOTS_ROOT/'mlp_calib/models/mlp_n2c_gelsight.pth'
+        weights = FOTS_ROOT/f'mlp_calib/models/mlp_n2c_{hardware}.pth'
         self.model.load_state_dict(torch.load(weights, map_location='cpu', weights_only=True))
         self.renderer = Render(
-            background_img=np.load(FOTS_ROOT/'assets/gel/gelsight_bg.npy'),
-            bg_render=np.load(FOTS_ROOT/'utils/utils_data/ini_bg_fots_gelsight.npy'),
+            background_img=np.load(FOTS_ROOT/f'assets/gel/{hardware}_bg.npy'),
+            bg_render=np.load(FOTS_ROOT/f'utils/utils_data/ini_bg_fots_{hardware}.npy'),
             model=self.model)
 
     def render(self, indentation_m, *, shadow=False):
@@ -112,10 +121,11 @@ class FOTSRenderer:
 class FOTSOptical:
     label = 'GelSight / FOTS (rigid geometry proxy)'
 
-    def __init__(self, model, sensors, *, ideal=False, shadow=True):
+    def __init__(self, model, sensors, *, ideal=False, shadow=True, hardware='gelsight'):
         import pyrender
         from .optical_depth import depth_renderer
-        self.model, self.optics = model, FOTSRenderer()
+        self.model, self.optics = model, FOTSRenderer(hardware)
+        self.label = 'DIGIT / FOTS' if hardware == 'digit' else self.label
         self.shadow, self.history, self.last_time = shadow, {}, None
         p = self.optics.params
         self.sensors = {name: (model.site(site).id, model.geom(gel).id)
@@ -131,6 +141,24 @@ class FOTSOptical:
         self.scene.add(pyrender.OrthographicCamera(
             xmag=p.sensor_w/p.mm_to_pixel/2000,
             ymag=p.sensor_h/p.mm_to_pixel/2000, znear=.00001, zfar=.1), pose=pose)
+        self.baselines = {}
+        reference = mujoco.MjData(model)
+        mujoco.mj_forward(model, reference)
+        for name, (site, gel) in self.sensors.items():
+            if model.geom_type[gel] == mujoco.mjtGeom.mjGEOM_MESH:
+                mesh = geom_mesh(model, gel)
+                transform = np.eye(4)
+                rotation = reference.site_xmat[site].reshape(3, 3).T
+                transform[:3, :3] = rotation @ reference.geom_xmat[gel].reshape(3, 3)
+                transform[:3, 3] = rotation @ (reference.geom_xpos[gel]-reference.site_xpos[site])
+                mesh.apply_transform(transform)
+                mesh.update_faces(mesh.face_normals[:, 2] > 1e-6)
+                mesh.faces = mesh.faces[:, ::-1]
+                node = self.scene.add(pyrender.Mesh.from_trimesh(mesh, smooth=False))
+                self.baselines[name] = self.r.render(self.scene, flags=pyrender.RenderFlags.DEPTH_ONLY)
+                self.scene.remove_node(node)
+            else:
+                self.baselines[name] = np.full((p.sensor_h, p.sensor_w), self.camera_distance_m)
 
     def render(self, data):
         import pyrender
@@ -149,6 +177,9 @@ class FOTSOptical:
                 del history[geom]
             contacts = []
             indentation = np.zeros((self.optics.params.sensor_h, self.optics.params.sensor_w))
+            baseline = self.baselines[name]
+            valid = baseline > 0
+            current = baseline.copy()
             for geom in forces:
                 if geom not in self.nodes:
                     mesh = pyrender.Mesh.from_trimesh(geom_mesh(self.model, geom), smooth=False)
@@ -162,7 +193,8 @@ class FOTSOptical:
                 depth = self.r.render(self.scene, flags=pyrender.RenderFlags.DEPTH_ONLY)
                 self.scene.remove_node(node)
                 # Per-object surface overlap, then frontmost union for RGB.
-                overlap = np.where(depth > 0, np.maximum(self.camera_distance_m-depth, 0), 0)
+                overlap = np.where(valid & (depth > 0), np.maximum(baseline-depth, 0), 0)
+                current = np.where(valid & (depth > 0), np.minimum(current, depth), current)
                 indentation = np.maximum(indentation, overlap)
                 trajectory = self.trajectory(history, geom, pose, overlap)
                 if trajectory is not None:
@@ -172,7 +204,8 @@ class FOTSOptical:
             frames[name] = OpticalFrame(rgb, indentation, sum(forces.values()), tuple(forces),
                                        float(data.time), marker_image, displacement,
                                        contact_mask=indentation > 0,
-                                       valid_mask=np.ones(indentation.shape, dtype=bool))
+                                       valid_mask=valid, camera_depth_m=current,
+                                       baseline_depth_m=baseline.copy())
         return frames
 
     def trajectory(self, history, geom, pose, depth):

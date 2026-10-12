@@ -260,7 +260,7 @@ DIGIT、GelSight 指硬件几何、胶体、相机和照明；TACTO、FOTS 指�
 - [TACTO](https://github.com/facebookresearch/tacto)：根据物体网格／位姿、胶面、内部相机和灯光进行三维渲染，再处理背景和噪声；包含力相关的光学位姿调整近似，输出 RGB 和深度。原版没有 FOTS 那套膨胀／剪切／扭转标记运动模型。官方明确不保证接触形变和摩擦动力学精确。
 - [FOTS](https://github.com/Rancho-zhao/FOTS)：从接触深度求表面法线及位置，由实测标定训练的 MLP 生成颜色，另有阴影与标记运动模型。它不限定物理引擎；[作者 MuJoCo 模型](https://github.com/Rancho-zhao/FOTS/blob/FOTS-mujoco/assets/gel/digit_sensor.xml) 的硬件是 DIGIT，主分支示例加载的是 GelSight 标定。两者不能混为一套硬件模型。
 
-本项目 `tacto` 是 DIGIT CAD＋TACTO；`fots` 是本地平面安装代理＋作者 GelSight 标定＋FOTS。后者不是原封不动复制作者 DIGIT MuJoCo 场景。若比较算法，必须固定硬件、接触轨迹、相机与压深定义，并使用该硬件各自的标定。单独替换 RGB 渲染器不会补齐胶体力学或真实 CAD。
+本项目 `tacto` 与 `digit_fots` 共享 DIGIT CAD／物理参数，`digit_compare` 在同一 MuJoCo 状态下同时运行两者；`gelsight` 使用独立 GelSightMujoco 原模型。旧 `fots` 保留平面代理和作者 GelSight 标定。比较时保留各算法的原投影、背景和深度生成方法，并显式标注差异，不能把原生输出差异当作实物误差。单独替换 RGB 渲染器不会补齐胶体力学。
 
 ## DIGIT / TACTO 光学选项
 
@@ -275,6 +275,45 @@ DIGIT、GelSight 指硬件几何、胶体、相机和照明；TACTO、FOTS 指�
 **光学。** 原 TACTO `Renderer` 的相机、灯光、渲染、背景处理、噪声与力近似沿用；默认与上游示例一样采用 240×320 分辨率和 `bg_digit_240_320.jpg`。背景校正执行作者的 0.5 倍差分及 7×7 高斯平滑，再叠加真实背景，不是本地拟合增益。胶面使用同一 CAD 朝向接触区的曲面，变换到内部相机系并翻面以从内部观察；替代默认平面，也不执行上游可选 mesh 加载器的 1.02 放大。上游力近似将 0–100 N 线性映射到最多 5 mm 的物体光学位姿调整；该上限不限制物理力。默认 RGB 噪声为每帧重新采样的 N(0,7)，`--ideal` 仅关闭随机噪声，不能消除背景固有纹理。深度为当前渲染相对空载曲面之差；显示默认共用两指的自动范围并标明 µm，支持固定范围，均不裁剪数值数组。接触区域为有效胶面内的正光学压深像素；按 M 与深度图切换，不作为独立测力传感器。曲面边缘外的相机射线可能没有空载胶面深度，不能将渲染器的 0 背景值当作位于相机原点的胶面。`valid_mask` 标出有效区域，区域外 `indentation_m` 用 0 占位并显示蓝灰色，不参与接触标记；原始 `camera_depth_m` 和 `baseline_depth_m` 同时保留，可重算有效区的深度差。
 
 **验证和边界。** 已有直接执行原 Renderer 的 RGB／深度／背景对照、噪声统计、原手指／行程保留、刚体旋转一致性、多物体接触、球压入／卸载、方块物理夹起／松开测试。真实 DIGIT 光学／力标定仍需独立数据；论文完整任务实验不是此次 sensor 接入的完成条件。独立台球半径 5 mm、质量 0.02 kg、位置伺服 kp=3000、kv=5，都是诊断设置。Mac CGL 只替换图形上下文初始化，不修改上游文件。原始传感器模型与 TACTO 渲染方法是不同层次；FOTS 也能用于 DIGIT，命令名称表示本项目当前的组合。
+
+## DIGIT 双算法比较
+
+`digit_fots` 使用与 TACTO 完全相同的独立 DIGIT CAD、指尖安装、关节、质量、碰撞与控制器。FOTS 主分支中的 `mlp_n2c_digit.pth`、`digit_bg.npy`、`ini_bg_fots_digit.npy` 和注释中的 DIGIT 标记网格被实际加载；不是将 GelSight 权重改名。原 MLP、平滑、平面阴影、MarkerMotion 都执行。数据为 RGB `320×240×3`、米制光学深度 `320×240`、标记位移 `8×9×2`。原膨胀／剪切／扭转系数和原流图箭头绘法保持不变，数值位移不放大。来源及 SHA256 见 [FOTS manifest](../assets/reference/fots/manifest.json)。
+
+FOTS 的深度由同一 CAD 的曲面作为空载面，按来源 `19.58 px/mm` 正交投影，计算接触物体与曲面的重叠。它不使用 TACTO 的力相关光学位移。为了保持两种方法可核查，没有用 TACTO 的深度替换 FOTS 输入，也没有调整两者倍率。
+
+`digit_compare` 只有一个物理环境，每个采样时刻先后调用两种算法，检查时间、接触 geom 和法向力一致。TACTO 原透视相机与 FOTS 的标定正交窗口不同，因此两幅原生图不是逐像素配准的。默认双算法共用显示深度范围，显示不同强弱是保留真实输出差异；不能直接用 RGB RMSE 宣称哪种更准确。
+
+`--compare-data` 在球、长方体、圆柱探头上分别执行：空载、按压、平移、扭转、倾斜、释放、再次接触、最终释放。积分步长 0.5 ms，控制 100 Hz，输出采样 10 Hz，每种探头 80 帧。探头通过关节位置伺服运动，不覆盖 qpos 制造压入，不焊接探头／物体。位置 kp=3000 N/m、kv=5 N·s/m；旋转 kp=1 N·m/rad、kv=.02 N·m·s/rad 是公开的本地诊断装置参数，不是传感器材料标定。主变量为传感器光学后端，物理运动完全共享。
+
+每个形状目录包含：
+
+- `frames.npz`：`time_s`、`stage`、6 维 `qpos/qvel/ctrl`、探头世界位置／旋转；`tacto/` 与 `fots/` 下的原始 RGB、`indentation_m`、`camera_depth_m`、`baseline_depth_m`、`contact_mask`、`valid_mask`、`contact_geom_mask`、`normal_force_n`、渲染耗时；FOTS 另存原始标记位移和流图。
+- `metrics.csv`：逐帧力、最大压深、有效区接触比例、相对各自空载图的 RGB 变化及耗时。RGB 变化衡量响应大小，不是对实物的精度。
+- `comparison.mp4` 与阶段 PNG：左右并排显示原生输出，保留宽高比，共享深度显示范围。
+- 总目录 `report.json`：参数、源码版本、各阶段末三帧统计、geom／joint 名称和力差检查。
+
+数据用于验证和比较传感器接口，独立于 LeRobot 训练数据。`--demo` 另提供 Panda 物理夹取／抬升／释放测试。源码对照测试直接独立运行作者的 DIGIT 模型，逐像素比较 RGB、阴影、标记流；多姿态序列检查接触历史和释放恢复。
+
+## GelSight / 原生 MuJoCo 模型
+
+`--sensor gelsight` 使用 [rlamprell/GelSightMujoco](https://github.com/rlamprell/GelSightMujoco) 的 `gelsight_mountable0.xml` 和配套外壳、后盖、玻璃 STL；来源版本、SHA256 和许可证状态见 [manifest](../assets/reference/gelsight_mujoco/manifest.json)。源码／资产通过脚本单独下载，不复制进本仓库。该旧模型不能改称 GelSight Mini，也不与 FOTS 的 GelSight 硬件标定混用。
+
+原 body 内的前后盖、玻璃、半透明胶面、表层、隐形摩擦层和内部相机均保留。模块固定变换到原 Panda 指尖末端，原相机视场角 20°、几何尺寸、质量和每层接触参数保留；只适配名称、固定安装姿态与碰撞 bit。来源光学表层不会与其目标物体直接碰撞，接触反力来自更靠里的摩擦／玻璃层，胶面图像由内部相机生成；这是来源的层结构，不是本地停止闭合或补零。
+
+Panda 场景使用来源默认 Newton、100 次迭代、关闭额外 noslip；AnySkin 的 CG／30 次配置对这个硬接触模型不稳定，因此不沿用。夹爪仍为原位置伺服，没有新限力、最小开口、接触停闭或物体附着。原 `solimp` 中超出 MuJoCo 范围的值由引擎按照自身规则裁剪，并非有效弹性材料参数。
+
+光学执行原 `gelsight_driver.py`：形变平滑、四路光照、Phong 漫反射／高光、内部阴影、背景、纹理噪声均保留。`RobotArm__BaseEnv.py` 中的工厂参数直接读取，默认分辨率 160×120；不导入旧 Gym 控制环境。原 `mujoco_py` 读取的是 RGB 渲染后的 OpenGL 深度缓冲。本地用原生 `mjr_readPixels` 重现；现代 Renderer 的普通深度模式会把透明层当作不透明，因此不能直接替代这一读取路径。
+
+**单位区分：** `render_input_depth` 是来源使用的无量纲 `[0,1]` 缓冲；`render_deformation` 是原光学函数平滑后的同单位结果；`render_depth_unit=legacy_opengl_buffer`。`camera_depth_m`、`baseline_depth_m` 是根据真实近平面／远平面反投影后的米制深度；`indentation_m` 是两者之差，显示以 µm 标注。来源光学面与接触层相隔约 2 mm，因此图像深度可能接近 2 mm，即使刚性接触重叠很小；不能把它解读为已标定的硅胶弹性压缩。背景误差和浮点残差原样保存，不强行置零。
+
+`--ideal` 只关闭原纹理随机噪声，保留原背景。该方法没有 FOTS 的标记剪切／扭转模型，所以不虚构标记流输出。测试覆盖原光学函数逐像素一致、噪声所在环节、透明胶面按压／释放、Panda 夹取／抬升／释放；抬升同时检查双侧接触和有限位移，避免把弹飞误判为抓取成功。
+
+## MuJoCo 软体求解与光学传感器
+
+MuJoCo [可变形物体文档](https://mujoco.readthedocs.io/en/stable/modeling.html#deformable-objects)提供 `flex/flexcomp`：网格接触、有限元材料模型以及三线性／二次降阶表示。本项目 AnySkin 的降阶指腹使用这条物理路线。`solref/solimp` 的软接触约束与胶体网格 FEM 是不同层次；刚体可有数值穿入，并不代表模拟了胶体内部应力。
+
+TACTO、FOTS 和这里旧 GelSightMujoco 的光学变形／平滑不自动产生 FEM 材料反力。若要接软胶求解，应明确胶体网格、固定边界、材料参数，再把求解后的表面送给光学后端。当前保持各来源公开方法，不加入一套未经确认的材料模型来冒充作者实现。
 
 ## GelSight / FOTS 光学选项
 

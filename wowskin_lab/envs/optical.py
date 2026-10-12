@@ -1,8 +1,8 @@
 """Independent optical benches and Panda mounts, sharing the arm controller.
 
-Original standalone DIGIT STL or an explicitly local flat GelSight proxy, rigid
-MuJoCo contact and upstream optics. No flex/magnetic model is constructed; frames are not passed
-off as the existing ViSk AnySkin observations.
+Original DIGIT STL / GelSightMujoco CAD, or the legacy flat FOTS proxy;
+rigid contact and unchanged upstream optical algorithms. Frames are not
+passed off as the existing ViSk AnySkin observations.
 """
 from functools import lru_cache
 import json
@@ -17,6 +17,75 @@ from wowskin_lab.paths import ROOT
 from wowskin_lab.envs.franka import HOME
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, pick_scene, response_configuration
 from wowskin_lab.core.arm_control import configure_controller
+
+OPTICAL_SENSORS = ('tacto', 'digit_fots', 'digit_compare', 'fots', 'gelsight')
+
+
+def sensor_geometry(sensor):
+    if sensor == 'gelsight':
+        return source_gelsight_geometry()
+    return gelsight_geometry() if sensor == 'fots' else digit_geometry()
+
+
+def sensor_prefix(sensor):
+    return 'source_gelsight' if sensor == 'gelsight' else ('gelsight' if sensor == 'fots' else 'digit')
+
+
+def sensor_registration(sensor, names):
+    result = {}
+    for key, name in names.items():
+        if sensor == 'gelsight':
+            result[key] = (f'optical_{name}_camera', f'{name}_friction')
+        else:
+            result[key] = (f'{name}_{"surface" if sensor == "digit_fots" else "camera"}', f'{name}_gel')
+    return result
+
+
+def source_gelsight_geometry():
+    # Source housing y bounds: +/-18 mm. Its glass front is source z=34.001 mm.
+    # Rotate +source Z into the gap (-finger Y), and source Y down the finger.
+    return dict(proximal_z=0., gel_center_z=.018)
+
+
+def add_source_gelsight(asset, body, name, *, friction=.6):
+    """Import the full source module; only names, pose and collision bits adapt."""
+    import copy
+    from wowskin_lab.core.gelsight_mujoco import SOURCE
+    scene = ET.parse(SOURCE/'models/gripper_testbed_PickandPlace.xml').getroot()
+    for kind, names in (('mesh', ('gelsight_glass', 'front_cover', 'back_cover')),
+                        ('material', ('black_resin', 'gray_elastomer', 'transparent_glass'))):
+        for old_name in names:
+            new_name = f'source_gelsight_{old_name}'
+            if asset.find(f"{kind}[@name='{new_name}']") is None:
+                item = copy.deepcopy(scene.find(f"asset/{kind}[@name='{old_name}']"))
+                item.set('name', new_name)
+                if item.get('file'):
+                    item.set('file', str(SOURCE/'models/meshes'/item.get('file')))
+                asset.append(item)
+    original = ET.parse(SOURCE/'models/assets/gelsight_mountable0.xml').getroot().find('body')
+    module = copy.deepcopy(original)
+    module.set('name', name+'_module')
+    module.set('pos', '0 .034001 .018')
+    module.set('quat', '.7071067811865476 .7071067811865476 0 0')
+    for geom in module.findall('geom'):
+        geom.set('name', name+'_'+geom.get('name').split(':')[-1])
+        for attr in ('mesh', 'material'):
+            if geom.get(attr):
+                geom.set(attr, 'source_gelsight_'+geom.get(attr))
+        # Source bit 32 -> local sensor bit 2. As in the source target-object
+        # pair, the optical cover does not collide with task objects, but its
+        # affinity still allows contact with the opposite sensor hardware.
+        active = geom.get('contype') == '32'
+        geom.set('contype', '2' if active else '0')
+        geom.set('conaffinity', '7' if active else '2')
+    camera = module.find('camera')
+    camera.set('name', f'optical_{name}_camera')
+    body.append(module)
+
+
+def mount_optical(root, sensor, *, friction):
+    add = add_source_gelsight if sensor == 'gelsight' else (add_gelsight if sensor == 'fots' else add_digit)
+    mount_modules(root, sensor_prefix(sensor), add, sensor_geometry(sensor), friction=friction)
 
 
 @lru_cache(maxsize=1)
@@ -67,6 +136,9 @@ def add_digit(asset, body, name, *, friction=.6):
     ET.SubElement(body, 'site', name=f'{name}_camera',
                   pos=f'0 .022 {geometry["gel_center_z"]}',
                   quat='.7071067811865476 -.7071067811865476 0 0', size='.001', rgba='0 0 0 0')
+    ET.SubElement(body, 'site', name=f'{name}_surface',
+                  pos=f'0 0 {geometry["gel_center_z"]}',
+                  quat='.7071067811865476 .7071067811865476 0 0', size='.001', rgba='0 0 0 0')
 
 
 def mount_digits(root, *, friction):
@@ -147,8 +219,8 @@ class OpticalPandaEnv(PandaPickCubeTactileEnv):
         self.tcp_site, self.hand = self.model.site('tactile_tcp').id, self.model.body('hand').id
         self.probe_body = self.model.body('cube').id
         self.cube_q = self.model.jnt_qposadr[self.model.joint('cube_joint').id]
-        prefix = 'gelsight' if sensor == 'fots' else 'digit'
-        self.sensors = {side: (f'{prefix}_{side}_camera', f'{prefix}_{side}_gel') for side in ('left', 'right')}
+        prefix = sensor_prefix(sensor)
+        self.sensors = sensor_registration(sensor, {side: f'{prefix}_{side}' for side in ('left', 'right')})
         self.reset()
 
     def reset(self, seed=None):
@@ -177,10 +249,11 @@ class OpticalPandaEnv(PandaPickCubeTactileEnv):
 
 
 class OpticalBench:
-    def __init__(self, *, sensor='tacto'):
+    def __init__(self, *, sensor='tacto', probe_shape='sphere'):
         is_fots = sensor == 'fots'
-        name = 'gelsight' if is_fots else 'digit'
-        root = ET.Element('mujoco', model='WowSkin-Lab | standalone '+('GelSight / FOTS proxy' if is_fots else 'DIGIT / TACTO'))
+        name = sensor_prefix(sensor)
+        root = ET.Element('mujoco', model='WowSkin-Lab | standalone '+sensor)
+        ET.SubElement(root, 'compiler', angle='radian')
         ET.SubElement(root, 'option', timestep='.0005', integrator='implicitfast')
         visual = ET.SubElement(root, 'visual')
         ET.SubElement(visual, 'headlight', ambient='.7 .7 .7', diffuse='.2 .2 .2', specular='.1 .1 .1')
@@ -188,18 +261,26 @@ class OpticalBench:
         ET.SubElement(world, 'light', pos='0 -.3 .5')
         ET.SubElement(world, 'geom', type='plane', size='.3 .3 .01', rgba='.3 .35 .4 1')
         body = ET.SubElement(world, 'body', pos='0 0 .05', quat='.7071067811865476 -.7071067811865476 0 0')
-        (add_gelsight if is_fots else add_digit)(asset, body, name)
-        geometry = gelsight_geometry() if is_fots else digit_geometry()
+        add = add_source_gelsight if sensor == 'gelsight' else (add_gelsight if is_fots else add_digit)
+        add(asset, body, name)
+        geometry = sensor_geometry(sensor)
         probe = ET.SubElement(world, 'body', name='probe', pos=f'0 {geometry["gel_center_z"]} .065')
         for axis, vector in zip('xyz', ['1 0 0', '0 1 0', '0 0 1']):
             ET.SubElement(probe, 'joint', name=f'probe_{axis}', type='slide', axis=vector, damping='1')
-        ET.SubElement(probe, 'geom', name='probe', type='sphere', size='.005', mass='.02', rgba='.2 .6 .9 1')
+        for axis, vector in zip('xyz', ['1 0 0', '0 1 0', '0 0 1']):
+            ET.SubElement(probe, 'joint', name=f'probe_r{axis}', type='hinge', axis=vector, damping='.01')
+        sizes = dict(sphere='.005', box='.004 .005 .005', cylinder='.004 .005')
+        if probe_shape not in sizes:
+            raise ValueError(f'Unsupported probe shape: {probe_shape}')
+        ET.SubElement(probe, 'geom', name='probe', type=probe_shape, size=sizes[probe_shape], mass='.02', rgba='.2 .6 .9 1')
         actuator = ET.SubElement(root, 'actuator')
         for axis in 'xyz':
             ET.SubElement(actuator, 'position', joint=f'probe_{axis}', kp='3000', kv='5')
+        for axis in 'xyz':
+            ET.SubElement(actuator, 'position', joint=f'probe_r{axis}', kp='1', kv='.02')
         self.model = mujoco.MjModel.from_xml_string(ET.tostring(root, encoding='unicode'))
         self.data = mujoco.MjData(self.model)
-        self.sensors = {name.upper(): (f'{name}_camera', f'{name}_gel')}
+        self.sensors = sensor_registration(sensor, {name.upper(): name})
         self.reset()
 
     def reset(self):
@@ -207,7 +288,8 @@ class OpticalBench:
         mujoco.mj_forward(self.model, self.data)
 
     def step(self, velocity):
-        self.data.ctrl[:] += np.asarray(velocity)*.01
+        velocity = np.asarray(velocity)
+        self.data.ctrl[:len(velocity)] += velocity*.01
         for _ in range(20):
             mujoco.mj_step(self.model, self.data)
         mujoco.mj_forward(self.model, self.data)

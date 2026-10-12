@@ -14,6 +14,7 @@ assets/3dcal/upstream/*.pth
 third_party/franka_xbox/
 third_party/mujoco-tacto/
 third_party/FOTS/
+third_party/GelSightMujoco/
 third_party/visuoskin/
 third_party/feel-the-force/
 third_party/official/

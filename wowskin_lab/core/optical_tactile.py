@@ -26,6 +26,9 @@ class OpticalFrame:
     valid_mask: np.ndarray | None = None
     camera_depth_m: np.ndarray | None = None
     baseline_depth_m: np.ndarray | None = None
+    render_input_depth: np.ndarray | None = None
+    render_deformation: np.ndarray | None = None
+    render_depth_unit: str = 'metre'
 
 
 def contact_forces(model, data, gel):

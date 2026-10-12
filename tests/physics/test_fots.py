@@ -18,8 +18,14 @@ from tests.physics.test_optical_tactile import contact_scene
 
 class FOTSChecks(unittest.TestCase):
     def test_matches_original_optical_pipeline(self):
+        self.check_original_optical_pipeline('gelsight')
+
+    def test_digit_matches_original_optical_pipeline(self):
+        self.check_original_optical_pipeline('digit')
+
+    def check_original_optical_pipeline(self, hardware):
         seed_function = torch.seed
-        renderer = FOTSRenderer()
+        renderer = FOTSRenderer(hardware)
         self.assertIs(torch.seed, seed_function)
         rows, cols = np.mgrid[:320, :240]
         depth = np.maximum(0., .0006-((rows-160)**2+(cols-120)**2)*1e-7)
@@ -43,13 +49,22 @@ spec.loader.exec_module(module)
 # Checkpoint was saved on CUDA; device relocation leaves weights unchanged.
 torch.load = functools.partial(torch.load, map_location='cpu', weights_only=True)
 from tactile_render import get_simapproach
-from utils.marker_motion import MarkerMotion
 import params as pr
+if os.environ['FOTS_HARDWARE'] == 'digit':
+    pr.sensor_type = 'digit'
+    pr.N, pr.M, pr.x0, pr.y0, pr.dx, pr.dy = 9, 8, 40, 27, 27, 27
+from utils.marker_motion import MarkerMotion
 np.mat = np.asmatrix  # NumPy 2 compatibility for the untouched shadow module.
 p = os.environ['FOTS_TEST_DIR']
 d = np.load(p+'/depth.npy')
 with torch.inference_mode():
     renderer = get_simapproach()
+    if pr.sensor_type == 'digit':
+        from utils.fots_render import FOTSRender
+        model = module.MLP().cpu().eval()
+        model.load_state_dict(torch.load('mlp_calib/models/mlp_n2c_digit.pth'))
+        renderer = FOTSRender(background_img=np.load('assets/gel/digit_bg.npy'),
+            bg_render=np.load('utils/utils_data/ini_bg_fots_digit.npy'), model=model)
     image = renderer.generate(d*1000*pr.mm_to_pixel, d>0, shadow=False)
     shadow = renderer.generate(d*1000*pr.mm_to_pixel, d>0, shadow=True)
 marker = MarkerMotion(frame0_blur=image, depth=d*1000, mask=d>0,
@@ -59,7 +74,8 @@ np.save(p+'/shadow.npy', shadow[..., ::-1])
 np.save(p+'/marker.npy', marker._marker_motion()[..., ::-1])
 '''
             subprocess.run([sys.executable, '-c', source], cwd=FOTS_ROOT,
-                           env=dict(os.environ, FOTS_TEST_DIR=directory, PYTHONDONTWRITEBYTECODE='1'), check=True)
+                           env=dict(os.environ, FOTS_TEST_DIR=directory, FOTS_HARDWARE=hardware,
+                                    PYTHONDONTWRITEBYTECODE='1'), check=True)
             np.testing.assert_array_equal(actual, np.load(Path(directory)/'rgb.npy'))
             np.testing.assert_array_equal(shadow_actual, np.load(Path(directory)/'shadow.npy'))
             np.testing.assert_array_equal(marker_actual, np.load(Path(directory)/'marker.npy'))

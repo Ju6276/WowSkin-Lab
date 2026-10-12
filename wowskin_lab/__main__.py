@@ -39,9 +39,10 @@ def main(argv=None):
     rest = argv[1:]
     if command in ('sensor', 'teleop'):
         sensor_parser = argparse.ArgumentParser(add_help=False)
-        sensor_parser.add_argument('--sensor', choices=('anyskin', 'tacto', 'fots'), default='anyskin')
+        from .envs.optical import OPTICAL_SENSORS
+        sensor_parser.add_argument('--sensor', choices=('anyskin', *OPTICAL_SENSORS), default='anyskin')
         sensor_args, rest = sensor_parser.parse_known_args(rest)
-        if sensor_args.sensor in ('tacto', 'fots'):
+        if sensor_args.sensor in OPTICAL_SENSORS:
             from .tools.optical_sensor import main as optical
             return optical(rest, mounted=command == 'teleop', sensor=sensor_args.sensor)
     if command == 'dataset-export':

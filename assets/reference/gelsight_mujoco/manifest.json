@@ -1,0 +1,16 @@
+{
+  "source": "https://github.com/rlamprell/GelSightMujoco",
+  "revision": "a060b0ec384b189e39d9576df753d381857bcc56",
+  "license_note": "No license file at pinned revision. Fetch source/assets separately; none redistributed in this project.",
+  "files": {
+    "Test_bed/envs/RobotArm__BaseEnv.py": "f539955bfeb4bf4ba67f657759c408ef44e2a28a43a99b5fd38a6141da4b7b52",
+    "Test_bed/envs/utils/gelsight_driver.py": "fee8990bec5cc3c4aa45b1550a29ff5c824c25a7825376404f125b79eb855cf0",
+    "Test_bed/envs/models/gripper_testbed_PickandPlace.xml": "5666e4a6dc264737e3c3629391972c7613ac26965f800c81b940e74f8751143e",
+    "Test_bed/envs/models/assets/gelsight_mountable0.xml": "ab54840f03f63e0c7cbd7269d9a0b7455b2f606c858c79245f87377b02c9e953",
+    "Test_bed/envs/models/assets/background.png": "01b913e484fd9934ef99e31acb739640e6faa6c75e843d507287e784acbb6f72",
+    "Test_bed/envs/models/meshes/glass.stl": "dc5edb10df352dd7ec4297ee8a57e2c4cfdfa76f675622198eddf5acfec101ed",
+    "Test_bed/envs/models/meshes/mountable_gelsight.stl": "5b156674667668ca27ee2c2e7c461311ff9a8a159a4ad6570781ef74d6b438e2",
+    "Test_bed/envs/models/meshes/back_cover.stl": "48c1b60ef2737c37c453af9c24db249c34011fe3046d7780c0974954648fb7e5"
+  },
+  "local_adapter": "Append original module to stock Panda tip with a rigid pose transform and names/collision-bit mapping. Original geometry, masses, source contact settings and optical factory constants preserved. Native MuJoCo RGB-pass depth readback replaces mujoco_py; raw OpenGL buffer feeds untouched Phong driver. Metre depth reported separately. Original Newton/100/no-noslip retained for this hardware. No material FEM or hardware calibration claim."
+}

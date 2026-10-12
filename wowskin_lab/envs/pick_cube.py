@@ -71,10 +71,10 @@ def pick_scene(cfg, layout):
     # the shared pair of fixed tabletop cameras requested for this project.
     for parent in root.iter():
         for child in list(parent):
-            if child.tag == "camera":
+            if child.tag == "camera" and not child.get('name', '').startswith('optical_'):
                 parent.remove(child)
-    optical = cfg.get('sensor') in ('tacto', 'fots')
-    optical_label = 'dual GelSight / FOTS proxy' if cfg.get('sensor') == 'fots' else 'dual DIGIT / TACTO'
+    optical = cfg.get('sensor') in ('tacto', 'digit_fots', 'digit_compare', 'fots', 'gelsight')
+    optical_label = 'dual optical: '+str(cfg.get('sensor'))
     root.set("model", "WowSkin-Lab | PandaPickCube: " + (optical_label if optical else "WowSkin + plain silicone"))
     # Broad box/flex contacts create hundreds of constraints. CG avoids the
     # costly Newton factorization while preserving the same contact geometry.
@@ -84,6 +84,15 @@ def pick_scene(cfg, layout):
     option.set("iterations", "30")
     option.set("tolerance", "1e-8")
     option.set("noslip_iterations", "1")
+    if cfg.get('sensor') == 'gelsight':
+        # Restore this sensor source's Newton/100 solve. The AnySkin CG/30
+        # optimization fails to converge for its hard overlapping contacts.
+        # No contact is removed and no closure/force cap is introduced.
+        from wowskin_lab.core.gelsight_mujoco import SOURCE
+        source_option = ET.parse(SOURCE/'models/gripper_testbed_PickandPlace.xml').getroot().find('option')
+        option.set('solver', source_option.get('solver', 'Newton'))
+        option.set('iterations', source_option.get('iterations', '100'))
+        option.set('noslip_iterations', source_option.get('noslip_iterations', '0'))
     if cfg.get('skin_dof') == 'trilinear':
         # Required by MuJoCo 3.15's implicit flex elasticity integration.
         option.set('integrator', 'discrete')
@@ -112,9 +121,9 @@ def pick_scene(cfg, layout):
     # New TCP follows the shifted pads, not the upstream stock fingertips.
     hand = root.find(".//body[@name='hand']")
     if optical:
-        from .optical import digit_geometry, gelsight_geometry
-        geometry = gelsight_geometry() if cfg['sensor'] == 'fots' else digit_geometry()
-        prefix = 'gelsight' if cfg['sensor'] == 'fots' else 'digit'
+        from .optical import sensor_geometry, sensor_prefix
+        geometry = sensor_geometry(cfg['sensor'])
+        prefix = sensor_prefix(cfg['sensor'])
         mount = root.find(f".//body[@name='{prefix}_left_mount']")
         z = .0584+float(mount.get('pos').split()[2])+geometry['gel_center_z']
     else:

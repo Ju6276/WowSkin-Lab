@@ -83,40 +83,47 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 ## 可选视触觉传感器
 
-通过 `--sensor` 选择：
+DIGIT、GelSight 是硬件；TACTO、FOTS 是触觉生成算法。**保留 Panda 原手指，将完整传感器模块附加到指尖末端**，感应面朝夹持区；不替换原手指、不添加闭合空隙或夹持附着。
 
-- `anyskin`：默认，原有磁场传感器和采集流程。
-- `tacto`：使用 [mujoco-tacto](https://github.com/utn-air/mujoco-tacto) 的独立 DIGIT STL 和 TACTO 几何／灯光渲染。
-- `fots`：使用 [FOTS 主分支](https://github.com/Rancho-zhao/FOTS) 的 GelSight 预训练光学模型、背景与像素标定。安装外形是明确标注的矩形几何代理，不是官方 GelSight CAD。
-
-**名称分两层：DIGIT、GelSight 是传感器硬件；TACTO、FOTS 是仿真算法。** FOTS 作者的 MuJoCo 示例实际使用 DIGIT，因此 DIGIT 也可以配 FOTS。当前两个选项同时改变了硬件几何／标定和光学算法，不能当作“同一个传感器上只比较两种算法”的实验。算法差别和来源见[模型说明](docs/MODEL_CALIBRATION_ZH.md#传感器硬件与光学算法)。
-
-两种模块均**安装在原 Panda 指尖末端并向下延伸**；保留原手指外观、碰撞与关节行程，感应面朝向夹持区，TCP 随模块中心更新。DIGIT 是约 34 mm 的独立传感器，不使用带长柄的替代手指。GelSight 外壳仍为本地代理，安装件和惯量尚未实物校验。
-
-输出每指 240×320 RGB、米制光学深度和接触区域；FOTS 还输出 9×11 个标记点的二维像素位移与流图。**目前支持独立按压台和 Panda 方块；尚未接入数据集录制、ViSk、其他任务／夹爪或 Pico。** 不支持的参数会报错，不会静默切回 AnySkin。
+- `tacto`：DIGIT 独立 CAD＋原 TACTO 相机、灯光、背景校正、噪声、力相关光学位移、RGB／深度。
+- `digit_fots`：同一 DIGIT CAD＋FOTS 的 **DIGIT 专用**权重、背景和标记网格；原平滑、阴影、膨胀／剪切／扭转模型均执行。
+- `digit_compare`：**同一个 MuJoCo 状态同时运行以上两种算法**，并排显示和保存。两者保留各自的投影与深度生成方式，不做增益对齐；区别见[模型说明](docs/MODEL_CALIBRATION_ZH.md#digit-双算法比较)。
+- `gelsight`：移植 [GelSightMujoco](https://github.com/rlamprell/GelSightMujoco) 的完整外壳／玻璃／胶面／接触层／内部相机，执行原 Phong 光学、平滑、阴影及纹理噪声。不是此前的矩形代理，也不冒称 GelSight Mini。
+- `fots`：保留的旧 **GelSight 标定＋平面代理**选项，便于已有命令兼容；不是 `digit_fots` 或 `gelsight` 的别名。
+- `anyskin`：默认磁场传感器，原采集与策略流程不变。
 
 ```bash
-# 可选安装，仍用同一个 .venv
-.venv/bin/python scripts/setup_upstream.py --only tacto fots
+# 可选安装到同一个 .venv；上游源码／权重／CAD 单独下载
+.venv/bin/python scripts/setup_upstream.py --only tacto fots gelsight_mujoco
 .venv/bin/python -m pip install -r requirements/tacto.txt
 .venv/bin/python -m pip install --no-deps -e third_party/mujoco-tacto
 
-# 独立按压台：Q 下降按压，E 抬起；W/S、A/D 平移探针；R 复位
-.venv/bin/mjpython -m wowskin_lab sensor --sensor tacto --ideal
-# Panda 双指 DIGIT：沿用原键盘操作；也可 --input spacemouse
-.venv/bin/mjpython -m wowskin_lab teleop --sensor tacto --task pick_cube --input keyboard --ideal
-# GelSight / FOTS：独立按压台与 Panda 双指
-.venv/bin/mjpython -m wowskin_lab sensor --sensor fots
-.venv/bin/mjpython -m wowskin_lab teleop --sensor fots --task pick_cube --input keyboard
-# 无窗口接触/卸载及抬升回归
-.venv/bin/python -m unittest tests.physics.test_optical_tactile tests.physics.test_fots
+# DIGIT 双算法独立台：可选 sphere / box / cylinder 探头
+.venv/bin/mjpython -m wowskin_lab sensor --sensor digit_compare --probe-shape box --ideal
+# Panda 双指实时比较；也可 --input spacemouse
+.venv/bin/mjpython -m wowskin_lab teleop --sensor digit_compare --task pick_cube --input keyboard --ideal
+# 单独算法：将 digit_compare 改为 tacto 或 digit_fots
+
+# 真正独立的 GelSight MuJoCo 模型
+.venv/bin/mjpython -m wowskin_lab sensor --sensor gelsight --ideal
+.venv/bin/mjpython -m wowskin_lab teleop --sensor gelsight --task pick_cube --input keyboard --ideal
+
+# 同轨迹／同物理状态的数据比较：三种探头，按压、滑动、扭转、倾斜、释放与再次接触
+.venv/bin/mjpython -m wowskin_lab sensor --sensor digit_compare --ideal --compare-data --output outputs/diagnostics/digit_compare
+# 方块抓取／抬升／释放，保存两指的全部光学输出
+.venv/bin/mjpython -m wowskin_lab teleop --sensor digit_compare --task pick_cube --ideal --demo --output outputs/diagnostics/digit_cube
+
+# 独立执行原作者函数的数值对照及接触回归
+.venv/bin/python -m unittest tests.physics.test_optical_tactile tests.physics.test_fots tests.physics.test_optical_backends
 ```
 
-右侧显示 RGB／深度，FOTS 另有标记流。按 **M** 在深度与接触区域之间切换。深度默认使用两指共享的自动灰度范围，标明 µm 和当前范围；`--depth-display-max-mm 5` 可固定为 0–5 mm。只调整显示对比度，原始浮点深度不放大、不改写。DIGIT 胶面外的无效像素显示蓝灰色，另存 `valid_mask` 及原始／空载相机深度，不把无效像素当成触觉。诊断 `--demo --output <目录>` 保存全部原始输出的 NPZ 和预览图；不是训练录制。
+独立台：**Q/E** 下压／抬起，**W/S、A/D** 平移，**I/K、L/J、U/O** 倾斜／扭转，**R** 复位，**P** 退出。Panda 沿用原键盘操作，**X/Z** 闭合／打开。右侧 RGB／深度／FOTS 标记流保持原图宽高比；**M** 切换深度／接触区。深度灰度范围自动共享并标注 µm；`--depth-display-max-mm 5` 可固定范围。只改变显示，不改原始数值。
 
-TACTO 默认使用作者示例的空载背景和背景校正，叠加原高斯 RGB 噪声。`--ideal` 只关闭随机噪声，背景纹理仍保留；`--tacto-background <图片>` 可指定自己的空载图，`--no-tacto-background` 可对照纯光学渲染。相机、灯光、阴影、噪声和力近似配置可通过 `--tacto-config <DIGIT YAML>` 指定，默认读取固定上游配置。FOTS 背景来自作者标定图，不额外添加随机噪声；默认启用作者平面阴影，`--no-fots-shadow` 可对照。FOTS 的 RGB、阴影、标记图以及 TACTO 默认 RGB／深度／背景处理均有直接执行作者代码的对照测试。
+DIGIT 每指输出 RGB `320×240×3`、深度和有效区 `320×240`；DIGIT FOTS 另有 `8×9×2` 标记像素位移和流图。GelSight 原图是 `120×160×3`，同时保存米制相机深度与原算法使用的 **OpenGL 缓冲值**，两者单位不同。诊断 `--demo` 保存 NPZ／PNG；`--compare-data` 每种探头保存 80 帧 NPZ、逐帧 CSV、MP4 与报告。详见[字段与比较方法](docs/MODEL_CALIBRATION_ZH.md#digit-双算法比较)。
 
-**传感器验收按功能链进行，不要求复现论文任务实验。** TACTO 的几何、光照、背景、噪声、力相关位移和 RGB／深度；FOTS 的标定 MLP、平滑、阴影、接触区域、标记膨胀／剪切／扭转，均在运行路径中。MuJoCo 负责物理碰撞，原算法不提供精确胶体 FEM；当前 FOTS 深度是几何重叠而非已标定的硅胶压缩量，GelSight 外壳仍为上述安装代理。这些模型差异与未完成的任务／录制接入分别列在 [TACTO](docs/MODEL_CALIBRATION_ZH.md#digit--tacto-光学选项)、[FOTS](docs/MODEL_CALIBRATION_ZH.md#gelsight--fots-光学选项)和 [TODO](TODO.md#独立视触觉选项digit--tactogelsight--fots)。
+`--ideal` 关闭 TACTO 的随机 RGB 噪声或 GelSight 的纹理噪声；真实背景本身的纹理仍保留。FOTS 不额外加入随机噪声。`--no-fots-shadow` 可关闭原平面阴影；TACTO 支持 `--tacto-config`、`--tacto-background` 和 `--no-tacto-background`。不人为放大输出，不用目标物体白名单过滤触觉。
+
+**本次 sensor 功能范围：独立台、Panda 方块、原算法光学功能和原始输出比较。** 不是只绘制示意图；源码对照测试检查原始 RGB、深度或标记值。光学图像尚未接入 LeRobot／ViSk，也未接其他任务、Robotiq 或 Pico；这些是单独的应用工作。原算法的刚性接触／光学形变近似不等于材料 FEM；MuJoCo 支持软体，但本次没有用未标定的胶体力学冒充作者模型。安装件和硬件标定状态见[模型说明](docs/MODEL_CALIBRATION_ZH.md#传感器硬件与光学算法)及 [TODO](TODO.md)。
 
 ## 脆性薯片试验
 
