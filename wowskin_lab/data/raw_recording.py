@@ -89,6 +89,7 @@ class RawRobotRecorder:
             color_order='BGR in OpenCV video', pose='robot-base xyz metres + rotvec radians; tactile_tcp',
             gripper='measured closure fraction: 0 open, 1 closed',
             gripper_action='commanded_gripper is the actual absolute closure target (0 open, 1 closed); never substitute gripper_states',
+            gripper_request='requested_gripper is the pre-contact-stop 7D action closure; finger_contact_stop_active marks a held command, not sensor saturation',
             state_action_contract='State is measured feedback; action is a controller command. Contact can keep measured closure below the commanded closure.',
             control='base dxyz metres + local TCP drotvec radians + closure target 0..1',
             control_world='command_7d_world retains the controller world dxyz + local TCP drotvec + closure',
@@ -154,6 +155,9 @@ class RawRobotRecorder:
             self._append(key, value)
         self._append('gripper_states', e.gripper_fraction())
         self._append('commanded_gripper', e.gripper_fraction(target=True))
+        self._append('requested_gripper', e.gripper_fraction(target=True) if row is None
+                     else row.get('requested_gripper_closed_fraction', row['action'][6]))
+        self._append('finger_contact_stop_active', e.finger_contact_stop.active)
         if hasattr(e, 'gripper_feedback_sample'):
             for key, value in e.gripper_feedback_sample().items():
                 self._append('gripper_force_feedback/'+key, value)

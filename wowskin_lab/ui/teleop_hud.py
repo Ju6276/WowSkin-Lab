@@ -140,6 +140,13 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
     if getattr(env, 'keyboard_workspace_limited', False):
         labels += ['Target boundary']
         values += ['STOP: local workspace boundary | H shows bounds']
+    if env.cfg.get('finger_contact_stop', False):
+        labels += ['Finger contact']
+        values += [('HOLD: pads touched | Z opens / releases' if row.get('finger_contact_stop_active')
+                    else 'Contact stop ON (local option)')]
+    if env.cfg.get('pad_backing_contact', False):
+        labels += ['Pad backing']
+        values += ['Contact ON | experimental, slower']
     if env.cfg.get('disable_cartesian_limits', False):
         labels += ['Control']
         values += ['Cartesian limits OFF | centered input retains target']

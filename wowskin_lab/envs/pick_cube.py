@@ -101,7 +101,10 @@ def pick_scene(cfg, layout):
     for name in ("standard_shell", "silicone_backing"):
         shell = root.find(f".//geom[@name='{name}']")
         shell.set("contype", "1")
-        shell.set("conaffinity", "5")
+        # Skin contype=2/conaffinity=6: the former 1/5 shell masks excluded
+        # BOTH own and opposite silicone. Reduced bottom-node pins alone do
+        # not keep the cap out of its rigid backing during compression.
+        shell.set("conaffinity", "7" if cfg.get('pad_backing_contact', False) else "5")
     # New TCP follows the shifted pads, not the upstream stock fingertips.
     hand = root.find(".//body[@name='hand']")
     z = .0584+mount_reference(cfg)["position_m"][2]
@@ -222,6 +225,8 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
             from wowskin_lab.baselines.pollen import PollenPredictor
             self.predictor = PollenPredictor()
         self.reskin_response = None
+        from wowskin_lab.core.finger_contact import FingerContactStop
+        self.finger_contact_stop = FingerContactStop()
         self.reset()
         if cfg.get('reskin_model'):
             from wowskin_lab.baselines.reskin_contact import ReskinContactResponse
@@ -248,6 +253,7 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         self.target_rotation = self.data.xmat[self.hand].reshape(3, 3).copy()
         self.servo_rotation = self.target_rotation.copy()
         self.grip_target = 0.
+        self.finger_contact_stop.reset()
         self.grip_force = self.cfg.get('gripper_force_per_finger_n', float('nan'))
         self.tug_until = 0.
         self.mouse_wrench = np.zeros(6)
@@ -354,6 +360,11 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         torque = arm_torque(self)
         limits = m.actuator_ctrlrange[self.arm_controls]
         d.ctrl[self.arm_controls] = np.clip(torque, limits[:, 0], limits[:, 1])
+        if self.cfg.get('finger_contact_stop', False):
+            from wowskin_lab.core.finger_contact import pads_touch
+            closure = self.finger_contact_stop.apply(
+                self.gripper_fraction(target=True), self.gripper_fraction(), pads_touch(self))
+            self.grip_target = closure*self.gripper_closed_target()
         if self.cfg.get('gripper') == 'robotiq_2f85':
             d.ctrl[self.gripper_control] = self.grip_target
         elif self.cfg.get('gripper_control_mode') in ('panda_menagerie_position', 'panda_robosuite_position', 'ebim_robotiq_position'):
@@ -404,7 +415,11 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
             row['tactile_valid'] = bool(np.isfinite(row['magnetic_ut']).all())
             if not row['tactile_valid']:
                 row['tactile_status'] = row.get('reskin_status', 'network observation unavailable')
+        row['requested_gripper_closed_fraction'] = float(applied[6])
+        if self.cfg.get('finger_contact_stop', False):
+            applied[6] = self.gripper_fraction(target=True)
         row["action"] = applied
+        row['finger_contact_stop_active'] = self.finger_contact_stop.active
         row["action_time_s"] = action_time
         row["tcp_pose_before_m_rad"] = before_pose
         row["tcp_rotvec_rad"] = rotation_vector(self.data.site_xmat[self.tcp_site])
@@ -601,6 +616,12 @@ def scripted_action(env):
 
 def response_configuration(args):
     cfg = configuration(seed=getattr(args, 'seed', 0))
+    if getattr(args, 'pad_backing_contact', False):
+        cfg['pad_backing_contact'] = True
+    # Explicit operational option, not a repair of the deformation model.
+    # Old configs without this key retain their original actuator behavior.
+    if getattr(args, 'finger_contact_stop', False):
+        cfg['finger_contact_stop'] = True
     cfg['disable_cartesian_limits'] = bool(getattr(args, 'no_cartesian_limits', False))
     cfg['disable_workspace_limits'] = not bool(getattr(args, 'workspace_limits', False))
     if getattr(args, 'no_workspace_limits', False):
@@ -801,6 +822,8 @@ def viewer(args):
     if chip_task:
         print(f"Chip force feedback: X/SpaceMouse left enables {env.force_grip.selected_target_n:g} N; Z/right opens; -/= adjusts by 0.01 N; C keeps force loop active. Feedback is MuJoCo pad force, not magnetic uT.", flush=True)
     print('Arm controller: '+env.cfg.get('arm_controller', 'ik_pd'), flush=True)
+    print('Finger-to-finger contact stop: '+('ON (open to release)' if env.cfg.get('finger_contact_stop') else 'OFF'), flush=True)
+    print('Pad backing contacts: '+('ON (experimental; extra contact cost)' if env.cfg.get('pad_backing_contact') else 'OFF (legacy model; strong compression remains unresolved)'), flush=True)
     if cfg['disable_cartesian_limits']:
         print('Cartesian limits OFF: no workspace, action increment, servo slew or target-lead limits. '
               'Centered input retains the target; focus loss still cancels outstanding motion. '
@@ -1182,6 +1205,10 @@ def main():
     parser.add_argument('--ideal', action='store_true', help='Disable synthetic magnetic noise, drift, readout filtering and sample delay; retain contact mechanics and deformation response')
     parser.add_argument('--physics-step-us', type=int, choices=[20, 50, 100, 500, 1000], help='Integration step in microseconds; 500/1000 require reduced skin; recorded in metadata')
     parser.add_argument('--gripper', choices=['panda', 'robotiq_2f85'], default='panda', help='Panda or EBiM Robotiq 2F-85 with local tactile mounts')
+    parser.add_argument('--finger-contact-stop', action=argparse.BooleanOptionalAction, default=False,
+                        help='Hold closure target at measured pad-to-pad contact; open to release. Local controller option, recorded in metadata; not a width or magnetic-signal cap.')
+    parser.add_argument('--pad-backing-contact', action=argparse.BooleanOptionalAction, default=False,
+                        help='Experimental silicone-to-rigid-backing collision correction; slower, does not yet resolve strong thin-cable grasps. Recorded separately from the legacy model.')
     parser.add_argument('--skin-dof', choices=['full', 'trilinear'], default='trilinear', help='Reduced skin for all tasks (MuJoCo 3.15); full keeps the reference FEM')
     parser.add_argument('--keyboard-speed', type=float, help='Translation speed in m/s of simulation time; cable .12, cube .04; maximum .25')
     parser.add_argument('--spacemouse-speed', type=float, default=.12, help='Maximum translation m/s of simulation time')

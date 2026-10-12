@@ -24,6 +24,30 @@ from wowskin_lab.paths import ROOT
 @unittest.skipUnless(mujoco.__version__ == '3.15.0' and importlib.util.find_spec('lerobot'),
                      'Requires .venv and scripts/setup_capture.py')
 class LeRobotRecordingChecks(unittest.TestCase):
+    def test_contact_stop_records_request_and_applied_target_separately(self):
+        # Synthetic outcome label for format verification, not a cube success.
+        cfg = response_configuration(SimpleNamespace(task='pick_cube', ideal=True,
+            finger_contact_stop=True, pad_backing_contact=True,
+            magnetic_fit=ROOT/'configs/magnetic_fit_pollen_nonslip.json'))
+        env = PandaPickCubeTactileEnv(cfg, pollen=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            with LeRobotSimRecorder(env, tmp, source='format_contract_test_not_task_evaluation',
+                                    record_depth=False) as recorder:
+                recorder.start()
+                for _ in range(100):
+                    recorder.step(env.step([0, 0, 0, 0, 0, 0, 1])[-1])
+                path = recorder.finish('success')
+            with h5py.File(path/'measurements.h5') as f:
+                held = f['finger_contact_stop_active'][:].astype(bool) & (f['phase'][:] == 1)
+                self.assertTrue(held.any())
+                np.testing.assert_array_equal(f['requested_gripper'][:][held], 1.)
+                self.assertTrue(np.all(f['commanded_gripper'][:][held] < 1.))
+                np.testing.assert_allclose(f['command_7d'][:][held, -1], f['commanded_gripper'][:][held])
+                ds = upstream()('local/wowskin-lab', root=Path(tmp)/'pick_cube/lerobot', video_backend='pyav')
+                for row in ds.hf_dataset.with_format('numpy'):
+                    i = int(row['aux.raw_sample_index'])
+                    self.assertAlmostEqual(float(row['action'][-1]), float(f['commanded_gripper'][i+1]), places=6)
+
     def test_failed_final_verification_keeps_originals_and_blocks_append(self):
         cfg = response_configuration(SimpleNamespace(task='pick_cube', skin_dof='trilinear', ideal=True,
             magnetic_fit=ROOT/'configs/magnetic_fit_pollen_nonslip.json'))

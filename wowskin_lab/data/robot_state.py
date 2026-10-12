@@ -77,6 +77,9 @@ def robot_metadata(env):
     cartesian = env.cfg.get('arm_controller') == 'cartesian_impedance'
     control = dict(source='Simulation control and local input shaping; source and gains recorded separately',
         arm_controller=env.cfg.get('arm_controller', 'ik_pd'),
+        finger_contact_stop=bool(env.cfg.get('finger_contact_stop', False)),
+        pad_backing_contact=bool(env.cfg.get('pad_backing_contact', False)),
+        finger_contact_stop_rule='Local pad-to-pad contact closure hold; measured opening at contact onset; opening releases; no object contact stop',
         arm_control_source=env.cfg.get('arm_control_source'),
         cartesian_impedance=env.cfg.get('cartesian_impedance') if cartesian else None,
         teleop_frame=env.cfg.get('teleop_frame', 'legacy_unspecified'),
