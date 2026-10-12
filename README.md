@@ -32,6 +32,8 @@ python3.12 scripts/setup_capture.py
 
 启动后先测试操作，**不会自动录制**。SpaceMouse 左侧键闭合、右侧键张开；键盘 W/S 前后、A/D 左右、E/Q 上下，I/K、L/J、U/O 旋转，X/Z 闭合／张开、C 保持。点击仿真窗口后操作。
 
+三种输入默认使用固定机器人基座方向，转动观察视角不改变输入映射：W/S 对应基座 ±X，A/D 对应 −Y/+Y，E/Q 对应 ±Z。键盘旋转键仍绕 TCP 局部轴。**本地桌面工作空间盒子默认关闭**；速度、目标领先量、输入死区与底层控制参数仍保留，详见[控制说明](docs/MODEL_CALIBRATION_ZH.md#生效的控制与质量检查)。`--control-frame view` 和 `--workspace-limits` 分别显式恢复旧视角映射与旧边界。新旧控制配置请使用不同录制目录。
+
 1. **B**：复位，看到红色 `REC capture_…` 后开始操作。
 2. 完成任务，左上角绿色 **SUCCESS** 提示自动达标。
 3. **Enter**：结束并标记成功，等待 `SAVING → VERIFYING → SAVED`。
@@ -42,8 +44,10 @@ python3.12 scripts/setup_capture.py
 ## 其他任务与输入
 
 ```bash
-# 原绕线布局；简单插扣追加 --cable-layout single_clip
-.venv/bin/mjpython -m wowskin_lab teleop --task cable --input spacemouse --ideal
+# 双连接座长线＋两柱绕线；约 0.756 m、48 段，两端固定
+.venv/bin/mjpython -m wowskin_lab teleop --task cable --cable-layout routing --input spacemouse --ideal --record-dir data/episodes_routing_v1
+# 单卡扣，上下唇弹性、底座固定；Robotiq + 可选笛卡尔阻抗（强闭合存在下述已知问题）
+.venv/bin/mjpython -m wowskin_lab teleop --task cable --cable-layout single_clip --clip-model elastic_beam --gripper robotiq_2f85 --arm-controller cartesian_impedance --input keyboard --ideal --record-dir data/episodes_elastic_robotiq
 # SERL++ Peg 素材：启动已物理夹持，插入孔座
 .venv/bin/mjpython -m wowskin_lab teleop --task peg_insert --input spacemouse --ideal
 # Panda 喂食：初始化已夹勺，并放好六颗豆子
@@ -54,7 +58,20 @@ python3.12 scripts/setup_capture.py
 .venv/bin/mjpython -m wowskin_lab teleop --task pick_cube --input pico --ideal --record-dir data/episodes_pico
 ```
 
-线材当前使用 `local_cable_clip_v2`：透明框覆盖卡扣内部通道，碰撞代理对齐原网格。旧版记录使用独立目录保存；新采集可用 `--record-dir data/episodes_clip_v2`。Peg 使用原始 SERL++ 网格与凸分解，依靠接触夹持，不引入上游的 peg 焊接约束；本地抓法、评分与控制差异见采集手册。
+`single_clip` 仍为 0.38 m、24 段、首端固定，按 `local_cable_clip_v2` 检查入槽。`routing` 为独立双端连接布局，按顺序绕过两个柱的指定侧面评分；卡扣入槽不替代绕柱成功。两者的透明引导框只显示在操作窗口。历史记录保持原定义，新版使用新录制目录。[布局和评分说明](docs/COLLECTION_ZH.md)。
+
+Cube、线材、喂食、Peg 均可加 `--gripper robotiq_2f85`，默认 Panda；两种夹爪都保留连续反馈与连续指令。Peg 使用原始 SERL++ 网格与凸分解，依靠接触夹持，不引入上游的 peg 焊接约束；本地抓法、评分与控制差异见采集手册。
+
+**Robotiq 强闭合仍有已知问题**：薄线夹持或空夹时，完整 0.8 rad 指令可能压翻新增软指腹，中止该次无效采集。没有截短行程来规避；`tests.physics.test_robotiq` 保留失败复现。Robotiq 喂食的初始化夹持与完成录制是另一种负载条件，不能据此认为所有任务已稳定。
+
+机械臂默认仍为 IK＋关节 PD。可选笛卡尔阻抗和实验弹性卡扣分别启用，不会自动替换：
+
+```bash
+.venv/bin/mjpython -m wowskin_lab teleop --task cable --cable-layout single_clip --input keyboard --arm-controller cartesian_impedance --ideal --record-dir data/episodes_cartesian_base
+# 弹性卡扣试验：在上述命令加 --clip-model elastic_beam，并另选录制目录
+```
+
+笛卡尔阻抗使用固定版 SERL++ 控制函数，reset 仍通过原关节 PD 建立初始夹持。弹性卡扣的上下唇均可弯曲，安装底座固定；这是本地平面离散梁近似，材料与插拔力未标定。默认卡扣仍为刚体；两种线材布局均支持显式选择弹性版。实验范围见[模型说明](docs/MODEL_CALIBRATION_ZH.md#卡扣的物理范围)。
 
 Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松开右握键一次后，按住跟随。完整按键、成功条件和故障处理见 [采集手册](docs/COLLECTION_ZH.md)。Robotiq 强夹持、线材压扣仍可能出现软指腹网格失效，不承诺任意接触稳定。
 

@@ -10,9 +10,10 @@ from wowskin_lab.paths import ROOT
 class CableChecks(unittest.TestCase):
     def test_single_clip_keeps_fixed_adapter_and_sourced_finger_servo(self):
         from wowskin_lab.envs.cable import PandaCableEnv
-        from wowskin_lab.core.physics import configuration
+        from wowskin_lab.envs.pick_cube import response_configuration
+        from types import SimpleNamespace
         import mujoco
-        cfg = configuration(); cfg['cable_layout'] = 'single_clip'
+        cfg = response_configuration(SimpleNamespace(task='cable', cable_layout='single_clip', ideal=True))
         env = PandaCableEnv(cfg, pollen=False)
         root = ET.fromstring(env.xml)
         self.assertIsNotNone(root.find(".//body[@name='adapter_0']"))
@@ -44,14 +45,15 @@ class CableChecks(unittest.TestCase):
         env=PandaCableEnv(pollen=False)
         root=ET.fromstring(env.xml)
         self.assertIsNone(root.find(".//body[@name='cube']"))
-        self.assertEqual(len(env.contact_geoms),CABLE_COUNT-1)
-        self.assertEqual(root.find('.//composite').get('size'),str(CABLE_LENGTH))
+        self.assertEqual(len(env.contact_geoms),env.cable_count-1)
+        self.assertGreater(env.cable_length,.7)
+        self.assertIsNotNone(root.find('.//composite').get('vertex'))
         self.assertEqual(env.model.body_dofnum[env.model.body('wire_B_first').id],0)
         self.assertEqual(env.model.nflex,2)
         from wowskin_lab.envs.franka import mount_reference
         open_gap=2*(.04+mount_reference(env.cfg)['position_m'][1]-env.cfg['total_height_m'])
         lower=env.model.jnt_range[env.finger_joints[0],0]
-        self.assertAlmostEqual(open_gap+2*lower,.002)
+        self.assertLess(open_gap+2*lower,.001)  # No artificial 2 mm closure gap.
         for body in ('round_peg_0','round_peg_1','cclip_0','wowskin_mount','silicone_mount'):
             self.assertIsNotNone(root.find(f".//body[@name='{body}']"))
         start=env.target_xyz.copy()
@@ -64,7 +66,7 @@ class CableChecks(unittest.TestCase):
         np.testing.assert_allclose(env.target_xyz,start+[.001,0,0])
         np.testing.assert_array_equal(env.data.warning.number,0)
         np.testing.assert_array_equal(env.data.xfrc_applied,0)
-        self.assertEqual(row['cable_centerline_m'].shape,(24,3))
+        self.assertEqual(row['cable_centerline_m'].shape,(48,3))
         env.reset()
-        self.assertEqual(len(env.contact_geoms),24)
+        self.assertEqual(len(env.contact_geoms),48)
         self.assertEqual(env.data.time,0.)

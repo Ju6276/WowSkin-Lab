@@ -9,6 +9,7 @@ from wowskin_lab.data.cameras import active_cameras, capture_options
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration
 from wowskin_lab.envs.cable import PandaCableEnv
 from wowskin_lab.envs.feeding import PandaFeedingEnv
+from wowskin_lab.envs.peg_insert import PandaPegInsertEnv
 from wowskin_lab.ui.task_guides import TaskGuides, goal_regions
 from wowskin_lab.ui.teleop_hud import render_operator_panel
 
@@ -16,11 +17,12 @@ from wowskin_lab.ui.teleop_hud import render_operator_panel
 @unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Run in .venv')
 class OperatorGuideTests(unittest.TestCase):
     def test_guides_leave_all_three_rgb_depth_and_physics_unchanged(self):
-        for task, cls in (('pick_cube', PandaPickCubeTactileEnv),
-                          ('cable', PandaCableEnv), ('feeding', PandaFeedingEnv)):
-            with self.subTest(task=task):
+        for task, cls, layout in (('pick_cube', PandaPickCubeTactileEnv, None),
+                          ('cable', PandaCableEnv, 'single_clip'), ('cable', PandaCableEnv, 'routing'),
+                          ('feeding', PandaFeedingEnv, None), ('peg_insert', PandaPegInsertEnv, None)):
+            with self.subTest(task=task, layout=layout):
                 cfg = response_configuration(SimpleNamespace(task=task, skin_dof='trilinear',
-                    cable_layout='single_clip', ideal=True))
+                    cable_layout=layout, ideal=True))
                 env = cls(cfg, pollen=False)
                 m, d = env.model, env.data
                 scene = mujoco.MjvScene(m, maxgeom=100)

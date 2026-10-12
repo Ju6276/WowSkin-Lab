@@ -70,7 +70,7 @@ def scene_xml(cfg, layout):
         'size=".0007" rgba=".2 .9 .8 1"/>' for s in layout
     )
     return f'''<mujoco model="Uncalibrated magnetic tactile prototype">
-  <option timestep="{cfg['timestep_s']}" integrator="implicitfast"
+  <option timestep="{cfg['timestep_s']}" integrator="{cfg.get('integrator', 'implicitfast')}"
           gravity="0 0 0" cone="elliptic" iterations="50" tolerance="1e-10"/>
   <statistic center="0 0 .006" extent=".06"/>
   <visual><global offwidth="960" offheight="720"/><map znear=".01"/>

@@ -46,6 +46,11 @@ def goal_regions(env, model, data, row):
         local = np.r_[c['tip_local_m'][:2], (lower+upper)/2]
         half = np.array([c['max_lateral_error_m']]*2+[(upper-lower)/2])
         return [Region('PEG TIP TARGET', data.xpos[hole]+rotation@local, half, rotation, color)]
+    if hasattr(env, 'routing_score'):
+        return [Region(f'ROUTE {i//3+1}' if i % 3 == 1 else '',
+                       np.array([xb.mean(), y, zb.mean()]),
+                       np.array([np.ptp(xb)/2, .0005, np.ptp(zb)/2]), np.eye(3), color)
+                for i, (xb, y, zb) in enumerate(env.routing_score.gates())]
     if hasattr(env, 'clip_score'):
         c = env.clip_score
         bounds = np.array([c.x_bounds, c.y_bounds, c.z_bounds])

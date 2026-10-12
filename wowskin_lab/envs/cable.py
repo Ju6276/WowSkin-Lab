@@ -1,11 +1,13 @@
 """Single Panda cable workbench derived from pinned EBiM task-1 assets.
 
 Upstream fixture meshes and cable constitutive parameters are retained. The
-clip's three-box open-mouth collision proxy is aligned to the visible channel.
+default clip's rigid collision proxy is aligned to the visible channel;
+an explicit experimental planar elastic beam option replaces both lips.
 Board layout, cable length/discretization and robot are local choices.
 No grasp-assist, clip-assist, automatic contact-force closure or EBiM scoring.
 """
 import argparse
+from types import SimpleNamespace
 import copy
 import json
 from pathlib import Path
@@ -15,12 +17,12 @@ import xml.etree.ElementTree as ET
 import mujoco
 import numpy as np
 
+from wowskin_lab.core.arm_control import joint_pd_reset
 from wowskin_lab.paths import ROOT
 from wowskin_lab.envs.task_evaluation import CableClipEvaluator, task_config
-from wowskin_lab.core.physics import configuration
 from wowskin_lab.envs.pick_cube import (
     PandaPickCubeTactileEnv, pick_scene, TABLE_Z, MOTION_KEYS, ROTATE_AXES,
-    manual_action, key_command, view_translation,
+    manual_action, key_command, keyboard_translation, response_configuration,
 )
 from wowskin_lab.envs.franka import apply_free_camera, ViewerStyleGuard, mount_reference
 from wowskin_lab.ui.keyboard import ViewerKeyboard, MOVE_AXES, ESC, BACKSPACE
@@ -60,6 +62,13 @@ def cable_scene(cfg, layout):
              'round_peg_1': (.49, .065, TABLE_Z+.0008),
              'cclip_0': (.53, .145, TABLE_Z+.0009),
              'adapter_0': (.2543, -.1179, TABLE_Z-.0066)}
+    routing = cfg.get('cable_routing') if not single_clip else None
+    if routing:
+        # The same source sockets are placed at the two installed cable ends.
+        for i, endpoint in enumerate(routing['endpoint_world_m']):
+            poses[f'adapter_{i}'] = np.asarray(endpoint)-[.0057, -.0021, .0339]
+        for i, position in enumerate(routing['posts_world_m']):
+            poses[f'round_peg_{i}'] = position
     if single_clip:
         # Place the mouth about 50 mm on the +Y side of the initial cable
         # (y=-.12), retaining the user's reversed fixture orientation.
@@ -82,6 +91,9 @@ def cable_scene(cfg, layout):
             if geom.get('contype', '1') != '0':
                 geom.set('contype', '1')
                 geom.set('conaffinity', '6')
+        if name == 'cclip_0' and cfg.get('clip_model') == 'elastic_beam':
+            from .elastic_clip import add_elastic_clip
+            add_elastic_clip(root, body, cfg)
         world.append(body)
     root.append(copy.deepcopy(source.find('extension')))
     cable = copy.deepcopy(fixtures.find('composite'))
@@ -90,6 +102,21 @@ def cable_scene(cfg, layout):
     cable.set('curve', 's 0 0')
     cable.set('size', str(CABLE_LENGTH))
     cable.set('offset', f'.26 -.12 {TABLE_Z+.0273}')
+    if routing:
+        from .cable_routing import initial_vertices
+        vertices = initial_vertices(routing)
+        for name in ('count', 'curve', 'size', 'offset'):
+            cable.attrib.pop(name, None)
+        cable.set('vertex', ' '.join(f'{v:.12g}' for v in vertices.ravel()))
+        # A bent starting pose must not turn this cable into a stress-free S spring.
+        ET.SubElement(cable.find('plugin'), 'config', key='flat', value='true')
+        ET.SubElement(world, 'site', name='routing_end_socket',
+                      pos=' '.join(map(str, vertices[-1])), size='.001', rgba='0 0 0 0')
+        equality = root.find('equality')
+        if equality is None:
+            equality = ET.SubElement(root, 'equality')
+        ET.SubElement(equality, 'connect', name='installed_cable_end',
+                      site1='wire_S_last', site2='routing_end_socket', solref='.004 1')
     cable.find('geom').set('contype', '4')
     cable.find('geom').set('conaffinity', '7')
     cable.find('geom').set('rgba', '.92 .65 .16 1')
@@ -103,15 +130,30 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
     contact_geometry = 'cable'
 
     def __init__(self, cfg=None, pollen=False):
-        cfg = dict(configuration() if cfg is None else cfg)
+        cfg = response_configuration(SimpleNamespace(task='cable')) if cfg is None else dict(cfg)
         cfg.setdefault('clip_success', task_config('cable'))
+        if cfg.get('clip_model') == 'elastic_beam':
+            from .elastic_clip import configuration as elastic_configuration
+            cfg.setdefault('elastic_clip', elastic_configuration())
+        elif cfg.get('clip_model', 'rigid') != 'rigid':
+            raise ValueError('Unknown clip model')
         self.cable_layout = cfg.setdefault('cable_layout', 'routing')
         if self.cable_layout not in CABLE_LAYOUTS:
             raise ValueError(f'Unknown cable layout: {self.cable_layout}')
         self.task_name = 'cable_insert' if self.cable_layout == 'single_clip' else 'cable'
         cfg.setdefault('gripper_control_mode', 'panda_robosuite_position')
         cfg.setdefault('scene_design', 'ebim_task1_single_arm_single_clip' if self.cable_layout == 'single_clip'
-                       else 'ebim_task1_single_arm')
+                       else 'ebim_two_connector_routing_v1')
+        # Explicit old metadata reconstructs the earlier one-ended short layout.
+        if self.cable_layout == 'routing' and cfg['scene_design'] != 'ebim_task1_single_arm':
+            from .cable_routing import configuration as routing_configuration, initial_vertices
+            cfg.setdefault('cable_routing', routing_configuration())
+            vertices = initial_vertices(cfg['cable_routing'])
+            self.cable_count = len(vertices)
+            self.cable_length = float(np.linalg.norm(np.diff(vertices, axis=0), axis=1).sum())
+        else:
+            self.cable_count, self.cable_length = CABLE_COUNT, CABLE_LENGTH
+        cfg.update(cable_length_m=self.cable_length, cable_capsules=self.cable_count-1)
         # Cable edges produce large local compression/shear. Improve top
         # tetrahedron aspect ratios and enable MuJoCo internal contacts in the
         # full-node model. V/V0=0.15 is only a warning, not a stop. Radius is a NUMERICAL
@@ -129,47 +171,61 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         if cfg.get('skin_dof') == 'trilinear':
             cfg['silicone_numerics'] = 'Trilinear reduced skin, bottom nodes pinned; material uncalibrated'
         super().__init__(cfg, pollen=pollen, xml_factory=cable_scene,
-                         contact_body='wire_B_last', contact_geom=f'wire_G{CABLE_COUNT-2}', object_joint=None)
-        self.contact_geoms = {self.model.geom(f'wire_G{i}').id for i in range(CABLE_COUNT-1)}
+                         contact_body='wire_B_last', contact_geom=f'wire_G{self.cable_count-2}', object_joint=None)
+        self.contact_geoms = {self.model.geom(f'wire_G{i}').id for i in range(self.cable_count-1)}
         self.cable_bodies = np.array([self.model.geom_bodyid[self.model.geom(f'wire_G{i}').id]
-                                     for i in range(CABLE_COUNT-1)], dtype=int)
+                                     for i in range(self.cable_count-1)], dtype=int)
         self.cfg['task'] = 'single_arm_cable_insert_scene' if self.cable_layout == 'single_clip' else 'single_arm_cable_scene'
-        self.cfg['cable_anchor_status'] = 'Source fixed first segment and blue adapter retained in both layouts'
+        self.cfg['cable_anchor_status'] = (cfg['cable_routing']['end_connection'] if cfg.get('cable_routing')
+            else 'Source fixed first segment and blue adapter; other end free')
         self.cfg['ebim_revision'] = json.loads((ASSETS/'manifest.json').read_text())['revision']
         self.cfg['grasp_assist'] = False
         self.cfg['clip_assist'] = False
 
+    @joint_pd_reset
     def reset(self, seed=None):
         result = super().reset(seed)
         m = self.model
         radius = float(m.geom_size[m.geom('wire_G0').id, 0])
-        base, back, roof = (m.geom(name).id for name in
-                            ('cclip_0_base', 'cclip_0_backwall', 'cclip_0_hook_top'))
-        p, z = m.geom_pos, m.geom_size
         bounds = self.cfg['clip_success'].get('internal_bounds_clip_m')
         if bounds is None:  # Preserve explicitly recorded v1 scene semantics.
+            base, back, roof = (m.geom(name).id for name in
+                                ('cclip_0_base', 'cclip_0_backwall', 'cclip_0_hook_top'))
+            p, z = m.geom_pos, m.geom_size
             bounds = [[p[roof,0]-z[roof,0], p[roof,0]+z[roof,0]],
                       [p[roof,1]-z[roof,1]+radius, p[back,1]-z[back,1]-radius],
                       [p[base,2]+z[base,2]+radius, p[roof,2]-z[roof,2]-radius]]
         self.clip_score = CableClipEvaluator(self.cfg['clip_success'],
             x_bounds=bounds[0], y_bounds=bounds[1], z_bounds=bounds[2])
+        if self.cable_layout == 'routing' and self.cfg.get('cable_routing'):
+            from .cable_routing import CableRoutingEvaluator
+            self.routing_score = CableRoutingEvaluator(self.cfg['cable_routing'])
         return result
 
-    def evaluate_clip(self):
-        ids = [self.model.geom(f'wire_G{i}').id for i in range(CABLE_COUNT-1)]
+    def cable_segments(self):
+        ids = [self.model.geom(f'wire_G{i}').id for i in range(self.cable_count-1)]
         half = self.model.geom_size[ids, 1]
         axis = self.data.geom_xmat[ids].reshape(-1,3,3)[:, :, 2]
         centres = self.data.geom_xpos[ids]
-        ends = np.stack((centres-axis*half[:,None], centres+axis*half[:,None]), axis=1)
+        return np.stack((centres-axis*half[:,None], centres+axis*half[:,None]), axis=1)
+
+    def evaluate_clip(self):
+        ends = self.cable_segments()
         clip = self.model.body('cclip_0').id
         local = (ends-self.data.xpos[clip])@self.data.xmat[clip].reshape(3,3)
         return self.clip_score.update(float(self.data.time), local)
 
     def evaluation_metrics(self, row=None):
-        return dict(self.clip_score.metrics)
+        metrics = dict(self.clip_score.metrics)
+        if hasattr(self, 'routing_score'):
+            metrics.update(self.routing_score.metrics)
+        if self.cfg.get('clip_model') == 'elastic_beam':
+            from .elastic_clip import diagnostics
+            metrics.update(diagnostics(self.model, self.data))
+        return metrics
 
     def task_evaluation(self):
-        return self.clip_score.summary()
+        return (self.routing_score if hasattr(self, 'routing_score') else self.clip_score).summary()
 
     def observation(self):
         obs = super().observation()
@@ -183,13 +239,22 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         _, _, _, _, row = super().step(action)
         row['cable_last_segment_m'] = row.pop('cube_xyz_m')
         row['cable_centerline_m'] = self.data.xpos[self.cable_bodies].copy()
-        row['cable_end_m'] = (self.data.xpos[self.probe_body] +
-                              self.data.xmat[self.probe_body].reshape(3,3)[:,0]*CABLE_LENGTH/(CABLE_COUNT-1))
+        row['cable_end_m'] = self.data.site_xpos[self.model.site('wire_S_last').id].copy()
         row.pop('lift_m')
         row.update(self.evaluate_clip())
         row['success'] = self.success = self.clip_score.success
+        if hasattr(self, 'routing_score'):
+            row.update(self.routing_score.update(float(self.data.time), self.cable_segments()))
+            row['success'] = self.success = self.routing_score.success
+            row['cable_end_anchor_error_m'] = float(np.linalg.norm(row['cable_end_m']-
+                self.cfg['cable_routing']['endpoint_world_m'][1]))
         row['cable_layout'] = self.cable_layout
+        if self.cfg.get('clip_model') == 'elastic_beam':
+            from .elastic_clip import diagnostics
+            row.update(diagnostics(self.model, self.data))
         row['task_status'] = 'clip inserted' if self.success else 'press cable under clip roof'
+        if hasattr(self, 'routing_score'):
+            row['task_status'] = 'two-post route complete' if self.success else 'route around both post guides'
         self.last_row = row
         return self.observation(), float(self.success), False, False, row
 
@@ -209,8 +274,8 @@ def save_run(env, rows, output, elapsed):
     report = dict(task='PandaCable scene preview, not an EBiM scored rollout', samples=len(rows),
                   sim_time_s=float(env.data.time), wall_s=elapsed,
                   physics_warnings=env.data.warning.number.tolist(), config=env.cfg,
-                  cable_length_m=CABLE_LENGTH, cable_capsules=CABLE_COUNT-1,
-                  grasp_assist=False, clip_assist=False, routing_evaluator=False, task_evaluation=env.task_evaluation(),
+                  cable_length_m=env.cable_length, cable_capsules=env.cable_count-1,
+                  grasp_assist=False, clip_assist=False, routing_evaluator=hasattr(env, 'routing_score'), task_evaluation=env.task_evaluation(),
                   caveat='ReSkin MLP line-contact transfer unvalidated; no cable depth labels in Pollen.')
     (output/'report.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps({k:v for k,v in report.items() if k != 'config'}, indent=2), flush=True)
@@ -218,6 +283,9 @@ def save_run(env, rows, output, elapsed):
 
 def viewer(env, args):
     import mujoco.viewer
+    # The standalone diagnostic viewer uses the same fixed operator convention
+    # as `teleop --task cable`, including the non-macOS key callback.
+    env.cfg.update(teleop_frame='base', teleop_base_lateral_sign=1., disable_workspace_limits=True)
     keyboard = ViewerKeyboard(MOTION_KEYS | set(map(ord, 'XZCRVTP-=,.')) | {ESC, BACKSPACE},
                               title_contains='PandaCable:')
     hud = TactileHUD(env)
@@ -226,7 +294,7 @@ def viewer(env, args):
         hud.footer = 'NOT calibrated | cable/probe mismatch'
     rows, moving, close, fault = [], False, False, ''
     start = time.monotonic()
-    print('PandaCable: WASD/EQ move | I/K L/J U/O rotate | X/Z grip | R reset | V view | T tug | P exit', flush=True)
+    print('PandaCable: BASE W:+X S:-X A:-Y D:+Y E:+Z Q:-Z | local workspace OFF | I/K L/J U/O rotate | X/Z grip | R reset | V view | T tug | P exit', flush=True)
     try:
         with mujoco.viewer.launch_passive(env.model, env.data, key_callback=keyboard.native_callback,
                                           show_left_ui=False, show_right_ui=False) as handle, keyboard:
@@ -261,7 +329,7 @@ def viewer(env, args):
                         if keyboard.continuous:
                             action, moving = manual_action(env, snapshot.held, moving, azimuth)
                         else:
-                            fallback[:3] = view_translation(fallback[:3], azimuth)
+                            fallback[:3] = keyboard_translation(env, fallback[:3], azimuth)
                             fallback[6] = env.gripper_fraction(target=True)
                             action = fallback
                         rows.append(env.step(action)[-1])

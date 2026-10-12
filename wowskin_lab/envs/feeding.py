@@ -13,8 +13,8 @@ import xml.etree.ElementTree as ET
 import mujoco
 import numpy as np
 
+from wowskin_lab.core.arm_control import joint_pd_reset
 from wowskin_lab.paths import ROOT
-from wowskin_lab.core.physics import configuration
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, pick_scene, rotation_matrix
 from wowskin_lab.envs.franka import mount_reference
 from wowskin_lab.data.cameras import add_recording_cameras
@@ -218,7 +218,11 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
     contact_geometry = 'spoon'
 
     def __init__(self, cfg=None, pollen=False):
-        cfg = dict(configuration() if cfg is None else cfg)
+        if cfg is None:
+            from types import SimpleNamespace
+            from .pick_cube import response_configuration
+            cfg = response_configuration(SimpleNamespace(task='feeding'))
+        cfg = dict(cfg)
         for key, value in dict(cap_top_inner_fraction=.85, fem_internal_contact=True,
                                fem_contact_radius_m=.0002, fem_contact_timeconst_s=.0002).items():
             cfg.setdefault(key, value)
@@ -267,6 +271,7 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
                         grasp_assist=False, task_success_evaluator=self.delivery.config['schema'],
                         source_asset_manifest=str(ASSETS/'manifest.json'))
 
+    @joint_pd_reset
     def reset(self, seed=None):
         # Cold-start closure diverges with CG even at 50 us. Establish the
         # original physical grasp with Newton, then use CG for teleoperation.
@@ -365,7 +370,7 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
                 filtered = alpha*self._external_pad_forces()+(1-alpha)*filtered
                 confirmations = (confirmations+1 if filtered.sum() >=
                     preload['gripper_contact_force_threshold_n'] else 0)
-                endpoint = min(.735, preload['gripper_fixed_close_target_rad'],
+                endpoint = min(preload['gripper_fixed_close_target_rad'],
                     self.model.actuator_ctrlrange[self.gripper_control, 1],
                     self.model.jnt_range[self.finger_joints[0], 1])
                 if confirmations >= preload['gripper_contact_confirmation_steps']:

@@ -53,6 +53,37 @@ class PicoChecks(unittest.TestCase):
         expected = rotation_vector(self.env.target_rotation.T @ rotation_matrix([0., 0., theta]) @ self.env.target_rotation)
         np.testing.assert_allclose(action[3:6]/np.linalg.norm(action[3:6]), expected/np.linalg.norm(expected), atol=1e-8)
 
+    def test_base_reference_ignores_preview_yaw(self):
+        reference = rotation_matrix([0.,0.,np.pi/2])
+        commands = []
+        for yaw in (0.,135.,270.):
+            control = PicoController(camera_azimuth=yaw)
+            control.robot_rotation = reference
+            self.assertTrue(control.calibrate(frame()))
+            control.action(self.env, frame(), 1., 1, now=1.)
+            control.action(self.env, frame(1, grip=1.), 1.02, 1, now=1.02)
+            commands.append(control.action(self.env, frame(2,1.,p=(0.,1.,-.02)),1.04,1,now=1.04))
+        for command in commands:
+            np.testing.assert_allclose(command[:3], [.0,.0025,.0], atol=1e-12)
+            np.testing.assert_allclose(command,commands[0],atol=1e-12)
+
+    def test_front_facing_base_lateral_direction_in_both_headset_modes(self):
+        reference = rotation_matrix([0.,0.,np.pi/2])
+        for mode, head_q in (('worn',[0.,0.,0.,1.]),('desk',[0.,1.,0.,0.])):
+            for sign in (-1.,1.):
+                control = PicoController()
+                control.robot_rotation = reference
+                control.base_lateral_sign = 1.
+                f=frame(); f['mode']=mode; f['head']['q']=head_q
+                control.action(self.env,f,1.,1,now=1.)
+                f['right']['buttons'][1]=1.
+                control.action(self.env,f,1.02,1,now=1.02)
+                f['right']['p'][0]=sign*.02
+                action=control.action(self.env,f,1.04,1,now=1.04)
+                np.testing.assert_allclose(reference.T@action[:3],[0.,sign*.0025,0.],atol=1e-12)
+                np.testing.assert_allclose(action[3:6],0.,atol=1e-12)
+                self.assertAlmostEqual(np.linalg.det(control.basis),1.)
+
     def test_translated_scene_uses_its_own_workspace(self):
         # Feeding lives outside the cube's world-coordinate box. Even an
         # unchanged held controller must not drag it towards that cube box.

@@ -32,9 +32,11 @@ def keyboard_replay_step(env, action, moving, was_moving):
     return env.step(action)[-1]
 
 
+@unittest.skipUnless(mujoco.__version__.startswith('3.5.'),
+                     'Legacy full-node MuJoCo 3.5 recordings; current reduced contacts covered by test_contact_integrity')
 class CableStabilityChecks(unittest.TestCase):
     def test_single_clip_spacemouse_rim_contact_and_release(self):
-        cfg = response_configuration(SimpleNamespace(task='cable', cable_layout='single_clip', ideal=True))
+        cfg = response_configuration(SimpleNamespace(task='cable', cable_layout='single_clip', skin_dof='full', ideal=True))
         cfg.update(tcp_speed_m_s=.12, tcp_angular_speed_rad_s=.5, gripper_control_mode='panda_menagerie_position')
         env = PandaCableEnv(cfg, pollen=False)
         with np.load(Path(__file__).resolve().parents[1]/'fixtures/cable_single_clip_contact.npz') as source:
@@ -100,7 +102,8 @@ class CableStabilityChecks(unittest.TestCase):
         self.assertTrue(all(count in (1,2) for count in faces.values()))
 
     def make_env(self):
-        cfg = response_configuration(SimpleNamespace(task='cable', ideal=True))
+        cfg = response_configuration(SimpleNamespace(task='cable', skin_dof='full', ideal=True))
+        cfg['scene_design'] = 'ebim_task1_single_arm'
         cfg.update(keyboard_speed_m_s=.12, tcp_speed_m_s=.12, gripper_control_mode='panda_menagerie_position')
         env = PandaCableEnv(cfg, pollen=False)
         self.assertTrue(np.all(env.model.flex_internal))

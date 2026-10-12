@@ -17,6 +17,10 @@ from wowskin_lab.ui.channel_alignment import OFFICIAL_TO_REFERENCE, POSITIONS, o
 
 def bench_configuration(args):
     cfg = configuration(args.seed)
+    if tuple(map(int, mujoco.__version__.split('.')[:2])) >= (3, 15):
+        cfg.update(skin_dof='trilinear', integrator='discrete',
+                   skin_model_status='Trilinear interpolation with bounding-box bottom attachment; standalone bench, not the old full-node calibration model',
+                   engine_version=mujoco.__version__)
     cfg.update(duration_s=3.5, offset_x_m=args.x_mm/1000,
                offset_y_m=args.y_mm/1000, normal_load_n=args.load_n)
     # This initial bench stays in a small, numerically checked region.

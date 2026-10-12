@@ -9,7 +9,7 @@ AnySkin 的磁化皮肤受接触后变形，改变下方五个三轴磁力计的
 本项目用 MuJoCo 弹性四面体网格近似皮肤形变，再选择磁场输出方式；它不是 AnySkin、ViSk 或 FTF 官方提供的传感器仿真。三个方式共享同一套接触力学：
 
 - **原偶极子（底层参考）**：每个四面体中心放置磁偶极子，位置随网格移动，方向随形变梯度的旋转部分改变；叠加五芯片处磁场并扣除基线。遥操作入口不默认选择此项。
-- **拟合偶极子（三个任务的遥操作默认）**：使用 `configs/magnetic_fit_pollen_nonslip.json`，在偶极子场上应用五个正幅值系数。运行时不查询网络；也可用 `--magnetic-fit` 显式指定配置。
+- **拟合偶极子（各任务的遥操作默认）**：使用 `configs/magnetic_fit_pollen_nonslip.json`，在偶极子场上应用五个正幅值系数。运行时不查询网络；也可用 `--magnetic-fit` 显式指定配置。
 - **网络（显式对照，严格模式）**：追加 `--reskin-model outputs/reskin_forward_mapped`。从所有外部接触提取力加权 XY 和最大顶部压缩深度，输入本地 `3→64→64→15` 网络；没有输入完整网格、剪切、接触面积或物体形状。接触不限于任务物体。默认不自动外推；显式加 `--reskin-extrapolate` 仅启用实验接触预览。
 
 拟合与网络选项互斥。`--ideal` 关闭噪声、漂移、滤波和延迟，不关闭接触形变。非 ideal 偶极子路径保留配置中的滤波与延迟；网络没有相应动态模型。
@@ -65,7 +65,7 @@ Robotiq 使用 EBiM 原始 0–0.8 rad 关节范围、kp=300、kv=20、关节驱
 
 ### 控制配置与对照入口
 
-默认启用笛卡尔限制，包含键盘／SpaceMouse 每轴 6 mm 目标领先量，用于限制目标与实测位置之间积累的误差。各限制的具体作用及关闭方式见下文。
+默认遥操作使用机器人基座方向，本地桌面工作空间盒子关闭。仍启用速度、单步增量和目标领先限制；键盘／SpaceMouse 每轴 6 mm 领先量用于限制目标与实测位置之间积累的误差。各限制的具体作用及关闭方式见下文。
 
 可自行运行 Panda cube 控制对照：
 
@@ -75,6 +75,36 @@ Robotiq 使用 EBiM 原始 0–0.8 rad 关节范围、kp=300、kv=20、关节驱
 ```
 
 脚本通过 `SpaceMouseController.action()` 输入处理链执行抓取、抬升、搬运和释放，比较限制开启／关闭两种配置。接触压力测试加 `--stress --no-record`，每次选择新输出目录。输入轨迹另存 `control_trace.npz`；报告和 RGB-D 仅保存在本地，不混入人工示范。这是控制与录制检查，不是学习策略评估。
+
+Peg 的关节 PD／笛卡尔阻抗对照入口：
+
+```bash
+.venv/bin/python scripts/diagnostics/compare_peg_controllers.py \
+  --output outputs/diagnostics/my_peg_controllers
+```
+
+通过与遥操作相同的控制入口，读取仓库内固定版本 `assets/reference/serl_controller/impedance.py`。默认比较自由移动、对准插入、横向偏置 3 mm 三种情况。遥操作也可用 `--arm-controller cartesian_impedance` 显式选择，默认仍为 IK＋关节 PD；两边使用相同的物理夹持、目标平滑、执行器范围、碰撞与成功条件。初始化先以同一关节 PD 夹住 peg，再开始对照。插入使用同一物体位姿反馈脚本，不是学习策略。插入默认沿用键盘／SpaceMouse 每轴 6 mm 目标领先限制；`--target-lead-m 0` 单独测目标持续累积的工况。自由移动按相同的时间轨迹直接给目标，不施加这项领先截断，以比较实际跟踪误差。
+
+笛卡尔分支直接执行 SERL++ 控制函数，保留默认增益和算法，只适配 MuJoCo 3.15 的 `mj_fullM` 参数接口；零空间参考设为本场景初始关节姿态。源文件摘要和具体接口改动写入报告。输出包含 TCP 跟踪误差、插入评分、每个物理步的 peg／孔座接触力峰值及运行耗时；法向力之和与合力范数分别记录。整段耗时包含逐物理步的接触统计与各自控制器计算（笛卡尔分支不运行 IK），不等于遥操作 GUI 帧率。两套默认增益没有匹配等效刚度，也未调优，不能据此断言某一类控制器普遍更准。力值来自未标定的本地接触模型；3 mm 偏置超过评分允许的 2 mm，用于观察孔口接触，不能作随机扰动成功率测试。
+
+### 卡扣的物理范围
+
+默认 `--clip-model rigid` 是刚性开口碰撞代理，不模拟弯曲或回弹。可选 `--clip-model elastic_beam` 使用下面的实验模型。两者都不在进入区域后额外吸附线材。EBiM 固定版本的 XML 注释曾描述 `weld`，但实际 [apply_clip_guide](https://github.com/EBiM-Benchmark/benchmark/blob/161db49e9eafd34be31e5bdada72d8e2f796c16a/task1_mujoco/robotiq_duo_full_scene_minimal_core/teleop/grasping.py) 是向槽中心施加横向弹簧阻尼力，单个槽内线段限幅 8 N，允许沿槽轴滑动；本地没有接入这项辅助力。它也不是弹性卡扣本体求解。
+
+若研究真实扣合触觉，需要考虑夹臂／唇边被撑开后回弹，以及线材截面受压，不能只扩大成功区域。可参考 [Mechanics of a snap-fit](https://arxiv.org/abs/2003.13566) 的弹性壳弯曲、接触摩擦和插拔力实验；[BrickSim](https://intelligent-control-lab.github.io/BrickSim/) 则采用刚体引擎与专门连接力模型的混合方法，研究的是积木连接，不是本卡扣的现成模型。TacIPC 研究弹性触觉指腹，其 FEM／接触求解可作为方法参考，未提供此 C-Clip 的标定模型。
+
+### 实验弹性卡扣
+
+入口为 `teleop --task cable --cable-layout single_clip --clip-model elastic_beam`，也支持 `routing`、Panda／Robotiq 和两种控制器。原 EBiM STL 的安装底座保持固定；上壁、弯角、上唇组成一条被动梁链，下唇是独立梁链，两条根部都连接在固定底座上。可见表面和碰撞表面一起变形，不是只改渲染。关节弯曲能量为 `E = ½ kθ θ²`，刚度由两相邻半段的弯曲柔度计算。线材或压头的碰撞力撑开夹臂，撤去接触后靠弹簧势能回弹；没有吸附、自动闭合或进入成功框后施加辅助力。上下唇长短不同，使用同一材料也不会产生相同位移。
+
+这是参考 [Mechanics of a snap-fit 的离散弹性模型](https://arxiv.org/html/2003.13566v1#A3) 的本地**平面、不可伸长梁近似**，并未复现论文全部模型。没有三维扭转或完整壳体 FEM。几何截面近似、杨氏模量 1 GPa、密度 1000 kg/m³ 和阻尼都未标定；参数来源逐项保存在 [elastic_clip.json](../configs/elastic_clip.json)。适用当前 MuJoCo 3.15 discrete 降阶指腹配置，其他积分器尚未验证。
+
+`check_elastic_clip.py` 用运动压头验证撑开／撤回／回弹。机器人夹线插入／松手保持另由 `tests.physics.test_elastic_clip` 检查。压头测试的接触力峰值尚未时间步收敛，不能用于定量插入力结论。成功评分仍沿用几何入槽条件，不能把 SUCCESS 当作已验证弹性锁定。回归入口：
+
+```bash
+.venv/bin/python scripts/diagnostics/check_elastic_clip.py --output outputs/diagnostics/my_elastic_clip
+.venv/bin/python scripts/diagnostics/check_elastic_clip.py --probe-height-mm 7 --output outputs/diagnostics/my_lower_lip
+```
 
 ### Robotiq 喂食初始化
 
@@ -86,9 +116,12 @@ Robotiq 使用 EBiM 原始 0–0.8 rad 关节范围、kp=300、kv=20、关节驱
 
 没有 TCP 最低高度限制；桌面接触由求解器计算。默认仍保留以下本地控制设置，均不是论文规定，也不是传感器标定：
 
-- 场景 XY 和最高 Z 工作范围：方块 X 0.24–0.58/Y ±0.18/Z≤0.40 m；线材 X 0.24–0.64/Y ±0.22/Z≤0.40 m；喂食使用其平移后的场景坐标范围。键盘、SpaceMouse、Pico 使用对应场景范围。
+- **工作空间默认关闭**：只有显式 `--workspace-limits` 才启用旧本地世界坐标盒子：方块 X 0.24–0.58/Y ±0.18/Z≤0.40 m，线材 X 0.24–0.64/Y ±0.22/Z≤0.40 m；喂食使用平移后的范围。H 可查看实际范围。不是厂家可达空间，也不是碰撞边界。
+- **输入方向固定**：三种输入默认 `--control-frame base`；W/S 对应基座 ±X，A/D 对应 −Y/+Y，E/Q 对应 ±Z。SpaceMouse 平移与旋转参照固定基座，键盘旋转键绕 TCP 局部轴；Pico 的佩戴／对面模式校准用户方向后映射到基座，不参考预览相机。`--control-frame view` 才选择旧视角映射。
 - 每控制步平移分量最多 5 mm、旋转向量长度最多 0.03 rad；IK 使用阻尼迭代、关节边界内侧 0.02 rad，手臂 PD 为 600/45 加偏置力补偿。实际执行器范围沿用模型。
-- 键盘/SpaceMouse 的目标领先量为每轴 6 mm、旋转 0.03 rad；Pico 为每轴 30 mm、旋转 0.10 rad。速度限制和失焦/追踪失效停止用于输入控制，不用于伪造接触。
+- **领先量**：键盘/SpaceMouse 为每轴 6 mm、旋转 0.03 rad；Pico 为每轴 30 mm、旋转 0.10 rad。平移到边界时统一缩短整步，不分别裁剪各轴，也不把横向跟踪误差写回移动中的目标。接触时仍会限制进一步积累。
+- **输入速度和旋转**：键盘方块 0.04 m/s、其他任务 0.12 m/s，角速度 0.4 rad/s；SpaceMouse 0.12 m/s、0.5 rad/s；Pico 0.25 m/s、1.5 rad/s。底层目标再受 `tcp_speed_m_s`／`tcp_angular_speed_rad_s` 约束，实际值写入 metadata。均为本地操作参数，不是厂家最大速度。
+- **松手／回中处理**：默认键盘释放、SpaceMouse 回中时把目标重新设到实测位姿，取消尚未追完的运动；失焦／失联也取消。Pico 松握键停止，再握住建立新参考；模式切换与校准也重新建立操作参考。这些行为会影响操作手感。
 - 两侧指腹 `0<V/V0≤0.15` **只作网格质量警告**：正体积、求解正常且磁场有限时继续按当前形变计算，继续录制；没有保持最大值、复制上一帧、幅值截断或暂停。这一 15% 是本地未验证的诊断值，不是芯片量程、饱和阈值或材料极限。raw 的 `skin_min_volume_ratio`、`passive_min_volume_ratio`、`mesh_quality_warning` 与 100 Hz 时间戳同步，默认不因此过滤 episode。
 - `V/V0≤0` 表示单元退化到零或发生翻转；非有限状态、磁场或 MuJoCo 求解发散也属于物理故障，仍终止该段有效采集并暂停。不会把故障前最后一帧重复写成新测量。网络后端没有可用预测时仍按其独立的缺失数据规则处理，与 15% 警告无关。
 - 体积比针对单个四面体，取最小值；不等于整个皮肤厚度比，也不直接决定磁场大小。真实 AnySkin 没有网格阈值，测的是磁化皮肤变形引起的磁场变化。当前警告帧是可计算的仿真数据，但未验证的大变形结果不能当成准确真值。
@@ -97,7 +130,7 @@ Robotiq 使用 EBiM 原始 0–0.8 rad 关节范围、kp=300、kv=20、关节驱
 
 开启／关闭的实际区别：
 
-- 工作空间开启时，目标在边界被截断，即使画面中还没有碰到东西也可能不再前进；关闭后目标可越过该盒子，但机器人关节可达性与碰撞仍然约束实际运动。
+- 显式开启工作空间时，请求的整步在边界缩短或停止，即使画面中还没有碰到东西也可能不再前进；关闭后目标可越过该盒子，但机器人关节可达性与碰撞仍然约束实际运动。
 - 单步上限和目标速度平滑开启时，大输入被分步执行；关闭后 IK 直接追踪未作这层限速的目标，可能更快，也可能产生更大的跟踪误差和接触载荷。它不改变物理求解耗时，不能修复 0.01 倍实时的问题。
 - 领先量限制开启时，目标只能领先实测位姿一小段，接触时可能感觉推不动；关闭后持续输入能积累较远目标，卸载后仍可能继续追赶。SpaceMouse 回中本身不会清掉无限制模式下的积累目标。
 - 输入处理仍有本地设定：SpaceMouse 死区 0.08、归一化量程 350、默认速度 0.12 m/s／角速度 0.5 rad/s；每组非零轴数据超过 0.25 s 未更新会停止。Pico 超过 0.25 s 的数据、单帧位置跳变超过 0.15 m 或旋转超过 0.8 rad 会中断跟随；这些开关不随 `--no-cartesian-limits` 关闭。
@@ -141,6 +174,8 @@ raw 保存的是处理后的动作；原始输入及逐次裁剪／重锚事件�
 
 自动选择唯一可识别串口，启动前保持传感器固定、无接触。界面 `REAL on model` 在 MuJoCo 背景上显示真实串口数据；按 T 切换 `SIM prediction` 比较独立仿真。真实手按不会自动驱动仿真形变。
 
+当前 MuJoCo 3.15 的独立传感器入口也使用 trilinear＋discrete；历史 3.5 完整节点按压曲线不作为这一模型的标定结果。配置会写入采集记录。
+
 - 1–5 选择中心/左/右/上/下；P 仿真按压，L 抬起。
 - B 归零真机，Z 归零模拟显示；Reset 取接下来 5 帧平均并固定减去。
 - M 保存时间标记与截图；Q 结束并保存。
@@ -173,3 +208,11 @@ raw 保存的是处理后的动作；原始输入及逐次裁剪／重锚事件�
 - **TACTO**：[源码与兼容说明](https://github.com/facebookresearch/tacto)。Python＋PyBullet＋Pyrender，不强制依赖 CUDA；官方推荐 Ubuntu，并指出 macOS 的 PyBullet GUI 和 Pyrender 显示兼容问题。因此可以尝试 Mac 运行，但尚未在本机安装验证。它生成 DIGIT / OmniTact 等光学触觉的 RGB / 深度，不直接生成 AnySkin 的 15 路磁场，也不能替换硅胶 FEM 接触求解。
 
 这些都是候选参考，并非当前运行后端。替换形变求解器后，磁场响应与实物标定仍需要单独处理。
+
+## 玻璃等脆性材料：可选研究方向，尚未接入
+
+MuJoCo 没有设置“玻璃材质”就自动产生裂纹和碎片的内置模型。其维护者给出的实现路线是：把物体预先拆成多个刚体，用 weld 连接，在力或位移超过规定条件后解除连接；当前 API 支持通过 `mjData.eq_active` 关闭对应约束。[维护者说明](https://github.com/google-deepmind/mujoco/issues/577)、[weld 文档](https://mujoco.readthedocs.io/en/stable/XMLreference.html#equality-weld)。该链接中的断裂判据只是示例，不能直接当作玻璃材料参数。
+
+预分块模型可以接入现有机器人接触、碎片碰撞和录制流程，用于研究“碰撞后损坏／碎裂”的任务。但断裂只沿预定义界面发生；需显式定义界面强度、受拉／剪切判据、分块尺度及能量处理，不能把任意总接触力阈值称为实物玻璃强度。Houdini 的 [玻璃预破碎工具](https://www.sidefx.com/docs/houdini/destruction/glass.html) 和 [glue constraint 工作流](https://www.sidefx.com/docs/houdini/dyno/fracturing.html) 可供参考。
+
+若研究目标是材料应力、裂纹起始和扩展，需专门断裂求解器。例如 [Glass Fracture Upon Ballistic Impact](https://www.frontiersin.org/journals/materials/articles/10.3389/fmats.2019.00239/full) 使用近场动力学模拟玻璃冲击碎裂；其实现基于开源 LAMMPS，[官方 peridynamics 文档](https://docs.lammps.org/Howto_peri.html) 提供断键与损伤模型。该论文的冲击载荷不等于机器人慢速夹持，接入与参数验证是另一项工作，不是 MuJoCo 中已有的开关。

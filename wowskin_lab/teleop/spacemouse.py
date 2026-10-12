@@ -136,19 +136,21 @@ class SpaceMouseController:
         self.moving = False
         self.status = 'Center knob and release buttons'
 
-    def settings(self):
+    def settings(self, frame='view'):
         return dict(speed_m_s=self.speed, angular_speed_rad_s=self.angular_speed,
                     deadzone=self.deadzone, timeout_s=.25, full_scale=350,
                     hid_axis_signs=HID_AXIS_SIGNS.tolist(),
-                    translation_frame='camera ground plane + world Z',
-                    rotation_frame='camera ground plane + world Z, converted to TCP-local rotvec',
-                    pitch_convention='Forward cap tilt pitches a downward-facing tool away from the viewer about screen right',
+                    translation_frame='robot base XYZ' if frame == 'base' else 'camera ground plane + world Z',
+                    rotation_frame=('robot base XYZ' if frame == 'base' else 'camera ground plane + world Z')+', converted to TCP-local rotvec',
+                    pitch_convention=('Forward cap tilt pitches a downward-facing tool toward base +X; independent of the preview'
+                                      if frame == 'base' else 'Forward cap tilt pitches a downward-facing tool away from the viewer about screen right'),
                     buttons='left close; right open; both hold')
 
     def action(self, env, snapshot, azimuth, focused=True, now=None):
         from wowskin_lab.envs.pick_cube import (
-            hold_current_pose, view_translation, limit_vector, rotation_matrix, rotation_vector, key_command,
+            hold_current_pose, keyboard_translation, limit_vector, rotation_matrix, rotation_vector, key_command, WORKSPACE,
         )
+        from wowskin_lab.teleop.target_limits import straight_step, workspace_bounds
         now = time.monotonic() if now is None else now
         raw = snapshot.axes
         centered = np.max(np.abs(raw)) <= self.deadzone and snapshot.buttons == 0
@@ -173,8 +175,8 @@ class SpaceMouseController:
                 env.command_gripper(press == 'close')
         axes = np.sign(raw)*np.maximum(np.abs(raw)-self.deadzone, 0)/(1-self.deadzone)
         axes *= HID_AXIS_SIGNS*fresh
-        translation = view_translation(limit_vector(axes[:3], 1.), azimuth)*self.speed
-        world_rotation = view_translation(limit_vector(axes[3:], 1.), azimuth)*self.angular_speed
+        translation = keyboard_translation(env, limit_vector(axes[:3], 1.), azimuth)*self.speed
+        world_rotation = keyboard_translation(env, limit_vector(axes[3:], 1.), azimuth, rotation=True)*self.angular_speed
         rotation = env.data.site_xmat[env.tcp_site].reshape(3,3)
         local_rotation = rotation.T @ world_rotation
         moving = bool(np.any(translation) or np.any(local_rotation))
@@ -183,7 +185,8 @@ class SpaceMouseController:
             hold_current_pose(env)
         if limited and moving:
             actual = env.data.site_xpos[env.tcp_site]
-            env.target_xyz = np.clip(env.target_xyz, actual-.006, actual+.006)
+            translation = straight_step(env.target_xyz, translation/env.cfg['sample_hz'], actual,
+                                        workspace_bounds(env, WORKSPACE))*env.cfg['sample_hz']
             lead = rotation_vector(rotation.T @ env.target_rotation)
             env.target_rotation = rotation @ rotation_matrix(limit_vector(lead, .03))
         self.moving = moving

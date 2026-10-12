@@ -5,6 +5,7 @@ The cube is a free rigid body. Only contact/friction can lift it; no weld,
 attachment, pose copying, or object gravity compensation is used.
 """
 import argparse
+from types import SimpleNamespace
 from contextlib import nullcontext
 from collections import deque
 import csv
@@ -22,7 +23,9 @@ from wowskin_lab.core.physics import CHANNELS, TactileSim, configuration
 from wowskin_lab.ui.keyboard import BACKSPACE, ENTER, ESC, MOVE_AXES, ViewerKeyboard, direction
 from wowskin_lab.data.cameras import add_recording_cameras
 from wowskin_lab.teleop.command import CartesianCommand
+from wowskin_lab.teleop.target_limits import straight_step, workspace_bounds
 from wowskin_lab.envs.workcell import industrial_workcell
+from wowskin_lab.core.arm_control import configure_controller, joint_pd_reset, cartesian_active, arm_torque
 from wowskin_lab.paths import ROOT
 from wowskin_lab.envs.task_evaluation import CubePickPlaceEvaluator, cube_corners, gripper_contacts, task_config
 
@@ -162,7 +165,8 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
 
     def __init__(self, cfg=None, pollen=True, *, xml_factory=pick_scene,
                  contact_body="cube", contact_geom="cube", object_joint="cube_joint"):
-        cfg = configuration() if cfg is None else dict(cfg)
+        cfg = response_configuration(SimpleNamespace(task='pick_cube')) if cfg is None else dict(cfg)
+        configure_controller(cfg)
         self.pick_place = None
         if self.task_name == 'pick_cube':
             cfg.setdefault('task_success', task_config('pick_cube'))
@@ -228,6 +232,7 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
             self.comparison_gains = np.asarray(profile['gains'])
             self.cfg['comparison_magnetic_fit_profile'] = profile
 
+    @joint_pd_reset
     def reset(self, seed=None):
         self.episode_id = getattr(self, "episode_id", -1)+1
         if seed is not None:
@@ -315,6 +320,8 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         delta_rotation = rotation_vector(self.servo_rotation.T @ self.target_rotation)
         self.servo_rotation = self.servo_rotation @ rotation_matrix(
             delta_rotation if unrestricted else limit_vector(delta_rotation, angular_step))
+        if cartesian_active(self):
+            return  # Same target slew; task-space torque needs no runtime IK.
         m, d = self.model, self.ik_data
         d.qpos[:] = self.data.qpos
         d.qpos[self.arm_q] = self.joint_target
@@ -340,7 +347,7 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         if progress is not None:
             progress()
         d, m = self.data, self.model
-        torque = 600*(self.joint_target-d.qpos[self.arm_q])-45*d.qvel[self.arm_v]+d.qfrc_bias[self.arm_v]
+        torque = arm_torque(self)
         limits = m.actuator_ctrlrange[self.arm_controls]
         d.ctrl[self.arm_controls] = np.clip(torque, limits[:, 0], limits[:, 1])
         if self.cfg.get('gripper') == 'robotiq_2f85':
@@ -367,7 +374,7 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         applied[6] = np.clip(action[6], 0., 1.)
         target = self.target_xyz+applied[:3]
         if not unrestricted:
-            target = np.clip(target, *getattr(self, 'workspace', WORKSPACE))
+            target = np.clip(target, *workspace_bounds(self, WORKSPACE))
         applied[:3] = target-self.target_xyz
         self.target_xyz = target
         self.target_rotation = self.target_rotation @ rotation_matrix(applied[3:6])
@@ -481,7 +488,7 @@ def hold_current_pose(env):
     """Cancel an outstanding Cartesian target when manual input ends/starts."""
     env.target_xyz = env.data.site_xpos[env.tcp_site].copy()
     if not env.cfg.get('disable_cartesian_limits', False):
-        env.target_xyz = np.clip(env.target_xyz, *getattr(env, 'workspace', WORKSPACE))
+        env.target_xyz = np.clip(env.target_xyz, *workspace_bounds(env, WORKSPACE))
     env.servo_xyz = env.target_xyz.copy()
     env.target_rotation = env.data.site_xmat[env.tcp_site].reshape(3, 3).copy()
     env.servo_rotation = env.target_rotation.copy()
@@ -497,9 +504,7 @@ def view_translation(vector, azimuth):
 
 
 def manual_action(env, held, was_moving, camera_azimuth=None):
-    translation = direction(held)
-    if camera_azimuth is not None:
-        translation = view_translation(translation, camera_azimuth)
+    translation = keyboard_translation(env, direction(held), camera_azimuth)
     velocity = translation*env.cfg.get('keyboard_speed_m_s', .04)
     angular_velocity = direction(held, ROTATE_AXES)*.4
     moving = bool(np.any(velocity) or np.any(angular_velocity))
@@ -508,12 +513,30 @@ def manual_action(env, held, was_moving, camera_azimuth=None):
         hold_current_pose(env)
     if limited and moving:
         actual = env.data.site_xpos[env.tcp_site]
-        env.target_xyz = np.clip(env.target_xyz, actual-.006, actual+.006)
+        requested_step = velocity/env.cfg['sample_hz']
+        bounds = workspace_bounds(env, WORKSPACE)
+        workspace_step = straight_step(env.target_xyz, requested_step, actual, bounds, lead_m=np.inf)
+        env.keyboard_workspace_limited = not np.allclose(workspace_step, requested_step, atol=1e-12)
+        velocity = straight_step(env.target_xyz, requested_step, actual, bounds)*env.cfg['sample_hz']
         actual_rotation = env.data.site_xmat[env.tcp_site].reshape(3, 3)
         lead = rotation_vector(actual_rotation.T @ env.target_rotation)
         env.target_rotation = actual_rotation @ rotation_matrix(limit_vector(lead, .03))
+    else:
+        env.keyboard_workspace_limited = False
     return np.r_[velocity/env.cfg['sample_hz'], angular_velocity/env.cfg['sample_hz'],
                  env.gripper_fraction(target=True)], moving
+
+
+def keyboard_translation(env, vector, camera_azimuth=None, *, rotation=False):
+    if env.cfg.get('teleop_frame', env.cfg.get('keyboard_frame', 'view')) == 'base':
+        from wowskin_lab.data.robot_state import world_from_base
+        # Fixed front-facing translation convention: forward +X, right +Y.
+        # Angular input retains the proper right-handed basis; reflecting a
+        # translation axis must not silently reverse the calibrated cap tilt.
+        # Missing sign preserves the preceding base-frame acquisition profile.
+        lateral = -1. if rotation else env.cfg.get('teleop_base_lateral_sign', -1.)
+        return world_from_base(env)[:3, :3] @ np.array([vector[1], lateral*vector[0], vector[2]])
+    return view_translation(vector, camera_azimuth) if camera_azimuth is not None else np.asarray(vector)
 
 
 def save_records(rows, output):
@@ -573,10 +596,18 @@ def scripted_action(env):
 def response_configuration(args):
     cfg = configuration(seed=getattr(args, 'seed', 0))
     cfg['disable_cartesian_limits'] = bool(getattr(args, 'no_cartesian_limits', False))
+    cfg['disable_workspace_limits'] = not bool(getattr(args, 'workspace_limits', False))
+    if getattr(args, 'no_workspace_limits', False):
+        cfg['disable_workspace_limits'] = True
+    cfg['teleop_frame'] = getattr(args, 'control_frame', 'base')
+    cfg['teleop_base_lateral_sign'] = 1.
+    cfg['translation_target_limiter'] = 'direction_preserving_v1'
+    if getattr(args, 'arm_controller', 'ik_pd') != 'ik_pd':
+        cfg['arm_controller'] = args.arm_controller
     cfg['gripper'] = getattr(args, 'gripper', 'panda')
     if cfg['gripper'] == 'robotiq_2f85' and getattr(args, 'grip_force', None) is not None:
         raise ValueError('Robotiq uses the sourced hinge servo; --grip-force is a Panda legacy option')
-    cfg['skin_dof'] = getattr(args, 'skin_dof', 'full')
+    cfg['skin_dof'] = getattr(args, 'skin_dof', 'trilinear')
     if cfg['skin_dof'] == 'trilinear':
         cfg.update(skin_model_status='Experimental trilinear interpolation; bounding-box bottom attachment; no internal contact',
                    skin_model_source='https://github.com/google-deepmind/mujoco/blob/3.5.0/model/flex/gripper_trilinear.xml',
@@ -584,6 +615,8 @@ def response_configuration(args):
                    engine_version=mujoco.__version__)
     if getattr(args, 'task', 'pick_cube') == 'cable':
         cfg['cable_layout'] = getattr(args, 'cable_layout', None) or 'routing'
+        if getattr(args, 'clip_model', 'rigid') != 'rigid':
+            cfg['clip_model'] = args.clip_model
     physics_step_us = getattr(args, 'physics_step_us', None)
     task = getattr(args, 'task', 'pick_cube')
     if task == 'feeding':
@@ -703,6 +736,12 @@ def viewer(args):
     from wowskin_lab.ui.task_guides import TaskGuides
     cfg = response_configuration(args)
     cfg['randomize_cube'] = args.randomize
+    cfg['teleop_frame'] = args.control_frame
+    cfg['teleop_base_lateral_sign'] = 1.
+    cfg['translation_target_limiter'] = 'direction_preserving_v1'
+    # New sessions have no hand-written tabletop target box. Older recordings
+    # retain their saved configuration when reconstructed for evaluation.
+    cfg['disable_workspace_limits'] = not args.workspace_limits
     cable_task = getattr(args, 'task', 'pick_cube') == 'cable'
     feeding_task = getattr(args, 'task', 'pick_cube') == 'feeding'
     peg_task = getattr(args, 'task', 'pick_cube') == 'peg_insert'
@@ -714,6 +753,7 @@ def viewer(args):
     cfg['keyboard_speed_m_s'] = keyboard_speed
     if args.input == 'keyboard':
         cfg['tcp_speed_m_s'] = max(cfg.get('tcp_speed_m_s', .08), keyboard_speed)
+        cfg['keyboard_target_limiter'] = 'direction_preserving_v1; 6 mm per-axis lead, stop along requested direction at workspace boundary'
     if args.input == 'pico':
         if not np.isfinite([args.pico_speed, args.pico_angular_speed]).all() or not (0 < args.pico_speed <= .5 and 0 < args.pico_angular_speed <= 3.):
             raise ValueError('Pico speed must be in (0, .5] m/s and angular speed in (0, 3] rad/s')
@@ -730,7 +770,7 @@ def viewer(args):
                                                args.spacemouse_deadzone)
         cfg['tcp_speed_m_s'] = args.spacemouse_speed
         cfg['tcp_angular_speed_rad_s'] = args.spacemouse_angular_speed
-        cfg['spacemouse'] = mouse_controller.settings()
+        cfg['spacemouse'] = mouse_controller.settings(cfg['teleop_frame'])
     if cable_task:
         from wowskin_lab.envs.cable import PandaCableEnv
         env = PandaCableEnv(cfg, pollen=not args.no_pollen)
@@ -744,6 +784,7 @@ def viewer(args):
         env = PandaPickCubeTactileEnv(cfg, pollen=not args.no_pollen)
     title = ('PandaCable / single clip' if cable_task and env.cable_layout == 'single_clip'
              else 'PandaCable' if cable_task else 'PandaFeeding' if feeding_task else 'PandaPegInsert' if peg_task else 'PandaPickCube')
+    print('Arm controller: '+env.cfg.get('arm_controller', 'ik_pd'), flush=True)
     if cfg['disable_cartesian_limits']:
         print('Cartesian limits OFF: no workspace, action increment, servo slew or target-lead limits. '
               'Centered input retains the target; focus loss still cancels outstanding motion. '
@@ -781,6 +822,10 @@ def viewer(args):
     if args.input == 'pico':
         from wowskin_lab.teleop.pico import PicoBridge
         pico = PicoBridge(args.pico_port, args.pico_scale, args.pico_speed, args.pico_angular_speed)
+        if cfg['teleop_frame'] == 'base':
+            from wowskin_lab.data.robot_state import world_from_base
+            pico.controller.robot_rotation = world_from_base(env)[:3, :3].copy()
+            pico.controller.base_lateral_sign = cfg['teleop_base_lateral_sign']
     rows = [] if args.diagnostic_log else deque(maxlen=200)
     sampled_count = 0
     close, fault, automatic = cable_task, "", False
@@ -791,7 +836,7 @@ def viewer(args):
     realtime_factor, loop_hz = 0., 0.
     deadline = time.monotonic()+args.seconds if args.seconds else float("inf")
     grip_help = env.cfg['gripper_control_mode'] if source_gripper else '-/= legacy force limit'
-    print(f"{title} 7D: HOLD WASD/arrows view-relative XY, E/Q Z | I/K local Rx, L/J Ry, U/O Rz | release to stop | X close Z open C hold | {grip_help} | T tug | R reset | V view | ,/. display scale | Esc overview | P exit", flush=True)
+    print(f"{title} 7D: input frame {cfg['teleop_frame']} | workspace box {'ON' if args.workspace_limits else 'OFF'} | HOLD WASD/arrows, E/Q Z | I/K local Rx, L/J Ry, U/O Rz | release to stop | X close Z open C hold | {grip_help} | R reset | V view | P exit", flush=True)
     if recorder:
         print('Recording: B new/reset or stop (unreviewed) | Enter save SUCCESS | N save FAILURE | R interrupts | P save interrupted and exit', flush=True)
     display_model, display_data = PhysicsWorker.display(env)
@@ -983,7 +1028,7 @@ def viewer(args):
                     elif keyboard.continuous:
                         action, was_moving = manual_action(env, held, was_moving, camera_azimuth)
                     else:
-                        fallback_motion[:3] = view_translation(fallback_motion[:3], camera_azimuth)
+                        fallback_motion[:3] = keyboard_translation(env, fallback_motion[:3], camera_azimuth)
                         fallback_motion[6] = env.gripper_fraction(target=True)
                         action = fallback_motion
                     row = physics.run(env.step, action)[-1]
@@ -1095,15 +1140,25 @@ def main():
     parser.add_argument("--seconds", type=float, default=0.,
                         help='Optional wall-clock limit; 0 runs until P/window close. Exiting interrupts an active recording.')
     parser.add_argument('--input', choices=['keyboard', 'pico', 'spacemouse'], default='keyboard')
+    parser.add_argument('--control-frame', choices=['base', 'view'], default='base',
+                        help='All inputs: fixed robot base (default), or legacy view-relative convention')
+    parser.add_argument('--arm-controller', choices=['ik_pd', 'cartesian_impedance'], default='ik_pd',
+                        help='Default IK/joint PD, or pinned SERL++ task-space torque with upstream default gains; reset still uses joint PD')
     parser.add_argument('--pointcloud', action='store_true', help='Show live three-view RGB-D fusion in robot base coordinates; M toggles even without this flag')
     parser.add_argument('--pointcloud-hz', type=float, default=5., help='Maximum point-cloud preview capture Hz (wall time); does not change recording clocks')
     parser.add_argument('--pointcloud-stride', type=int, default=4, help='Preview pixel sampling stride, 1 for every depth pixel; recording remains full resolution')
     parser.add_argument('--pointcloud-voxel', type=float, default=.002, help='Preview voxel size [m], 0 to disable; recording is unchanged')
     parser.add_argument('--no-cartesian-limits', action='store_true',
                         help='Simulation experiment: disable workspace, per-action, servo-speed and target-lead limits; retain input scale, IK, joint and actuator bounds')
+    parser.add_argument('--no-workspace-limits', action='store_true',
+                        help='Disable only the local TCP target bounding box; keep target lead, speed, joint and actuator limits')
+    parser.add_argument('--workspace-limits', action='store_true',
+                        help='Opt in to the legacy, locally chosen tabletop TCP target box; OFF by default')
     parser.add_argument('--task', choices=['pick_cube', 'cable', 'feeding', 'peg_insert'], default='pick_cube')
     parser.add_argument('--cable-layout', choices=['routing', 'single_clip'],
-                        help='Cable fixture layout: original routing (default), or one reversed C-clip')
+                        help='Cable fixture layout: local two-post routing (default), or one reversed C-clip')
+    parser.add_argument('--clip-model', choices=['rigid', 'elastic_beam'], default='rigid',
+                        help='Rigid original proxy (default), or experimental uncalibrated passive elastic clip')
     parser.add_argument('--feeding-setting', choices=['care_room', 'ebim_station'], default='care_room',
                         help='Feeding setting: seated adult in a local care room (default), or previous isolated EBiM station')
     parser.add_argument('--grip-force', type=float, help='Explicitly enable the OLD local force-limited controller [N/finger]; default uses sourced Menagerie Panda position servo')
@@ -1136,6 +1191,10 @@ def main():
     args = parser.parse_args()
     if args.cable_layout is not None and args.task != 'cable':
         parser.error('--cable-layout requires --task cable')
+    if args.clip_model != 'rigid' and args.task != 'cable':
+        parser.error('--clip-model requires --task cable')
+    if args.workspace_limits and args.no_workspace_limits:
+        parser.error('Choose --workspace-limits or --no-workspace-limits')
     if args.reskin_extrapolate and not args.reskin_model:
         parser.error('--reskin-extrapolate requires --reskin-model')
     if args.task in ('cable', 'feeding', 'peg_insert'):

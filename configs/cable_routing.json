@@ -1,0 +1,19 @@
+{
+  "schema": "two_connector_two_post_routing_v1",
+  "provenance": "Local tabletop layout using unchanged EBiM connector/post assets and cable material parameters; not official EBiM scoring",
+  "endpoint_world_m": [[0.28, -0.18, 0.1273], [0.58, 0.18, 0.1273]],
+  "initial_lateral_sine_amplitude_m": 0.14,
+  "capsules": 48,
+  "stress_free_shape": "straight",
+  "end_connection": "First segment fixed; last endpoint connected to the second fixed socket, free to rotate. No gripper attachment or clip capture force.",
+  "posts_world_m": [[0.40, -0.025, 0.1008], [0.49, 0.065, 0.1008]],
+  "post_sides_x": [1, -1],
+  "scoring": {
+    "schema": "ordered_two_post_side_passages_v1",
+    "description": "From connector 0 to 1, pass three Y cross-sections on the +X side of post 0 then the -X side of post 1, below their top caps; hold 0.3 s. Clip insertion is diagnostic only in this layout.",
+    "side_offset_x_m": [0.0087, 0.035],
+    "cross_section_offsets_y_m": [-0.012, 0.0, 0.012],
+    "center_height_world_m": [0.103, 0.120],
+    "continuous_dwell_s": 0.3
+  }
+}

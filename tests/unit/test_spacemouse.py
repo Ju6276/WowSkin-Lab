@@ -24,6 +24,44 @@ def fake_env():
 
 
 class SpaceMouseChecks(unittest.TestCase):
+    def test_front_facing_base_lateral_input_and_pitch_are_separate(self):
+        from wowskin_lab.envs.pick_cube import keyboard_translation
+        from scipy.spatial.transform import Rotation
+        for yaw in (0.,135.,270.):
+            env, state, controller = fake_env(), MouseState(), SpaceMouseController()
+            env.cfg.update(teleop_frame='base',teleop_base_lateral_sign=1.,disable_workspace_limits=True)
+            env.model = SimpleNamespace(body=lambda name: SimpleNamespace(id=0))
+            env.data.xmat = np.eye(3).reshape(1,9)
+            env.data.xpos = np.zeros((1,3))
+            rotation = np.diag([1.,-1.,-1.])
+            env.data.site_xmat = rotation.reshape(1,9)
+            controller.action(env,state.sample(),yaw,now=1.)
+            for sign in (-1.,1.):
+                state.feed(report(1,[350*sign,0,0,350,0,0]),2.)
+                action = controller.action(env,state.sample(),yaw,now=2.)
+                np.testing.assert_allclose(action[:3],[0.,sign*.0012,0.],atol=1e-12)
+                np.testing.assert_allclose(action[:3],.0012*keyboard_translation(env,[sign,0,0],yaw),atol=1e-12)
+                next_rotation = rotation @ Rotation.from_rotvec(action[3:6]).as_matrix()
+                self.assertGreater((next_rotation[:,2]-rotation[:,2])[0],0.)
+
+    def test_base_frame_translation_and_rotation_ignore_view(self):
+        from wowskin_lab.envs.pick_cube import keyboard_translation
+        base = np.array([[0.,-1.,0.], [1.,0.,0.], [0.,0.,1.]])
+        results = []
+        for azimuth in (0., 135., 270.):
+            env, state, controller = fake_env(), MouseState(), SpaceMouseController()
+            env.cfg.update(teleop_frame='base', disable_workspace_limits=True)
+            env.model = SimpleNamespace(body=lambda name: SimpleNamespace(id=0))
+            env.data.xmat = base.reshape(1,9)
+            env.data.xpos = np.zeros((1,3))
+            np.testing.assert_allclose(keyboard_translation(env, [0,1,0], azimuth), base[:,0])
+            controller.action(env, state.sample(), azimuth, now=1.)
+            state.feed(report(1, [0,-350,0,350,0,0]), 2.)
+            results.append(controller.action(env, state.sample(), azimuth, now=2.))
+        for action in results:
+            np.testing.assert_allclose(action[:3], .0012*base[:,0], atol=1e-12)
+            np.testing.assert_allclose(action, results[0], atol=1e-12)
+
     def test_unlimited_mode_keeps_target_lead_and_centered_target_but_focus_loss_stops(self):
         env, state, controller = fake_env(), MouseState(), SpaceMouseController()
         env.cfg['disable_cartesian_limits'] = True

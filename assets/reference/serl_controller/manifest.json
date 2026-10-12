@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/liusong-0086/serl-plus-plus",
+  "revision": "a1c541ad77c3d55c3e7b2ddc568773a449987e7f",
+  "source_file": "infra/sim/controllers/impedance.py",
+  "sha256": "a15e6de4c1631075f2a5e2cb4815dd90f3a7fe863000192a58d8a49aa9609c34",
+  "license": "Apache-2.0",
+  "modifications": "Source unchanged; local loader adapts only mj_fullM signature for MuJoCo 3.15."
+}

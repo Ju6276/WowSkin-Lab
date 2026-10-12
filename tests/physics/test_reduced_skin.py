@@ -54,13 +54,15 @@ class ReducedTaskChecks(unittest.TestCase):
         return response_configuration(SimpleNamespace(task=task, skin_dof='trilinear', ideal=True,
             reskin_model=ROOT/'outputs/reskin_forward_mapped', reskin_extrapolate=True))
 
-    def test_cable_both_layouts_grasp_lift_release(self):
+    def test_legacy_short_cable_layouts_grasp_lift_release(self):
         from wowskin_lab.envs.cable import PandaCableEnv
         from tests.physics.test_cable_stability import CableStabilityChecks
         for layout in ('routing', 'single_clip'):
             with self.subTest(layout=layout):
                 cfg = self.config('cable')
                 cfg['cable_layout'] = layout
+                if layout == 'routing':
+                    cfg['scene_design'] = 'ebim_task1_single_arm'  # Recorded one-ended 0.38 m benchmark.
                 e = PandaCableEnv(cfg, pollen=False)
                 initial = e.data.xpos[e.cable_bodies, 2].copy()
                 rows = []
@@ -70,9 +72,9 @@ class ReducedTaskChecks(unittest.TestCase):
                 for _ in range(600):
                     t = e.data.time
                     if t < 2.4: target = [x, -.12, .185]
-                    elif t < 3.3: target = [x, -.12, .1275]
+                    elif t < 3.3: target = [x, -.12, .123]
                     elif t < 4.2:
-                        target = [x, -.12, .1275]
+                        target = [x, -.12, .123]
                         e.command_gripper(True)
                     else:
                         target = [x, -.12, .17]

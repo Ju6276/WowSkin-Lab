@@ -13,6 +13,8 @@ from wowskin_lab.envs.franka import FrankaTactileSim
 from wowskin_lab.baselines.pollen import CHANNELS, RESOURCE_DIR, PollenPredictor, read_csv
 
 
+@unittest.skipUnless(mujoco.__version__.startswith('3.5.'),
+                     'Legacy full-node mount; reduced geometry and velocities covered by test_reduced_skin')
 class MountedSensorChecks(unittest.TestCase):
     def test_magnetic_field_invariant_under_rigid_arm_motion(self):
         sim = FrankaTactileSim()

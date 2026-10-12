@@ -135,6 +135,8 @@ class PicoController:
             raise ValueError('Invalid Pico speed limits')
         self.speed, self.angular_speed = speed, angular_speed
         self.camera_azimuth = camera_azimuth
+        self.robot_rotation = None  # Set by the environment for fixed base-frame control.
+        self.base_lateral_sign = -1.  # Legacy; viewer records/sets front-facing +Y right.
         self.basis = None
         self.mode = None
         self.reset()
@@ -161,7 +163,14 @@ class PicoController:
         yaw = np.deg2rad(self.camera_azimuth)
         world_yaw = np.array([[np.cos(yaw), -np.sin(yaw), 0.],
                               [np.sin(yaw), np.cos(yaw), 0.], [0., 0., 1.]])
-        self.basis = world_yaw @ np.stack([forward, np.cross(up, forward), up])
+        target_rotation = world_yaw if self.robot_rotation is None else self.robot_rotation
+        self.basis = target_rotation @ np.stack([forward, np.cross(up, forward), up])
+        self.translation_basis = self.basis.copy()
+        if self.robot_rotation is not None:
+            # Mirror only operator left/right translation. Orientation still
+            # uses the same proper rotation basis as before this UI change.
+            self.translation_basis = (target_rotation @ np.diag([1., -self.base_lateral_sign, 1.])
+                                      @ target_rotation.T @ self.basis)
         self.session = frame['session']
         self.mode = frame.get('mode', 'worn')
         self.engaged, self.armed = False, False
@@ -226,23 +235,23 @@ class PicoController:
                 self.status = 'Pose jump: release right grip'
                 return env.hold_action()
         self.previous = (p.copy(), r.copy())
-        desired_p = self.robot_p + self.scale*self.basis @ (p-self.origin_p)
+        desired_p = self.robot_p + self.scale*self.translation_basis @ (p-self.origin_p)
         limited = not env.cfg.get('disable_cartesian_limits', False)
-        if limited:
-            desired_p = np.clip(desired_p, *getattr(env, 'workspace', WORKSPACE))
         desired_r = self.basis @ r @ self.origin_r.T @ self.basis.T @ self.robot_r
         # Bound motion per simulated second, and bound target lead at contact.
         actual_p = env.data.site_xpos[env.tcp_site]
         actual_r = env.data.site_xmat[env.tcp_site].reshape(3, 3)
         from wowskin_lab.envs.pick_cube import rotation_matrix
         if limited:
-            env.target_xyz = np.clip(env.target_xyz, actual_p-.03, actual_p+.03)
             env.target_rotation = actual_r @ rotation_matrix(limit_vector(rotation_vector(actual_r.T @ env.target_rotation), .10))
         hz = env.cfg['sample_hz']
         delta_p = desired_p-env.target_xyz
         delta_r = rotation_vector(env.target_rotation.T @ desired_r)
         if limited:
+            from wowskin_lab.teleop.target_limits import straight_step, workspace_bounds
             delta_p = limit_vector(delta_p, self.speed/hz)
+            delta_p = straight_step(env.target_xyz, delta_p, actual_p,
+                                    workspace_bounds(env, WORKSPACE), lead_m=.03)
             delta_r = limit_vector(delta_r, self.angular_speed/hz)
         closure = float(right['buttons'][0])
         self.status = 'Moving: right trigger closes gripper'

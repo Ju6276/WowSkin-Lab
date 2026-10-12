@@ -11,8 +11,8 @@ import xml.etree.ElementTree as ET
 import mujoco
 import numpy as np
 
+from wowskin_lab.core.arm_control import joint_pd_reset
 from wowskin_lab.paths import ROOT
-from wowskin_lab.core.physics import configuration
 from wowskin_lab.envs.franka import mount_reference
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, pick_scene, rotation_matrix
 from wowskin_lab.envs.task_evaluation import task_config
@@ -104,7 +104,11 @@ class PandaPegInsertEnv(PandaPickCubeTactileEnv):
     task_name = 'peg_insert'
 
     def __init__(self, cfg=None, pollen=False):
-        cfg = dict(configuration() if cfg is None else cfg)
+        if cfg is None:
+            from types import SimpleNamespace
+            from .pick_cube import response_configuration
+            cfg = response_configuration(SimpleNamespace(task='peg_insert'))
+        cfg = dict(cfg)
         if 'peg_insert' not in cfg:
             cfg['peg_insert'] = task_config('peg_insert')
             if cfg.get('gripper') == 'robotiq_2f85':
@@ -122,8 +126,11 @@ class PandaPegInsertEnv(PandaPickCubeTactileEnv):
                               self.model.geom_bodyid[i] == self.probe_body and self.model.geom_contype[i]}
         self.cfg['peg_asset_source'] = json.loads((ASSETS/'manifest.json').read_text())['revision']
         self.cfg['grasp_assist'] = False
-        self.cfg['arm_control'] = 'Local Cartesian IK + joint PD torque (600/45) + bias compensation; not SERL++ Cartesian impedance'
+        self.cfg['arm_control'] = ('Pinned SERL++ Cartesian impedance; local TCP and reset nullspace posture'
+            if cfg.get('arm_controller') == 'cartesian_impedance' else
+            'Local Cartesian IK + joint PD torque (600/45) + bias compensation; not SERL++ Cartesian impedance')
 
+    @joint_pd_reset
     def reset(self, seed=None):
         super().reset(seed)
         c, m, d = self.cfg['peg_insert'], self.model, self.data

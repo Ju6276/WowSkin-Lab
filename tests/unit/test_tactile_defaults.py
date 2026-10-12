@@ -35,12 +35,22 @@ class TactileDefaultsTests(unittest.TestCase):
 
     def test_task_integration_and_explicit_step_override(self):
         from wowskin_lab.envs.pick_cube import response_configuration
-        for task, step in (('pick_cube', .0001), ('cable', .0001), ('feeding', .00005)):
+        for task, step in (('pick_cube', .0005), ('cable', .0005), ('feeding', .0005), ('peg_insert', .0005)):
             cfg = response_configuration(SimpleNamespace(task=task))
+            self.assertAlmostEqual(cfg['timestep_s'], step)
+            self.assertEqual(cfg['skin_dof'], 'trilinear')
+            self.assertTrue(cfg['disable_workspace_limits'])
+            self.assertEqual(cfg['teleop_frame'], 'base')
+            self.assertEqual(cfg['teleop_base_lateral_sign'], 1.)
+        # Explicit historical full-node configurations retain their old step.
+        for task, step in (('pick_cube', .0001), ('cable', .0001), ('feeding', .00005)):
+            cfg = response_configuration(SimpleNamespace(task=task, skin_dof='full'))
             self.assertAlmostEqual(cfg['timestep_s'], step)
         cfg = response_configuration(SimpleNamespace(task='pick_cube', physics_step_us=20))
         self.assertAlmostEqual(cfg['timestep_s'], .00002)
         self.assertEqual(cfg['constraint_jacobian'], 'sparse')
+        cfg = response_configuration(SimpleNamespace(task='pick_cube', workspace_limits=True))
+        self.assertFalse(cfg['disable_workspace_limits'])
 
     def test_shared_dataset_records_model_choice_in_episode_metadata(self):
         args = self.command(['teleop', '--skin-dof', 'trilinear'])

@@ -13,25 +13,35 @@ class InputChecks(unittest.TestCase):
         from wowskin_lab.envs.pick_cube import response_configuration
         from wowskin_lab.envs.cable import PandaCableEnv
         cfg = response_configuration(SimpleNamespace(task='cable',ideal=True))
-        self.assertAlmostEqual(cfg['timestep_s'],.0001)
+        self.assertAlmostEqual(cfg['timestep_s'],.0005)
         reference = response_configuration(SimpleNamespace(task='cable',physics_step_us=20))
         cube = response_configuration(SimpleNamespace(task='pick_cube'))
         self.assertAlmostEqual(reference['timestep_s'],.00002)
-        self.assertAlmostEqual(cube['timestep_s'],.00002)
-        cfg.update(keyboard_speed_m_s=.12,tcp_speed_m_s=.12)
+        self.assertAlmostEqual(cube['timestep_s'],.0005)
+        cfg.update(keyboard_speed_m_s=.12,tcp_speed_m_s=.12,
+                   teleop_frame='base',teleop_base_lateral_sign=1.,disable_workspace_limits=True)
         env = PandaCableEnv(cfg,pollen=False)
-        self.assertEqual(env.steps_per_sample,100)
+        self.assertEqual(env.steps_per_sample,20)
         keys = KeyState(MOVE_AXES)
         keys.event(ord('D'),True)
         start=env.data.site_xpos[env.tcp_site].copy()
         moving=False
+        targets=[]
         for _ in range(100):
             a,moving=manual_action(env,keys.sample().held,moving,camera_azimuth=135)
             env.step(a)
+            targets.append(env.target_xyz.copy())
         end=env.data.site_xpos[env.tcp_site].copy()
-        distance=float(np.dot(end-start,view_translation([1,0,0],135)))
-        self.assertGreater(distance,.10)
+        distance=float((end-start)[1])
+        # 120 mm/s is an input ceiling. The retained 6 mm target lead can
+        # reduce travel when joint PD tracking lags; it must not turn the path.
+        self.assertGreater(distance,.03)
         self.assertLess(distance,.125)
+        targets=np.asarray(targets)
+        np.testing.assert_allclose(targets[:,[0,2]],np.broadcast_to(start[[0,2]],(100,2)),atol=1e-9)
+        self.assertTrue(np.all(np.diff(targets[:,1])>=-1e-10))
+        self.assertLess(np.max(np.diff(targets[:,1])),.001201)
+        self.assertLess(np.linalg.norm(end-env.target_xyz),.008)
         keys.event(ord('D'),False)
         for _ in range(50):
             a,moving=manual_action(env,keys.sample().held,moving,camera_azimuth=135)

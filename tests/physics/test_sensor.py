@@ -1,5 +1,6 @@
 """Sensor bench checks: no classifier is involved."""
 import unittest
+import mujoco
 from argparse import Namespace
 from collections import Counter
 
@@ -9,6 +10,7 @@ from wowskin_lab.core.physics import TactileSim, configuration
 from wowskin_lab.envs.bench import normal_press, sensor_reading, bench_configuration
 
 
+@unittest.skipUnless(mujoco.__version__.startswith('3.5.'), 'Legacy full-node sensor bench for MuJoCo 3.5')
 class SensorChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -85,6 +87,23 @@ class SensorChecks(unittest.TestCase):
         self.assertEqual(sim.zero_time, sim.data.time)
         self.assertEqual(len(sim.delay), sim.cfg["delay_samples"])
         np.testing.assert_array_equal(sim.filtered, np.zeros((5, 3)))
+
+
+@unittest.skipUnless(mujoco.__version__.startswith('3.15.'), 'Current MuJoCo 3.15 sensor viewer')
+class CurrentSensorBenchChecks(unittest.TestCase):
+    def test_current_viewer_configuration_press_and_release(self):
+        cfg=bench_configuration(Namespace(seed=0,x_mm=0.,y_mm=0.,load_n=.05,ideal=True))
+        self.assertEqual(cfg['skin_dof'], 'trilinear')
+        sim=TactileSim(cfg)
+        self.assertEqual(sim.model.opt.integrator, mujoco.mjtIntegrator.mjINT_DISCRETE)
+        rows=[sensor_reading(sim,normal_press) for _ in range(350)]
+        hold=[r for r in rows if 1.4<r['time_s']<1.9]
+        self.assertAlmostEqual(np.mean([r['normal_force_n'] for r in hold]),.05,delta=.005)
+        self.assertGreater(np.linalg.norm(hold[-1]['ideal_delta_ut']),.01)
+        self.assertLess(rows[-1]['normal_force_n'],1e-6)
+        self.assertGreater(min(r['min_volume_ratio'] for r in rows),0.)
+        self.assertTrue(np.isfinite([r['magnetic_ut'] for r in rows]).all())
+        np.testing.assert_array_equal(sim.data.warning.number,0)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@
 
 ## 已包含的素材与代码
 
+- SERL++ 可选笛卡尔阻抗：[源码与摘要](assets/reference/serl_controller/manifest.json)、[Apache-2.0 许可证](assets/reference/serl_controller/LICENSE)。保留原文件；运行时只适配 MuJoCo `mj_fullM` 调用接口，初始化和输入处理属于本地接入。
 - SERL++ Peg Insert：[来源与逐文件 SHA256](assets/serl_peg/manifest.json)、[上游许可证](assets/serl_peg/LICENSE)。网格、凸分解与源 XML 保持原样；本地场景不复制 grasp weld，使用自己的机器人、抓法、控制与评分。
 - EBiM 线材、卡扣与 Robotiq：[来源 manifest](assets/ebim/manifest.json)、[许可证](assets/ebim/LICENSE)、[NOTICE](assets/ebim/NOTICE)。
 - EBiM 喂食：[来源 manifest](assets/ebim_feeding/manifest.json)、[许可证](assets/ebim_feeding/LICENSE)、[NOTICE](assets/ebim_feeding/NOTICE)、[上游说明](assets/ebim_feeding/upstream_README.md)。派生人体／布局不等于上游完整任务。

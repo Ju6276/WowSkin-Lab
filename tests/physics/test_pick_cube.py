@@ -19,7 +19,7 @@ class PickCubeChecks(unittest.TestCase):
         hud.show(SimpleNamespace(lock=nullcontext, is_running=lambda: True, viewport=None), {})
 
     def test_removed_stock_pads_and_registered_upper_edge(self):
-        sim = FrankaTactileSim()
+        sim = PandaPickCubeTactileEnv(pollen=False)
         root = ET.fromstring(sim.xml)
         reference = mount_reference(sim.cfg)
         self.assertAlmostEqual(sim.cfg['base_height_m'], .0115)
@@ -43,7 +43,7 @@ class PickCubeChecks(unittest.TestCase):
         self.assertEqual(m.jnt_type[m.body_jntadr[env.probe_body]], mujoco.mjtJoint.mjJNT_FREE)
         self.assertFalse(np.any(m.eq_type == mujoco.mjtEq.mjEQ_WELD))
         rows = [env.step(scripted_action(env))[-1] for _ in range(850)]
-        self.assertTrue(env.success)
+        self.assertFalse(env.success)  # Lift/tug/release in place is not a two-box delivery.
         self.assertGreater(max(r["lift_m"] for r in rows), .08)
         held = [r for r in rows if 4.8 < r["time_s"] < 5.4]
         self.assertTrue(all(r["grasped"] for r in held))
@@ -91,7 +91,7 @@ class PickCubeChecks(unittest.TestCase):
         np.testing.assert_allclose(env.servo_rotation, start, atol=1e-12)
 
     def test_hud_z_sign_xy_rotation_and_display_only_scale(self):
-        sim = FrankaTactileSim()
+        sim = PandaPickCubeTactileEnv(pollen=False)
         hud = TactileHUD(sim, full_scale_ut=10.)
         signal = np.zeros((5, 3))
         signal[0, 2], signal[1, 2] = 6., -6.

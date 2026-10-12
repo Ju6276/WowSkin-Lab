@@ -1,4 +1,5 @@
 """Compact operator overlay; optional diagnostics do not affect simulation."""
+import numpy as np
 
 
 def saved_recording_notice(recorder, path, outcome):
@@ -86,6 +87,10 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
                      f"Insert {row.get('peg_depth_m', 0.)*1000:.1f}/{env.peg_score.config['required_insertion_m']*1000:g} mm | "
                      f"offset {row.get('peg_lateral_error_m', 0.)*1000:.1f} mm | "
                      f"angle {row.get('peg_orientation_error_deg', 0.):.1f} deg | hold {row.get('peg_dwell_s', 0.):.1f} s")
+    elif hasattr(env, 'routing_score'):
+        task_text = ('SUCCESS: two-post route' if env.success else
+                     f"Route {row.get('routing_gate_count', 0)}/6 | hold {row.get('routing_dwell_s', 0.):.1f}/"
+                     f"{env.routing_score.config['scoring']['continuous_dwell_s']:g} s")
     elif hasattr(env, 'cable_layout'):
         task_text = ('SUCCESS: cable in clip' if env.success else
                      f"Clip {row.get('clip_span_count', 0)}/3 | hold {row.get('clip_dwell_s', 0.):.1f}/"
@@ -108,8 +113,22 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
     else:
         record_text = 'Disabled for this run'
 
-    labels = [title, 'Task', 'Record']
+    labels = [title.split(' /')[0], 'Task', 'Record']
     values = [f'{input_kind} | {input_status}', task_text, record_text]
+    labels += ['Input frame']
+    values += [env.cfg.get('teleop_frame', 'view').upper()+
+               (' | A:-Y D:+Y' if env.cfg.get('teleop_frame') == 'base' and env.cfg.get('teleop_base_lateral_sign') == 1. else '')+
+               ' | local workspace '+
+               ('OFF' if env.cfg.get('disable_workspace_limits') or env.cfg.get('disable_cartesian_limits') else 'ON (H: bounds)')]
+    if env.cfg.get('arm_controller') == 'cartesian_impedance':
+        labels += ['Arm control']
+        values += ['Cartesian impedance (SERL++)']
+    if env.cfg.get('clip_model') == 'elastic_beam':
+        labels += ['Clip model']
+        values += ['Elastic beam | experimental, uncalibrated']
+    if getattr(env, 'keyboard_workspace_limited', False):
+        labels += ['Target boundary']
+        values += ['STOP: local workspace boundary | H shows bounds']
     if env.cfg.get('disable_cartesian_limits', False):
         labels += ['Control']
         values += ['Cartesian limits OFF | centered input retains target']
@@ -117,6 +136,12 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
         labels += ['To finish']
         values += [feeding_feedback(row, env.delivery.config)]
     if diagnostics:
+        from wowskin_lab.envs.pick_cube import WORKSPACE
+        from wowskin_lab.teleop.target_limits import workspace_bounds
+        bounds = workspace_bounds(env, WORKSPACE)
+        labels += ['Workspace [world m]']
+        values += ['OFF' if np.isinf(bounds).all() else
+                   ' | '.join(f'{axis} {lo:g}..{hi:g}' for axis, lo, hi in zip('XYZ', *bounds))]
         model = ('Forward MLP (experimental)' if env.cfg.get('reskin_model') else
                  'Dipole + fitted gains' if env.cfg.get('magnetic_fit') else 'Dipole (unfitted)')
         labels += ['Magnetic model', 'Gripper', 'Finger load [N]', 'Mesh min V/V0',
@@ -145,7 +170,9 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
             values += ['Right GRIP + move / rotate | release stops',
                        'Right TRIGGER closes | release GRIP holds']
         else:
-            values += ['WASD + E/Q | I/K L/J U/O rotate', 'X close | Z open | C hold']
+            move = ('BASE: W/S X | A/D Y | E/Q Z' if env.cfg.get('teleop_frame', env.cfg.get('keyboard_frame')) == 'base'
+                    else 'VIEW: WASD + E/Q')
+            values += [move+' | I/K L/J U/O rotate', 'X close | Z open | C hold']
     labels += ['Keys']
     values += [f"R reset | V view | M cloud | H {'hide' if diagnostics else 'show'} details | P exit"]
     if recording_notice:

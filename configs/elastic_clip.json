@@ -1,0 +1,75 @@
+{
+  "schema": "experimental_discrete_elastic_clip_v2_two_lips",
+  "status": "Uncalibrated inextensible planar beam approximation, not original EBiM physics or a full FEM reproduction",
+  "method_reference": "https://arxiv.org/html/2003.13566v1#A3",
+  "method": "Discrete bending energy 0.5*k_theta*q^2, k_theta=EI/dual_length; MuJoCo passive hinge springs plus contact/friction; no capture force or weld",
+  "geometry_source": "Approximate midlines traced from EBiM C-Clip.stl section at x=6.5 mm after source 0.01 scale; mounting base retained below z=1 mm; upper arm and lower lip use independent passive beam chains rooted at that base",
+  "young_pa": 1000000000.0,
+  "density_kg_m3": 1000.0,
+  "joint_damping_nm_s_rad": 2e-05,
+  "friction": [
+    0.25,
+    0.002,
+    0.0002
+  ],
+  "contact_solref": [
+    0.002,
+    1.0
+  ],
+  "parameter_status": "Young modulus, density and damping are illustrative test parameters, not measured EBiM plastic values. Friction 0.25 taken from EBiM back/base proxy. Thickness and midline are section approximations.",
+  "x_center_m": 0.0065,
+  "width_m": 0.01,
+  "max_segment_length_m": 0.002,
+  "base_cut_height_m": 0.001,
+  "midline_yz_m": [
+    [
+      0.0075,
+      0.001
+    ],
+    [
+      0.0075,
+      0.0195
+    ],
+    [
+      0.008,
+      0.0205
+    ],
+    [
+      0.0098,
+      0.02145
+    ],
+    [
+      0.02,
+      0.02145
+    ],
+    [
+      0.0209,
+      0.0205
+    ],
+    [
+      0.0209,
+      0.00885
+    ]
+  ],
+  "span_thickness_m": [
+    0.002,
+    0.0015,
+    0.001,
+    0.0005,
+    0.0005,
+    0.0005
+  ],
+  "lower_midline_yz_m": [
+    [
+      0.02025,
+      0.001
+    ],
+    [
+      0.02025,
+      0.0063
+    ]
+  ],
+  "lower_span_thickness_m": [
+    0.0005
+  ]
+}

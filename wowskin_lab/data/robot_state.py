@@ -73,9 +73,18 @@ def robot_metadata(env):
     parent = env.model.site_bodyid[env.tcp_site]
     bounds = np.asarray(getattr(env, 'workspace', WORKSPACE))
     limited = not env.cfg.get('disable_cartesian_limits', False)
-    control = dict(source='Local simulation IK/PD and input shaping, not paper or manufacturer controller settings',
+    workspace_limited = limited and not env.cfg.get('disable_workspace_limits', False)
+    cartesian = env.cfg.get('arm_controller') == 'cartesian_impedance'
+    control = dict(source='Simulation control and local input shaping; source and gains recorded separately',
+        arm_controller=env.cfg.get('arm_controller', 'ik_pd'),
+        arm_control_source=env.cfg.get('arm_control_source'),
+        cartesian_impedance=env.cfg.get('cartesian_impedance') if cartesian else None,
+        teleop_frame=env.cfg.get('teleop_frame', 'legacy_unspecified'),
+        teleop_base_lateral_sign=env.cfg.get('teleop_base_lateral_sign', -1.),
+        translation_target_limiter=env.cfg.get('translation_target_limiter', 'legacy_component_clip'),
         cartesian_limits_enabled=limited,
-        workspace_world_m=[[float(v) if np.isfinite(v) else None for v in row] for row in bounds] if limited else None,
+        workspace_limits_enabled=workspace_limited,
+        workspace_world_m=[[float(v) if np.isfinite(v) else None for v in row] for row in bounds] if workspace_limited else None,
         unbounded_axis_value=None, max_translation_component_per_tick_m=.005 if limited else None,
         max_rotation_norm_per_tick_rad=.03 if limited else None,
         tcp_speed_m_s=env.cfg.get('tcp_speed_m_s', .08) if limited else None,
@@ -83,6 +92,7 @@ def robot_metadata(env):
         ik_iterations=8, ik_damping_squared=.0001, ik_max_joint_update_rad=.04,
         ik_rotation_error_weight=.2, ik_error_tolerance=1e-5,
         joint_limit_margin_rad=.02, arm_pd_position_gain=600., arm_pd_velocity_gain=45.,
+        ik_pd_usage='Reset initialization only' if cartesian else 'Reset and runtime',
         keyboard_spacemouse_target_lead_component_m=.006 if limited else None,
         keyboard_spacemouse_rotation_lead_rad=.03 if limited else None,
         pico_target_lead_component_m=.03 if limited else None, pico_rotation_lead_rad=.10 if limited else None,

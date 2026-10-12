@@ -22,7 +22,7 @@ from scipy.spatial.transform import Rotation
 
 from wowskin_lab.data.cameras import CAMERAS, capture_options
 from wowskin_lab.data.recording import magnetic_baseline, require_training_tactile
-from wowskin_lab.data.robot_state import robot_sample, world_from_base
+from wowskin_lab.data.robot_state import robot_metadata, robot_sample, world_from_base
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, hold_current_pose, task_camera
 
 
@@ -315,7 +315,8 @@ def main(argv=None):
         action='base dXYZ metres + local TCP relative rotvec radians + absolute closure fraction',
         execution='Initialize target once at reset; accumulate each base/local increment once across 100 Hz controller ticks without erasing pending servo motion',
         viewer='Detached display model/data; viewer reset or perturbations do not enter policy physics',
-        controller='Existing MuJoCo IK + joint servos and command limits, not XArm hardware control',
+        controller=transport.env.cfg.get('arm_controller', 'ik_pd'),
+        controller_contract=robot_metadata(transport.env)['controller_contract'],
         image_channels='BGR to match original converter PKL; live MuJoCo RGB converted once',
         input_keys=list(cfg.suite.pixel_keys)+list(cfg.suite.aux_keys), checkpoint_stats_used=True,
         baseline='Median of five actual reset measurements, as in upstream RobotEnv.reset',
