@@ -79,7 +79,7 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 ## 脆性薯片试验
 
-机器人场景沿用喂食的房间与 Franka，移除人体、勺子和豆子，保留 EBiM 原始托盘。薯片约 70×50 mm，两端上翘、两侧下弯，高低边缘相差 24 mm；实体碰撞面与外形一致。启动后空夹爪，按 **V** 切换薯片近景：
+机器人场景沿用喂食的房间与 Franka，移除人体、勺子和豆子，保留 EBiM 原始托盘几何和物理参数，托盘颜色使用原场景碗的蓝绿色材质。薯片约 70×50 mm，两端上翘、两侧下弯，高低边缘相差 24 mm；实体碰撞面与外形一致。启动后空夹爪，按 **V** 切换薯片近景：
 
 ```bash
 .venv/bin/mjpython -m wowskin_lab teleop --task chip_tray --input keyboard --ideal --record-dir data/episodes_chip_tray

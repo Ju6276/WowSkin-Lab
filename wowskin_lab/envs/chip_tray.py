@@ -61,6 +61,11 @@ def tray_scene(cfg, layout):
         e.set('childclass' if e.tag == 'body' else 'class', 'ebim_task3')
         world.append(e)
     tray = world.find("body[@name='dynamic_simple_tray']")
+    # Reuse the source bowl's colour; tray geometry and contact remain original.
+    material_name = cfg['chip_tray']['tray_visual_material_source']
+    if asset.find(f"material[@name='{material_name}']") is None:
+        asset.append(copy.deepcopy(source.find(f"asset/material[@name='{material_name}']")))
+    tray.find("geom[@name='visual_dynamic_simple_tray']").set('material', material_name)
     floor = tray.find(".//geom[@name='collision_simple_tray_floor']")
     frame = tray.find("body[@name='dynamic_simple_tray_collision_frame']")
     tray_pos = np.fromstring(tray.get('pos'), sep=' ')

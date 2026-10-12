@@ -1,6 +1,7 @@
 {
   "schema": "chip_tray_scene_v1",
-  "provenance": "Local experimental chip on the original EBiM task3 tray, in the existing care room. Tray mesh, inertial and contact properties are retained. Only its initial height is lowered to rest on the table.",
+  "provenance": "Local experimental chip on the original EBiM task3 tray, in the existing care room. Tray mesh, inertial and contact properties are retained. Initial height is lowered to rest on the table; the visual material is taken from EBiM's bowl at the user's request.",
+  "tray_visual_material_source": "mat_v2_OmniPBR",
   "chip_overrides": {
     "saddle_height_m": 0.012,
     "sectors": 4,

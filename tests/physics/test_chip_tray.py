@@ -21,6 +21,8 @@ class ChipTrayTests(unittest.TestCase):
         source = copy.deepcopy(ET.parse(ASSETS/'scene_100.xml').find(".//body[@name='dynamic_simple_tray']"))
         source.set('pos', actual.get('pos'))
         source.set('childclass', 'ebim_task3')
+        source.find("geom[@name='visual_dynamic_simple_tray']").set(
+            'material', e.cfg['chip_tray']['tray_visual_material_source'])
         self.assertEqual(ET.tostring(source), ET.tostring(actual))
         vertices = np.concatenate([center+v for center, v, _ in e.fracture.pieces])
         c = chip_config()
