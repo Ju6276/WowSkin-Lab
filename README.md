@@ -90,7 +90,7 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 显示 `INTACT / BROKEN` 和碎片组数；沿用 B/Enter/N 手动录制操作。**本试验尚未定义自动成功条件**，Enter 是人工标记，不能把它当作自动验证的无损抓取。几何与求解设置见 [chip_tray.json](configs/chip_tray.json)；没有给薯片添加机器人固定约束。原来的喂食任务不变。
 
-复测力闭环与抬升：`.venv/bin/python -m scripts.diagnostics.check_chip_force --forces .05 .08`。raw 的 `gripper_force_feedback/` 另存每步力目标、启用状态、双指载荷和伺服开度；原 state/action 中的夹爪量仍是实测／指令闭合比例，没有改成牛顿。该试验的自动训练导出尚未验收。
+复测力闭环与抬升：`.venv/bin/python -m scripts.diagnostics.check_chip_force --forces .05 .08`。raw 的 `gripper_force_feedback/` 另存每步力目标、启用状态、双指载荷、`width_m` 实际宽度和 `servo_target_width_m` 内层伺服目标宽度；宽度由 Panda 指关节计算，不是软指腹表面间距。原 state/action 中的夹爪量仍是实测／指令闭合比例，没有改成牛顿。ViSk/FTF 导出仍用开度动作；让策略输出目标力并在部署时启用相同力闭环，属于尚未完成的独立适配。
 
 独立按压台仍可使用，不自动录制：
 

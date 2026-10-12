@@ -165,9 +165,14 @@ class PandaChipEnv(PandaPickCubeTactileEnv):
         super().control(mode)
 
     def gripper_feedback_sample(self):
+        # Panda local slide coordinates are shifted by -0.04 m from the
+        # source fingers. Report encoder-equivalent opening, not skin gap.
+        closed = self.model.jnt_range[self.finger_joints, 0]
         return dict(enabled=bool(self.force_grip.enabled), target_n=self.force_grip.target_n,
                     selected_target_n=self.force_grip.selected_target_n,
                     pad_normal_force_n=pad_normal_forces(self.model, self.data, (self.skin_flex, self.passive_flex)),
+                    width_m=float(np.sum(self.data.qpos[self.finger_q]-closed)),
+                    servo_target_width_m=float(np.sum(self.grip_target-closed)),
                     servo_target_closure=self.gripper_fraction(target=True))
 
     def after_physics_step(self):

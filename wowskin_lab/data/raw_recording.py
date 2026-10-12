@@ -117,6 +117,7 @@ class RawRobotRecorder:
                 config=self.env.force_grip.config,
                 raw_group='gripper_force_feedback',
                 action='7D actions remain inner-servo closure targets; force requests and measured pad forces are separate 100 Hz fields',
+                width='width_m and servo_target_width_m: Panda encoder-equivalent finger opening in metres, measured and inner-servo target; excludes added pad thickness/deformation',
                 source='MuJoCo simulated contact force, not a calibrated AnySkin force estimate')
         self._metadata()
         try:

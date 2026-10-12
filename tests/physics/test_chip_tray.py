@@ -11,6 +11,25 @@ from wowskin_lab.envs.chip_tray import PandaChipEnv, ASSETS, chip_config
 
 
 class ChipTrayTests(unittest.TestCase):
+    def test_force_feedback_width_separates_state_from_command(self):
+        e = PandaChipEnv()
+        before = e.gripper_feedback_sample()
+        self.assertAlmostEqual(before['width_m'], .08, delta=1e-5)
+        self.assertAlmostEqual(before['servo_target_width_m'], .08)
+        e.command_gripper(True)
+        for _ in range(20):
+            e.step(e.hold_action())
+        sample = e.gripper_feedback_sample()
+        self.assertTrue(sample['enabled'])
+        self.assertAlmostEqual(sample['target_n'], .05)
+        self.assertLess(sample['width_m'], before['width_m'])
+        self.assertLess(sample['servo_target_width_m'], sample['width_m'])
+        e.command_gripper(False)
+        opened = e.gripper_feedback_sample()
+        self.assertEqual(opened['width_m'], sample['width_m'], 'An open command must not teleport the fingers')
+        self.assertAlmostEqual(opened['servo_target_width_m'], .08)
+        self.assertFalse(opened['enabled'])
+
     def test_tray_source_preserved_and_saddle_has_opposite_curvatures(self):
         e = PandaChipEnv()
         root = ET.fromstring(e.xml)

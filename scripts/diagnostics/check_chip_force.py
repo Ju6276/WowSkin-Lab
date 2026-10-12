@@ -47,7 +47,8 @@ def chip_contact_loads(env):
                 other_force_world_n=other.tolist())
 
 
-def run(target_n, grasp_z=1.123, closing_seconds=32., yaw_deg=0., admittance=None, finger_speed=None):
+def run(target_n, grasp_z=1.123, closing_seconds=32., yaw_deg=0., admittance=None, finger_speed=None,
+        snapshots=None, chip_frame_height=None, offset_xy=(0., 0.)):
     cfg = response_configuration(SimpleNamespace(task='chip_tray', ideal=True, chip_grip_force=target_n))
     env = PandaChipEnv(cfg)
     if admittance is not None:
@@ -58,7 +59,17 @@ def run(target_n, grasp_z=1.123, closing_seconds=32., yaw_deg=0., admittance=Non
     stage = 'approach'
     first_break = None
     original = env.after_physics_step
-    grasp_rotation = rotation_matrix([0., 0., np.deg2rad(yaw_deg)]) @ env.target_rotation
+    home_rotation = env.target_rotation.copy()
+    grasp_rotation = rotation_matrix([0., 0., np.deg2rad(yaw_deg)]) @ home_rotation
+
+    def snapshot(name):
+        if snapshots is not None:
+            destination = Path(snapshots)/f'force_{target_n:g}'
+            destination.mkdir(parents=True, exist_ok=True)
+            (destination/'scene.xml').write_text(env.xml)
+            state = np.empty(mujoco.mj_stateSize(env.model, mujoco.mjtState.mjSTATE_INTEGRATION))
+            mujoco.mj_getState(env.model, env.data, state, mujoco.mjtState.mjSTATE_INTEGRATION)
+            np.savez(destination/f'{name}.npz', state=state)
 
     def after():
         nonlocal peak, first_break
@@ -92,7 +103,22 @@ def run(target_n, grasp_z=1.123, closing_seconds=32., yaw_deg=0., admittance=Non
         return np.average(env.data.xipos[env.fracture.body_ids], axis=0,
                           weights=env.model.body_mass[env.fracture.body_ids])
 
-    for target in ([-1.7822603, .13180272, 1.27065], [-1.7822603, .13180272, grasp_z]):
+    if chip_frame_height is not None:
+        # Explicit diagnostic grasp planning from settled simulator geometry.
+        # This never feeds object pose into the force-feedback controller.
+        stage = 'settle'
+        for _ in range(150):
+            if not tick():
+                break
+        chip_rotation = env.data.xmat[env.fracture.body_ids[0]].reshape(3, 3).copy()
+        grasp_rotation = chip_rotation @ rotation_matrix([0., 0., np.deg2rad(yaw_deg)]) @ home_rotation
+        grasp_position = center()+chip_rotation[:, 2]*chip_frame_height
+        targets = (grasp_position+chip_rotation[:, 2]*.15, grasp_position)
+    else:
+        x, y = np.array([-1.7822603, .13180272])+np.asarray(offset_xy)
+        targets = ([x, y, 1.27065], [x, y, grasp_z])
+    stage = 'approach'
+    for target in targets:
         for _ in range(450):
             delta = np.asarray(target)-env.target_xyz
             delta *= min(1., .0005/max(np.linalg.norm(delta), 1e-12))
@@ -102,6 +128,7 @@ def run(target_n, grasp_z=1.123, closing_seconds=32., yaw_deg=0., admittance=Non
             break
 
     start_z = center()[2]
+    snapshot('before_close')
     if not first_break:
         stage = 'close'
         env.command_gripper(True)
@@ -109,6 +136,7 @@ def run(target_n, grasp_z=1.123, closing_seconds=32., yaw_deg=0., admittance=Non
             if not tick():
                 break
     grasp_sample = env.gripper_feedback_sample()
+    snapshot('after_close')
     if not first_break:
         stage = 'lift'
         for _ in range(200):
@@ -119,7 +147,10 @@ def run(target_n, grasp_z=1.123, closing_seconds=32., yaw_deg=0., admittance=Non
         for _ in range(200):
             if not tick():
                 break
-    result = dict(target_n=target_n, grasp_z_m=grasp_z, yaw_deg=yaw_deg, closing_seconds=closing_seconds,
+    snapshot('after_lift')
+    result = dict(target_n=target_n, grasp_z_m=float(targets[-1][2]), yaw_deg=yaw_deg, closing_seconds=closing_seconds,
+                  chip_frame_height_m=chip_frame_height, grasp_position_world_m=np.asarray(targets[-1]).tolist(),
+                  grasp_rotation_world=grasp_rotation.tolist(),
                   first_break=first_break, peak_contact_n=peak.tolist(),
                   grasp_force_n=grasp_sample['pad_normal_force_n'].tolist(),
                   final_force_n=env.gripper_feedback_sample()['pad_normal_force_n'].tolist(),
@@ -141,10 +172,18 @@ def main():
     parser.add_argument('--admittance', type=float, help='Explicit experimental gain override [m/(N s)]')
     parser.add_argument('--finger-speed', type=float, help='Explicit target slew override [m/s per finger]')
     parser.add_argument('--output', type=Path, default=Path('outputs/diagnostics/chip_force_feedback'))
+    parser.add_argument('--snapshots', action='store_true', help='Save actual physics states/XML for contact inspection')
+    parser.add_argument('--chip-frame-height', type=float,
+                        help='Diagnostic grasp height above settled chip COM [m]; align orientation to chip and replace --grasp-z')
+    parser.add_argument('--offset-xy', type=float, nargs=2, default=(0., 0.),
+                        help='Explicit world XY offset [m] for the fixed-world diagnostic grasp')
     args = parser.parse_args()
+    if args.chip_frame_height is not None and np.any(args.offset_xy):
+        parser.error('--offset-xy applies to fixed-world grasps, not --chip-frame-height')
     args.output.mkdir(parents=True, exist_ok=True)
     for force in args.forces:
-        result = run(force, args.grasp_z, args.closing_seconds, args.yaw_deg, args.admittance, args.finger_speed)
+        result = run(force, args.grasp_z, args.closing_seconds, args.yaw_deg, args.admittance, args.finger_speed,
+                     args.output if args.snapshots else None, args.chip_frame_height, args.offset_xy)
         (args.output/f'force_{force:g}.json').write_text(json.dumps(result, indent=2)+'\n')
         print(json.dumps({k: v for k, v in result.items() if k not in ('trace', 'strength', 'warnings')}, indent=2), flush=True)
 
