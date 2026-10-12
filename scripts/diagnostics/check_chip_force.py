@@ -10,9 +10,41 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import mujoco
 
 from wowskin_lab.envs.chip_tray import PandaChipEnv
 from wowskin_lab.envs.pick_cube import response_configuration, rotation_matrix, rotation_vector
+
+
+def chip_contact_loads(env):
+    """Resolve pad forces ON the chip; diagnostics only, never controller input.
+
+    Scalar normal loads alone do not say whether a curved contact supports
+    the chip upward. Exclude internal fragment contacts from the balance.
+    """
+    pads = (env.skin_flex, env.passive_flex)
+    pieces = set(env.fracture.piece_geoms)
+    normal, tangent, other = np.zeros((2, 3)), np.zeros((2, 3)), np.zeros(3)
+    wrench = np.zeros(6)
+    for i in range(env.data.ncon):
+        c = env.data.contact[i]
+        sides = [side for side in (0, 1) if c.geom[side] in pieces]
+        if len(sides) != 1:
+            continue
+        side = sides[0]
+        mujoco.mj_contactForce(env.model, env.data, i, wrench)
+        # Contact frame points from side 0 to side 1.
+        basis = c.frame.reshape(3, 3)*(1 if side == 1 else -1)
+        n, t = basis[0]*wrench[0], basis[1:].T@wrench[1:3]
+        opposite_flex = c.flex[1-side]
+        if opposite_flex in pads:
+            j = pads.index(opposite_flex)
+            normal[j] += n
+            tangent[j] += t
+        else:
+            other += n+t
+    return dict(pad_normal_world_n=normal.tolist(), pad_tangent_world_n=tangent.tolist(),
+                other_force_world_n=other.tolist())
 
 
 def run(target_n, grasp_z=1.123, closing_seconds=32., yaw_deg=0., admittance=None, finger_speed=None):
@@ -51,6 +83,7 @@ def run(target_n, grasp_z=1.123, closing_seconds=32., yaw_deg=0., admittance=Non
                           target_n=sample['target_n'], servo_closure=sample['servo_target_closure'],
                           measured_closure=env.gripper_fraction(),
                           chip_contact_n=[row['normal_force_n'], row['passive_normal_force_n']],
+                          chip_contact_loads=chip_contact_loads(env),
                           chip_center_m=center().tolist(), tcp_m=env.data.site_xpos[env.tcp_site].tolist(),
                           broken_bonds=row['chip_broken_bonds']))
         return first_break is None
@@ -93,6 +126,8 @@ def run(target_n, grasp_z=1.123, closing_seconds=32., yaw_deg=0., admittance=Non
                   final_servo_closure=env.gripper_fraction(target=True),
                   center_lift_m=float(center()[2]-start_z), metrics=env.evaluation_metrics(),
                   warnings=env.data.warning.number.tolist(), controller=env.force_grip.config,
+                  chip_mass_kg=float(env.model.body_mass[env.fracture.body_ids].sum()),
+                  gravity_m_s2=env.model.opt.gravity.tolist(),
                   strength=env.cfg['brittle_chip'], trace=trace)
     return result
 

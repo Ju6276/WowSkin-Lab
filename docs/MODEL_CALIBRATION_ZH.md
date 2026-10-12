@@ -237,6 +237,8 @@ MuJoCo 没有设置“玻璃材质”就自动产生裂纹和碎片的内置模�
 
 目标力是反馈设定值，不是瞬时接触力的硬上限；碰撞仍可能超调。两指互相接触也会产生读数，不能把“力达到目标”单独当作夹住薯片或成功抬起的证据。抬升测试另查薯片质心高度和与薯片本身的接触；这些评估量不进入控制器。
 
+可用 `.venv/bin/python -m scripts.diagnostics.check_chip_force --forces .05 .08 .10 --closing-seconds 12` 对照不同目标力。输出包含薯片质量、质心高度、断裂事件，以及每指作用在薯片上的世界系法向力／摩擦力向量和其它外部接触合力。由此区分“压在上表面”“侧面夹持”和“脱落后两指互碰”；`--grasp-z`、`--yaw-deg` 是显式测试抓姿，不输入力控制器。世界系 Z 向上，静止时全部外部接触力的 Z 分量应近似平衡重力。
+
 原 7D `step` 的最后一维仍是内层伺服闭合指令；程序化力控需显式 `env.command_gripper(True)`，之后用 `env.step(env.hold_action())` 保持外环。`env.command_gripper(False)` 停止力控并打开。raw 单独保存 `gripper_force_feedback/{enabled,target_n,selected_target_n,pad_normal_force_n,servo_target_closure}`，不会把牛顿伪装成已有训练接口的开度。此模式当前只接入薯片 Panda 场景，不改变其它任务或已有 ViSk checkpoint 的控制语义。
 
 ## 玻璃与连续裂纹：后续研究方向
