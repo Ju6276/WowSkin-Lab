@@ -14,6 +14,7 @@ COMMANDS = {
     'pick-demo': 'Run the existing physical grasp/tug regression demo',
     'cable': 'Single Franka cable scene using pinned EBiM fixtures (local variant)',
     'whip': 'Published 25-link whip: independent bending/swinging dynamics comparator',
+    'brittle-chip': 'Experimental potato chip: prefragmented bodies with load-triggered weld failure',
     'sensor': 'Standalone sensor viewer/demo',
     'franka-bench': 'Mounted sensor probe viewer/demo',
     'pollen': 'Published Pollen checkpoint download/evaluation',
@@ -83,7 +84,7 @@ def main(argv=None):
     else:
         module = {'franka-bench': 'envs.franka', 'pollen': 'baselines.pollen', 'cad': 'tools.render_cad',
                   'reskin-response': 'baselines.reskin_forward', 'reskin-inverse': 'baselines.reskin_inverse',
-                  'cable': 'envs.cable', 'whip': 'envs.whip'}[command]
+                  'cable': 'envs.cable', 'whip': 'envs.whip', 'brittle-chip': 'envs.brittle_chip'}[command]
     old = sys.argv
     try:
         sys.argv = [module, *rest]

@@ -77,6 +77,18 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 右侧显示两路固定相机＋一路腕部相机。加 `--pointcloud` 可在其下预览 RGB-D 融合点云；逐帧外参将腕部视角变换到机器人基座系。使用 MuJoCo 理想深度，目前不模拟深度噪声。预览不写进相机图像；快捷键与开销见采集手册。
 
+## 脆性薯片试验
+
+独立的 MuJoCo 按压台，不替换上述机器人任务，也不自动录制：
+
+```bash
+.venv/bin/mjpython -m wowskin_lab brittle-chip
+# 可选：自动按压／抬起并保存本机演示录像与断裂事件
+.venv/bin/python -m wowskin_lab brittle-chip --headless --video --output outputs/diagnostics/brittle_chip
+```
+
+`Space` 执行一次按压／抬起，再按可停止压头目标；`D/U` 下压／抬起，`R` 重置，`P` 退出。24 个薄片刚体通过 32 条 weld 连接，每条连接按自己的力／力矩断开；分离后的碎片保留碰撞。形状、强度与密度均为[试验参数](configs/brittle_chip.json)，不是实测薯片。模型范围与内部接触处理见[说明](docs/MODEL_CALIBRATION_ZH.md#脆性薯片预分块试验)。尚未接入 Franka 夹取、AnySkin 或 LeRobot 录制。
+
 ## 数据与学习
 
 ```text
