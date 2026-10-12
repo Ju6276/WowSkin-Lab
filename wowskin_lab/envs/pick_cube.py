@@ -73,8 +73,9 @@ def pick_scene(cfg, layout):
         for child in list(parent):
             if child.tag == "camera":
                 parent.remove(child)
-    optical = cfg.get('sensor') == 'tacto'
-    root.set("model", "WowSkin-Lab | PandaPickCube: " + ("dual DIGIT / TACTO" if optical else "WowSkin + plain silicone"))
+    optical = cfg.get('sensor') in ('tacto', 'fots')
+    optical_label = 'dual GelSight / FOTS proxy' if cfg.get('sensor') == 'fots' else 'dual DIGIT / TACTO'
+    root.set("model", "WowSkin-Lab | PandaPickCube: " + (optical_label if optical else "WowSkin + plain silicone"))
     # Broad box/flex contacts create hundreds of constraints. CG avoids the
     # costly Newton factorization while preserving the same contact geometry.
     option = root.find("option")
@@ -111,8 +112,9 @@ def pick_scene(cfg, layout):
     # New TCP follows the shifted pads, not the upstream stock fingertips.
     hand = root.find(".//body[@name='hand']")
     if optical:
-        from .optical import digit_geometry
-        z = .0584+digit_geometry()['gel_center_z']
+        from .optical import digit_geometry, gelsight_geometry
+        geometry = gelsight_geometry() if cfg['sensor'] == 'fots' else digit_geometry()
+        z = .0584+geometry['gel_center_z']
     else:
         z = .0584+mount_reference(cfg)["position_m"][2]
     ET.SubElement(hand, "site", name="tactile_tcp", pos=f"0 0 {z}", size=".001",

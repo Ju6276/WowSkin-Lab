@@ -1,7 +1,7 @@
-"""Independent DIGIT bench and Panda mount, sharing the existing arm controller.
+"""Independent optical benches and Panda mounts, sharing the arm controller.
 
-Original mujoco-tacto housing/gel OBJ assets, rigid MuJoCo contact and upstream
-optics. No flex/magnetic model is constructed, and no optical frames are passed
+Original DIGIT OBJ assets or an explicitly local flat GelSight proxy, rigid
+MuJoCo contact and upstream optics. No flex/magnetic model is constructed; frames are not passed
 off as the existing ViSk AnySkin observations.
 """
 from functools import lru_cache
@@ -60,12 +60,50 @@ def mount_digits(root, *, friction):
         add_digit(root.find('asset'), finger, f'digit_{side}', friction=friction)
 
 
+def gelsight_geometry():
+    from wowskin_lab.core.fots import upstream
+    params, _, _ = upstream()
+    return dict(width=params.sensor_w/params.mm_to_pixel/1000,
+                height=params.sensor_h/params.mm_to_pixel/1000,
+                gel_center_z=.012)
+
+
+def add_gelsight(asset, body, name, *, friction=.6):
+    """Flat calibration-window proxy, not an official GelSight housing CAD.
+
+    The source gelsight_pad.npy is flat. Active size uses source pixel/mm;
+    2 mm backing and rectangular housing are explicit local mount geometry.
+    """
+    geometry = gelsight_geometry()
+    x, z = geometry['width']/2, geometry['height']/2
+    center = geometry['gel_center_z']
+    ET.SubElement(body, 'geom', name=f'{name}_housing', type='box',
+                  pos=f'0 .006 {center}', size=f'{x+.002} .004 {z+.002}',
+                  rgba='.12 .13 .15 1', contype='2', conaffinity='7',
+                  friction=f'{friction} .005 .0001', solref='.002 1')
+    ET.SubElement(body, 'geom', name=f'{name}_gel', type='box',
+                  pos=f'0 .001 {center}', size=f'{x} .001 {z}',
+                  rgba='.65 .68 .72 1', contype='2', conaffinity='7',
+                  friction=f'{friction} .005 .0001', solref='.002 1')
+    # +X right, +Y image-down (finger +Z), +Z outward (finger -Y).
+    ET.SubElement(body, 'site', name=f'{name}_camera', pos=f'0 0 {center}',
+                  quat='.7071067811865476 .7071067811865476 0 0', size='.001', rgba='0 0 0 0')
+
+
+def mount_gelsights(root, *, friction):
+    for side in ('left', 'right'):
+        finger = root.find(f".//body[@name='{side}_finger']")
+        for geom in list(finger.findall('geom')):
+            finger.remove(geom)
+        add_gelsight(root.find('asset'), finger, f'gelsight_{side}', friction=friction)
+
+
 class OpticalPandaEnv(PandaPickCubeTactileEnv):
     """Reuse Panda's command/IK/PD methods, with a separate optical lifecycle."""
-    def __init__(self, args=None):
+    def __init__(self, args=None, *, sensor='tacto'):
         cfg = response_configuration(args or SimpleNamespace(task='pick_cube'))
         cfg.update(json.loads((ROOT/'configs/gripper_control.json').read_text()))
-        cfg.update(sensor='tacto', skin_dof=None, camera_profile='three_view',
+        cfg.update(sensor=sensor, skin_dof=None, camera_profile='three_view',
                    scene_design='industrial_workcell_v1')
         configure_controller(cfg)
         self.cfg = cfg
@@ -81,7 +119,8 @@ class OpticalPandaEnv(PandaPickCubeTactileEnv):
         self.tcp_site, self.hand = self.model.site('tactile_tcp').id, self.model.body('hand').id
         self.probe_body = self.model.body('cube').id
         self.cube_q = self.model.jnt_qposadr[self.model.joint('cube_joint').id]
-        self.sensors = {side: (f'digit_{side}_camera', f'digit_{side}_gel') for side in ('left', 'right')}
+        prefix = 'gelsight' if sensor == 'fots' else 'digit'
+        self.sensors = {side: (f'{prefix}_{side}_camera', f'{prefix}_{side}_gel') for side in ('left', 'right')}
         self.reset()
 
     def reset(self, seed=None):
@@ -110,17 +149,20 @@ class OpticalPandaEnv(PandaPickCubeTactileEnv):
 
 
 class OpticalBench:
-    def __init__(self):
-        root = ET.Element('mujoco', model='WowSkin-Lab | standalone DIGIT / TACTO')
+    def __init__(self, *, sensor='tacto'):
+        is_fots = sensor == 'fots'
+        name = 'gelsight' if is_fots else 'digit'
+        root = ET.Element('mujoco', model='WowSkin-Lab | standalone '+('GelSight / FOTS proxy' if is_fots else 'DIGIT / TACTO'))
         ET.SubElement(root, 'option', timestep='.0005', integrator='implicitfast')
         visual = ET.SubElement(root, 'visual')
         ET.SubElement(visual, 'headlight', ambient='.7 .7 .7', diffuse='.2 .2 .2', specular='.1 .1 .1')
         asset, world = ET.SubElement(root, 'asset'), ET.SubElement(root, 'worldbody')
         ET.SubElement(world, 'light', pos='0 -.3 .5')
         ET.SubElement(world, 'geom', type='plane', size='.3 .3 .01', rgba='.3 .35 .4 1')
-        sensor = ET.SubElement(world, 'body', pos='0 0 .05', quat='.7071067811865476 -.7071067811865476 0 0')
-        add_digit(asset, sensor, 'digit')
-        probe = ET.SubElement(world, 'body', name='probe', pos=f'0 {digit_geometry()["gel_center_z"]} .065')
+        body = ET.SubElement(world, 'body', pos='0 0 .05', quat='.7071067811865476 -.7071067811865476 0 0')
+        (add_gelsight if is_fots else add_digit)(asset, body, name)
+        geometry = gelsight_geometry() if is_fots else digit_geometry()
+        probe = ET.SubElement(world, 'body', name='probe', pos=f'0 {geometry["gel_center_z"]} .065')
         for axis, vector in zip('xyz', ['1 0 0', '0 1 0', '0 0 1']):
             ET.SubElement(probe, 'joint', name=f'probe_{axis}', type='slide', axis=vector, damping='1')
         ET.SubElement(probe, 'geom', name='probe', type='sphere', size='.005', mass='.02', rgba='.2 .6 .9 1')
@@ -129,7 +171,7 @@ class OpticalBench:
             ET.SubElement(actuator, 'position', joint=f'probe_{axis}', kp='3000', kv='5')
         self.model = mujoco.MjModel.from_xml_string(ET.tostring(root, encoding='unicode'))
         self.data = mujoco.MjData(self.model)
-        self.sensors = {'DIGIT': ('digit_camera', 'digit_gel')}
+        self.sensors = {name.upper(): (f'{name}_camera', f'{name}_gel')}
         self.reset()
 
     def reset(self):

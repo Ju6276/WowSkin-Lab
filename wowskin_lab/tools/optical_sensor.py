@@ -1,4 +1,4 @@
-"""Preview DIGIT optical observations; deliberately separate from magnetic recording."""
+"""Preview DIGIT/TACTO or GelSight/FOTS; separate from magnetic recording."""
 import argparse
 from contextlib import nullcontext
 import json
@@ -21,9 +21,9 @@ def panel(frames):
     for i, (name, frame) in enumerate(frames.items()):
         y = i*height
         draw.text((4, y+3), f'{name}: RGB | indentation 0..5 mm', fill='white')
-        out.paste(Image.fromarray(frame.rgb), (0, y+17))
+        out.paste(Image.fromarray(frame.rgb).resize((120, 160)), (0, y+17))
         depth = np.uint8(255*np.clip(frame.indentation_m/.005, 0, 1))
-        out.paste(Image.fromarray(depth).convert('RGB'), (120, y+17))
+        out.paste(Image.fromarray(depth).convert('RGB').resize((120, 160)), (120, y+17))
         draw.text((4, y+177), f'Contact normal: {frame.normal_force_n:.3f} N', fill='white')
     return np.asarray(out)
 
@@ -131,7 +131,7 @@ def viewer(env, optics, input_kind):
                     message = ('W/S +/-base X | A/D -/+base Y | E/Q up/down\nX/Z close/open | I/K L/J U/O rotate' if panda
                                else 'W/S probe +/-Y | A/D -/+X\nE/Q up/down (Q presses)')
                     handle.set_texts([(mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT,
-                        'DIGIT / TACTO optical preview\n'+message+'\nR reset | P exit | No dataset recording', '')])
+                        optics.label+' optical preview\n'+message+'\nR reset | P exit | No dataset recording', '')])
                     if handle.is_running():
                         handle.set_images([(mujoco.MjrRect(viewport.left+viewport.width-w-10,
                                            viewport.bottom+10, w, h), pixels)])
@@ -140,18 +140,22 @@ def viewer(env, optics, input_kind):
                 time.sleep(max(0., .01-(time.monotonic()-start)))
 
 
-def main(argv=None, *, mounted=False):
+def main(argv=None, *, mounted=False, sensor='tacto'):
     parser = argparse.ArgumentParser(description=__doc__)
     if mounted:
         parser.add_argument('--task', choices=['pick_cube'], default='pick_cube')
         parser.add_argument('--no-cartesian-limits', action='store_true')
     parser.add_argument('--input', choices=['keyboard', 'spacemouse'] if mounted else ['keyboard'], default='keyboard')
-    parser.add_argument('--ideal', action='store_true', help='Disable upstream RGB noise; keep optical force response')
+    parser.add_argument('--ideal', action='store_true', help='Disable TACTO RGB noise; FOTS adds no stochastic noise')
     parser.add_argument('--demo', action='store_true', help='Run physical contact/unload without a GUI')
-    parser.add_argument('--output', type=Path, default=Path('outputs/diagnostics/tacto'))
+    parser.add_argument('--output', type=Path, default=Path('outputs/diagnostics')/sensor)
     args = parser.parse_args(argv)
-    env = OpticalPandaEnv(args) if mounted else OpticalBench()
-    optics = OpticalTactile(env.model, env.sensors, ideal=args.ideal)
+    env = OpticalPandaEnv(args, sensor=sensor) if mounted else OpticalBench(sensor=sensor)
+    if sensor == 'fots':
+        from wowskin_lab.core.fots import FOTSOptical as Backend
+    else:
+        Backend = OpticalTactile
+    optics = Backend(env.model, env.sensors, ideal=args.ideal)
     try:
         if args.demo:
             return demo(env, optics, args.output)

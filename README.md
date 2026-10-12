@@ -81,13 +81,19 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 右侧显示两路固定相机＋一路腕部相机。加 `--pointcloud` 可在其下预览 RGB-D 融合点云；逐帧外参将腕部视角变换到机器人基座系。使用 MuJoCo 理想深度，目前不模拟深度噪声。预览不写进相机图像；快捷键与开销见采集手册。
 
-## 可选 DIGIT 视触觉预览
+## 可选视触觉传感器
 
-默认仍为 AnySkin 磁场。`--sensor tacto` 选择 [mujoco-tacto](https://github.com/utn-air/mujoco-tacto) 的 DIGIT 光学模型：输出每个指尖的 RGB 和米制光学压入深度，不输出 15 路磁场。**目前支持独立按压台和 Panda 方块预览；尚未接入数据集录制、ViSk、其他任务／夹爪或 Pico。** 不支持的参数会报错，不会静默切回 AnySkin。
+通过 `--sensor` 选择：
+
+- `anyskin`：默认，原有磁场传感器和采集流程。
+- `tacto`：使用 [mujoco-tacto](https://github.com/utn-air/mujoco-tacto) 的 DIGIT 网格和 TACTO 光学模型。
+- `fots`：使用 [FOTS 主分支](https://github.com/Rancho-zhao/FOTS) 的 GelSight 预训练光学模型、背景与像素标定。安装外形是明确标注的矩形几何代理，不是官方 GelSight CAD。
+
+两种光学选项输出每指 RGB 和米制压入深度，**目前支持独立按压台和 Panda 方块预览；尚未接入数据集录制、ViSk、其他任务／夹爪或 Pico。** 不支持的参数会报错，不会静默切回 AnySkin。
 
 ```bash
 # 可选安装，仍用同一个 .venv
-.venv/bin/python scripts/setup_upstream.py --only tacto
+.venv/bin/python scripts/setup_upstream.py --only tacto fots
 .venv/bin/python -m pip install -r requirements/tacto.txt
 .venv/bin/python -m pip install --no-deps -e third_party/mujoco-tacto
 
@@ -95,11 +101,14 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 .venv/bin/mjpython -m wowskin_lab sensor --sensor tacto --ideal
 # Panda 双指 DIGIT：沿用原键盘操作；也可 --input spacemouse
 .venv/bin/mjpython -m wowskin_lab teleop --sensor tacto --task pick_cube --input keyboard --ideal
+# GelSight / FOTS：独立按压台与 Panda 双指
+.venv/bin/mjpython -m wowskin_lab sensor --sensor fots
+.venv/bin/mjpython -m wowskin_lab teleop --sensor fots --task pick_cube --input keyboard
 # 无窗口接触/卸载及抬升回归
-.venv/bin/python -m unittest tests.physics.test_optical_tactile
+.venv/bin/python -m unittest tests.physics.test_optical_tactile tests.physics.test_fots
 ```
 
-右侧是每个传感器的 RGB／深度预览。`--ideal` 在此只关闭 TACTO 的 RGB 噪声；**不是把刚性接触改成 FEM**。物理碰撞由 MuJoCo 求解，光学形变采用上游力相关近似；本地接入、Mac CGL 后端和参数边界见[模型说明](docs/MODEL_CALIBRATION_ZH.md#digit--tacto-光学选项)。GelSight／FOTS 是另一个候选，尚未接入，不能把 DIGIT 模型称为已标定的 GelSight Mini。
+右侧是每个传感器的 RGB／深度预览。`--ideal` 关闭 TACTO 的 RGB 噪声；FOTS 不额外添加随机噪声，因此这个开关不改变其输出。两者物理碰撞均由 MuJoCo 求解，**没有硅胶 FEM**。TACTO 使用上游力相关光学位移近似；FOTS 使用接触几何重叠得到深度，再输入原作者光学网络。该重叠依赖 MuJoCo 接触参数，不是标定的真实胶面形变。FOTS 当前不输出标记点剪切流，平面阴影按作者演示默认关闭。本地接入与边界见 [TACTO](docs/MODEL_CALIBRATION_ZH.md#digit--tacto-光学选项)、[FOTS](docs/MODEL_CALIBRATION_ZH.md#gelsight--fots-光学选项)。
 
 ## 脆性薯片试验
 

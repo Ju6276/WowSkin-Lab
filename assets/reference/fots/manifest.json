@@ -1,0 +1,19 @@
+{
+  "source": "https://github.com/Rancho-zhao/FOTS",
+  "revision": "6c930af58f57b22fdec4f442d9c615c311c5ee75",
+  "branch": "main",
+  "sensor_calibration": "GelSight",
+  "license_note": "Upstream README declares MIT and links LICENSE; that file is absent at the pinned revision. Source/calibration/weights are fetched separately, not redistributed here.",
+  "files": {
+    "params.py": "b588033d74710443591ba2a78723120e4f9fb53b5be6008cf26a6810f5895658",
+    "utils/fots_render.py": "480ecf5a74c57b7371efa0f5300ab9271af71fe41fd7b8fda0a959b9ad1cceb7",
+    "utils/prepost_mlp.py": "4c63f2035b7aadbe078d5433fb883dd0afc4c6c0740f685862bdac7247f7d7ad",
+    "shadow_calib/planar_shadow.py": "5feb342deb5a3f6e513c08c875d062a999342143aa04cc890e00999c66ecfbd3",
+    "mlp_calib/src/train/mlp_model.py": "c296436ff3a05396ede3f0d3156ca44c0845d0f1f2d06141afe15a4c3082c84a",
+    "mlp_calib/models/mlp_n2c_gelsight.pth": "78696b0d4ef88a72ebc8d99ba188f76da75743b493a273297df4484312e2d2f9",
+    "assets/gel/gelsight_bg.npy": "fe4c4aaf4633cba0a39488497589481c01431b4f8484c9cd37899eb2f44f82b8",
+    "utils/utils_data/ini_bg_fots_gelsight.npy": "19a73073d881a718b7c99487936e85e048a270389abdd31e4ee0696831f9a9f7",
+    "utils/utils_data/gelsight_pad.npy": "33cda23854b224dcae5b2d02c92aa145c6584a985b17c1f52dd368ecc28bd748"
+  },
+  "local_adapter": "core/fots.py loads unmodified optical code with private imports, CPU weight loading and NumPy compatibility. Geometry adapter is not the DIGIT FOTS-mujoco branch."
+}

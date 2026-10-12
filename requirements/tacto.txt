@@ -1,4 +1,4 @@
-# Optional optics, installed into the same .venv AFTER requirements.txt.
+# Shared optional TACTO / FOTS depth-rendering dependencies, same .venv.
 # Install the pinned upstream tacto checkout separately with --no-deps;
 # its setup.py otherwise resolves pyrender from an unpinned branch.
 pyrender @ git+https://github.com/RobotControlStack/pyrender.git@33895b107a356c710ea0306f527078fc8f86ee59

@@ -15,6 +15,10 @@
     "url": "https://github.com/utn-air/mujoco-tacto.git",
     "revision": "4c396eb802dcbd1f9e6647a31a011f37006c4fc1"
   },
+  "fots": {
+    "url": "https://github.com/Rancho-zhao/FOTS.git",
+    "revision": "6c930af58f57b22fdec4f442d9c615c311c5ee75"
+  },
   "franka": {
     "url": "https://github.com/Ju6276/franka_xbox",
     "revision": "a43327ad8446642acd8d64b6c20829fd135a9f28"

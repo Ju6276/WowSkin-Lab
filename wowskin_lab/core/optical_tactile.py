@@ -21,6 +21,20 @@ class OpticalFrame:
     time_s: float
 
 
+def contact_forces(model, data, gel):
+    forces, force = {}, np.zeros(6)
+    for index, contact in enumerate(data.contact):
+        if gel not in (contact.geom1, contact.geom2):
+            continue
+        other = contact.geom2 if contact.geom1 == gel else contact.geom1
+        if other < 0:
+            raise NotImplementedError('Optical flex contact surface export is not implemented')
+        mujoco.mj_contactForce(model, data, index, force)
+        if force[0] > 0:
+            forces[other] = forces.get(other, 0.)+float(force[0])
+    return forces
+
+
 def geom_mesh(model, geom_id):
     """Compiled geom-local vertices: no extra Euler rotation or mirror."""
     import trimesh
@@ -53,6 +67,8 @@ def geom_mesh(model, geom_id):
 
 
 class OpticalTactile:
+    label = 'DIGIT / TACTO'
+
     def __init__(self, model, sensors, *, ideal=False, width=120, height=160):
         try:
             from tacto import Renderer, get_digit_config_path
@@ -71,18 +87,7 @@ class OpticalTactile:
             raise
 
     def contacts(self, data, gel):
-        forces = {}
-        force = np.zeros(6)
-        for index, contact in enumerate(data.contact):
-            if gel not in (contact.geom1, contact.geom2):
-                continue
-            other = contact.geom2 if contact.geom1 == gel else contact.geom1
-            if other < 0:
-                raise NotImplementedError('TACTO flex contact surface export is not implemented')
-            mujoco.mj_contactForce(self.model, data, index, force)
-            if force[0] > 0:
-                forces[other] = forces.get(other, 0.)+float(force[0])
-        return forces
+        return contact_forces(self.model, data, gel)
 
     def render(self, data):
         frames = {}

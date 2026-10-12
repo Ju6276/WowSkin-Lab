@@ -213,9 +213,9 @@ raw 保存的是处理后的动作；原始输入及逐次裁剪／重锚事件�
 - **TacIPC 原版**：[源码](https://github.com/Ailon-Island/TacIPC)、[构建依赖](https://github.com/Ailon-Island/TacIPC/blob/main/CMakeLists.txt)。项目声明 CUDA 语言并要求 CUDA Toolkit，不能直接在 Apple Silicon 上编译。Metal 是另一套 GPU 计算 API；把 CUDA 换成 Metal/MPS 需要移植求解器内核和依赖，不能通过安装一个替代库完成。本项目尚未接入 TacIPC。
 - **CPU IPC 路线**：[IPC](https://github.com/ipc-sim/IPC) 的官方文档包含 macOS 构建依赖，可作为 FEM＋接触防穿透、防翻转的参考，无需 CUDA。此路线尚未在本机编译或测量速度，不承诺实时。
 - **IPC Toolkit / PolyFEM**：[IPC Toolkit](https://github.com/ipc-sim/ipc-toolkit) 提供屏障能量、连续碰撞检测、摩擦及导数；它本身没有材料物理或完整求解器。官方建议结合 [PolyFEM](https://polyfem.github.io/)。接入时仍须实现传感器材料、边界与形变到磁场的模型。
-- **TACTO**：[源码与兼容说明](https://github.com/facebookresearch/tacto)。Python＋PyBullet＋Pyrender，不强制依赖 CUDA；官方推荐 Ubuntu，并指出 macOS 的 PyBullet GUI 和 Pyrender 显示兼容问题。因此可以尝试 Mac 运行，但尚未在本机安装验证。它生成 DIGIT / OmniTact 等光学触觉的 RGB / 深度，不直接生成 AnySkin 的 15 路磁场，也不能替换硅胶 FEM 接触求解。
+- **TACTO**：[源码与兼容说明](https://github.com/facebookresearch/tacto)。原版使用 PyBullet＋Pyrender，不强制依赖 CUDA，原 GUI 有 macOS 兼容限制。本项目已接入固定版 MuJoCo 移植与 CGL 预览，见下文 DIGIT / TACTO 选项；不等于原 PyBullet 整套示例均已验证。其 RGB / 深度不直接生成 AnySkin 的 15 路磁场，也不能替换硅胶 FEM 接触求解。
 
-这些都是候选参考，并非当前运行后端。替换形变求解器后，磁场响应与实物标定仍需要单独处理。
+TacIPC 和 CPU IPC 路线仍是候选；TACTO 是可选光学预览后端。替换形变求解器后，磁场响应与实物标定仍需要单独处理。
 
 ## 脆性薯片预分块试验
 
@@ -267,7 +267,21 @@ MuJoCo 没有设置“玻璃材质”就自动产生裂纹和碎片的内置模�
 
 Mac 采用本地 CGL 4.1 离屏上下文，替代会创建隐藏 NSWindow 的 pyglet 上下文，避免与 `mjpython` 仿真线程冲突；不修改光照/接触输出。上游 checkout 保持不变。可运行 `python -m unittest tests.physics.test_optical_tactile` 检查压入/卸载、多个接触物、双传感器隔离、全局旋转不变性及物理夹取/抬升/释放。自动探针和抓取诊断也可在启动命令中加 `--demo --output outputs/diagnostics/tacto`，结果不进入 Git。抓取回归不是 ViSk 策略评测。
 
-GelSight 与 DIGIT 都是视触觉传感器，但几何、胶面和光学标定不同。[FOTS](https://github.com/Rancho-zhao/FOTS/tree/FOTS-mujoco) 的 MuJoCo/Gym 示例是另一个候选；Gym 是环境 API，不是 Isaac Gym，也不替代 MuJoCo 求解器。尚未在本机运行 FOTS。[FEATS](https://arxiv.org/abs/2411.03315) 用 CalculiX 生成力分布标签，训练真实 GelSight Mini 图像到三分量力分布的模型，不是本分支的前向渲染器。
+GelSight 与 DIGIT 都是视触觉传感器，但几何、胶面和光学标定不同。Gym 是环境 API，不是 Isaac Gym，也不替代 MuJoCo 求解器。[FEATS](https://arxiv.org/abs/2411.03315) 用 CalculiX 生成力分布标签，训练真实 GelSight Mini 图像到三分量力分布的模型，不是本分支的前向渲染器。
+
+## GelSight / FOTS 光学选项
+
+`--sensor fots` 使用 [FOTS 主分支](https://github.com/Rancho-zhao/FOTS) 的 **GelSight** 配置，版本和文件 SHA256 见 [manifest](../assets/reference/fots/manifest.json)。作者的 `FOTS-mujoco` 演示分支使用 DIGIT 几何和旧 Gym 入口；这里不把它改名为 GelSight，也不替换本机 Gym 文件。当前用已有 MuJoCo 3.15、同一个 `.venv` 和 Mac CGL 后端。
+
+**沿用的光学算法。** 原作者 `FOTSRender`、MLP 结构与权重 `mlp_n2c_gelsight.pth`、`gelsight_bg.npy`、`ini_bg_fots_gelsight.npy`、`params.py`。先把米制深度转换为 `1000 × 19.58` 的像素单位，再执行原高斯平滑、法线与位置编码、MLP 和背景合成；BGR 转 RGB 后输出 320×240 图像。按作者 `fots_test.py` 默认 `shadow=False`，不额外添加随机噪声，不重新训练或放大增益。CPU `map_location` 只迁移权重设备，不改变数值。
+
+**深度从哪里来。** 读取胶面与所有刚体（包括桌面、另一指）的 MuJoCo 接触，再将接触几何变换到各自传感器局部坐标，用正交投影从胶面内部渲染物体表面。相机距平面 20 mm，近／远裁剪面 0.01／100 mm；深度读取使用正交公式 `near + buffer × (far-near)`。平面与物体相交处的重叠量输入 FOTS，未相交处深度为零。相机后方或不支持的 flex 不是已实现的软体成像范围。这里没有按目标物体名称筛选，也没有用目标力、成功标签或人为倍率生成深度。
+
+这个深度是 **MuJoCo 刚性软约束的几何重叠**，依赖接触参数、负载和时间步；它不等于真实 GelSight 弹性胶面的变形。FOTS 只合成光学观测，不返回材料反力、不改变接触求解器。球和多接触物的几何深度应与已知几何距离吻合；浅接触图像变化小，不通过额外压入补偿放大。
+
+**安装代理。** 源 `gelsight_pad.npy` 为平面。感应窗口按作者 `240×320 / 19.58` 得到约 12.26×16.34 mm；没有对应外壳 CAD。新增矩形刚性胶面厚 2 mm、后方壳体厚 8 mm，壳体四边各扩 2 mm，胶面中心位于手指局部 Z=12 mm；这些是本地安装代理，不是厂家尺寸。Panda 保留原指体惯量、原控制器与夹爪行程；触面摩擦沿用任务配置（默认 0.6）、`solref=.002 1`。这些不是 GelSight 材料标定，不宣称真实安装质量或抓取力。独立球压头沿用 TACTO 诊断台设置。
+
+**接口范围。** 两指分别计算 RGB／深度，预览缩小显示但诊断 NPZ 保存原始尺寸。当前没有接入标记点剪切／扭转历史或多物体标记流，也没有接入 LeRobot、ViSk 或其它任务；不把正常 RGB 渲染称为完整 FOTS 论文复现。原始文件保持不变；私有加载隔离上游绝对导入和 `torch.seed = 42` 的全局副作用，NumPy 2 的 `mat` 兼容只作用于上游阴影模块。`tests.physics.test_fots` 比较原光学管线输出、0.5 mm 已知重叠、多接触、整体旋转、压入/卸载及 Panda 物理抬升/释放。无窗口诊断用 `--demo --output outputs/diagnostics/fots`，并非策略评测。
 
 ## 玻璃与连续裂纹：后续研究方向
 

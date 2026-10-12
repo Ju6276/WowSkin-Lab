@@ -1,0 +1,8 @@
+{
+  "source": "https://github.com/RobotControlStack/pyrender",
+  "revision": "33895b107a356c710ea0306f527078fc8f86ee59",
+  "adapted_from": "pyrender/renderer.py::_read_main_framebuffer",
+  "local_file": "wowskin_lab/core/optical_depth.py",
+  "changes": "Depth-only readback uses orthographic near+buffer*(far-near), not perspective reconstruction.",
+  "license": "MIT; LICENSE adjacent"
+}
