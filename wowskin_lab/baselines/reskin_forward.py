@@ -189,11 +189,15 @@ class ResponseModel:
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest='command', required=True)
+    sub.add_parser('fetch', help='Download and verify the reference dataset without training')
     t = sub.add_parser('train'); t.add_argument('--output', default=str(OUTPUT)); t.add_argument('--epochs', type=int, default=2000)
     t.add_argument('--mapping', type=Path, help='Explicit provisional source-group permutation profile')
     q = sub.add_parser('predict'); q.add_argument('--model', default=str(OUTPUT)); q.add_argument('--xyz-mm', type=float, nargs=3, required=True); q.add_argument('--allow-depth-interpolation', action='store_true')
     args = p.parse_args()
-    if args.command == 'train':
+    if args.command == 'fetch':
+        fetch_data()
+        print(f'Reference data ready: {ASSETS}')
+    elif args.command == 'train':
         if args.epochs < 1: p.error('--epochs must be positive')
         train(args.output, args.epochs, mapping=args.mapping)
     else:

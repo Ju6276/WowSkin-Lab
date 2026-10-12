@@ -241,7 +241,9 @@ MuJoCo 没有设置“玻璃材质”就自动产生裂纹和碎片的内置模�
 
 `--offset-xy DX DY` 可测试偏向边缘的抓姿；`--chip-frame-height H` 则先物理沉降 1.5 秒，使用仿真中的薯片位姿规划对照抓姿，替代固定世界系抓点。这属于已知物体几何的诊断，不能作为视觉策略成功的证据，也不改变在线遥操作或力控制器输入。`--snapshots` 保存闭合前、闭合后和抬升后的实际 MuJoCo integration state 与场景 XML，方便检查碰撞接触；遇到断裂时快照可能是提前终止状态，必须结合报告中的 `first_break` 阅读。
 
-原 7D `step` 的最后一维仍是内层伺服闭合指令；程序化力控需显式 `env.command_gripper(True)`，之后用 `env.step(env.hold_action())` 保持外环。`env.command_gripper(False)` 停止力控并打开。raw 单独保存 `gripper_force_feedback/{enabled,target_n,selected_target_n,pad_normal_force_n,width_m,servo_target_width_m,servo_target_closure}`，不会把牛顿伪装成已有训练接口的开度。`width_m` 等于两个 Panda 本地指关节位置各加 0.04 m 后求和，`servo_target_width_m` 使用同样变换；实测值不裁剪，不扣软指腹厚度或形变。这是源夹爪编码器定义的开口，不是接触面距离。此模式当前只接入薯片 Panda 场景，不改变其它任务或已有 ViSk checkpoint 的控制语义。现有 ViSk/FTF 导出不使用目标力；独立的力动作训练与闭环部署接口尚未完成。
+原 7D `step` 的最后一维仍是内层伺服闭合指令；程序化力控需显式 `env.command_gripper(True)`，之后用 `env.step(env.hold_action())` 保持外环。`env.command_gripper(False)` 停止力控并打开。raw 单独保存 `gripper_force_feedback/{enabled,target_n,selected_target_n,pad_normal_force_n,width_m,servo_target_width_m,servo_target_closure}`，不会把牛顿伪装成已有训练接口的开度。`width_m` 等于两个 Panda 本地指关节位置各加 0.04 m 后求和，`servo_target_width_m` 使用同样变换；实测值不裁剪，不扣软指腹厚度或形变。这是源夹爪编码器定义的开口，不是接触面距离。此模式当前只接入薯片 Panda 场景，不改变其它任务或已有 ViSk checkpoint 的控制语义。现有导出没有将最后一维改成目标力；当前 ViSk 方向保持触觉输入、运动与开合目标输出，不计划为此增加力 action。
+
+薯片夹持仍待调整，未验证稳定无损抬升。后续接触与断裂检查统一列在 [TODO](../TODO.md#薯片夹持待调整暂不作为训练主线)，不通过提高默认破坏阈值或附着物体掩盖问题。
 
 ## 玻璃与连续裂纹：后续研究方向
 

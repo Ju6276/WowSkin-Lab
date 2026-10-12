@@ -1,6 +1,6 @@
 # ViSk 与 FTF：从当前采集开始
 
-采集入口见 [README](../README.md)。三个任务共享一套 LeRobot v2.1＋100 Hz raw 数值附件，不需要同时开两套录制器。默认 cube 数据位于 `data/episodes/pick_cube/`。以下命令在项目根目录执行，训练与部署需要分别手动启动。
+采集入口见 [README](../README.md)。各任务共享 LeRobot v2.1＋100 Hz raw 数值附件的录制协议，按任务分目录，不需要同时开两套录制器。默认 cube 数据位于 `data/episodes/pick_cube/`。以下命令在项目根目录执行，训练与部署需要分别手动启动；薯片仍是待调整的独立物理试验，不作为已验证的策略任务。
 
 ## 安装学习依赖
 
@@ -24,7 +24,7 @@ B 复位后开始录制；绿色 SUCCESS 不会自动停录，Enter 保存成功
 
 夹爪宽度的统一约定：后续宽度字段对齐真机驱动的反馈／命令语义。`gripper_width_m` 表示当前反馈开口，`gripper_target_width_m` 表示实际下发的目标开口；均为米，分别属于 state 和 action。Franka 真机对应 `GripperState.width`，仿真从关节反馈转换到同等零位、量程和单位；不把指腹形变后的表面最短距离作为采集要求或策略输入。[Franka 官方字段说明](https://frankarobotics.github.io/libfranka/0.15.0/structfranka_1_1GripperState.html)。Robotiq 按其驱动反馈与机构转换建立相同语义，不能把转轴角度比例直接当宽度。
 
-这是已明确的采集约定，**当前代码仍保存闭合比例和原始驱动关节，尚未增加上述米制宽度字段**。没有更改现有 episode。需要比例的算法在导出时转换，并保留实测状态与目标指令的区别。
+公共数据接口**当前仍保存闭合比例和原始驱动关节，尚未统一增加上述米制宽度字段**。薯片 raw 的 `gripper_force_feedback/` 另存 Panda `width_m` 和 `servo_target_width_m`，不代表其它任务或 LeRobot action 已改成米。现有 episode 保持原定义，实测状态与目标指令分开。
 
 ## ViSk：导出与训练
 
@@ -43,6 +43,8 @@ B 复位后开始录制；绿色 SUCCESS 不会自动停录，Enter 保存成功
 ViSk 原转换器生成 `processed_data_pkl_aa/pick_cube.pkl`，其中含图像、位姿、夹爪状态、触觉及统计量。本地桥接器按真实时间戳对齐，并用录制起止事件截取片段。原加载器继续执行采样、基线扣除、归一化和动作块构造。腕部图像沿用官方转换器裁掉右侧 20% 再缩放的规则，在线输入也执行同一裁剪。
 
 当前训练观测是 `pixels1/2/52`＋`sensor0`，输出为 10 步×7 维动作块。七维是基座系平移增量、末端局部旋转增量、夹爪绝对闭合指令。当前 `aux_keys=[sensor0]` 不编码本体状态；状态仍被保存，并用于构造运动标签。深度、语言和关节速度暂不作为原版 ViSk 的输入。
+
+当前学习方向保持**触觉输入、运动与夹爪开合输出**，不引入目标力 action。薯片的 MuJoCo 接触力反馈是独立控制实验，不属于 ViSk 原版策略，也不自动进入当前部署链路。
 
 **记录在案的本地差异：**
 
@@ -155,7 +157,21 @@ python collect_data.py collect_img=true collect_state=true collect_reskin=true d
 - **NeoSim 原始数据**：公开代码位于 `neoteai/N0-Foundation/neosim`，核对版本 `ad2d9b1ead7274391b348641e9abf38167e04f1e`。脚本策略＋cuRobo 按 seed 自动采集；每条演示保存 `hdf5/<seed>.hdf5`，另外保存拼接预览 `video/<seed>.mp4`、metadata 和成功记录。HDF5 含相机、机器人关节／末端位姿、触觉等；RGB 在 HDF5 中编码为 JPEG 字节，预览视频不是唯一图像来源。[采集说明](https://github.com/neoteai/N0-Foundation/blob/ad2d9b1ead7274391b348641e9abf38167e04f1e/neosim/docs/Collection.md)、[保存实现](https://github.com/neoteai/N0-Foundation/blob/ad2d9b1ead7274391b348641e9abf38167e04f1e/neosim/envs/utils/data.py)。
 - **NeoSim 夹爪与标签**：Franka 原始 joint 是七个臂关节＋两个手指关节，单臂 ACT 转换选前八维；最后一维是一个手指的直线关节位置（米），不是两指总间距。ACT 转换取 `q[t]` 作 state、`q[t+1]` 作 action。π0.5 单臂客户端也使用七关节＋一个手指位置，下发关节位置目标。不能把该 ACT 标签做法当成 OpenPI 的指令记录方法，或直接替代本项目的夹持指令。[ACT 转换](https://github.com/neoteai/N0-Foundation/blob/ad2d9b1ead7274391b348641e9abf38167e04f1e/neosim/policy/ACT/process_data.py)、[单臂部署](https://github.com/neoteai/N0-Foundation/blob/ad2d9b1ead7274391b348641e9abf38167e04f1e/neosim/eval/eval_pi05_single_joint_cl.py)。
 
-当前接入缺口：本项目已保存三相机、instruction、实测七关节位置／速度、TCP 状态／指令、夹爪状态／指令、深度和磁场；**没有独立记录实际下发的七关节位置目标／DROID 语义的速度指令，也没有保存与真机驱动同义的夹爪反馈宽度与目标宽度（米）**。宽度约定见本文开头，不要求硅胶接触面间距。当前 7 维 TCP `action` 不能改个字段名就作为 DROID 的 8 维关节动作。建议保留公共 LeRobot＋100 Hz raw，补全实际关节命令与驱动反馈宽度，再分别导出 ViSk、FTF、OpenPI；旧数据不伪造缺失命令。这些额外字段尚未接入；当前 cube / ViSk 流程仍使用上述 TCP 与连续夹爪指令，未偷偷更换协议。
+当前接入缺口：本项目已保存三相机、instruction、实测七关节位置／速度、TCP 状态／指令、夹爪状态／指令、深度和磁场；**尚未统一保存实际下发的七关节位置目标／DROID 语义的速度指令，以及真机驱动同义的米制夹爪反馈／目标宽度**。薯片 raw 的宽度附件是局部实现，见本文开头。当前 7 维 TCP `action` 不能改个字段名就作为 DROID 的 8 维关节动作。后续在公共协议中补全这些字段，再分别导出；旧数据不伪造缺失命令。当前 cube / ViSk 流程仍使用上述 TCP 与连续夹爪指令。
+
+## 可选触觉参考模型
+
+日常采集使用已提交的拟合偶极子配置，不需要下载数据或网络权重。3D Cal 数据、官方 MagNet 权重与本地训练输出只保留在本机；来源、版本和校验值在 `assets/3dcal/` 的 manifest 中。
+
+```bash
+# 只获取官方参考数据与权重，不启动训练
+.venv/bin/python -m wowskin_lab reskin-response fetch
+.venv/bin/python -m wowskin_lab reskin-inverse fetch
+```
+
+`reskin-response train --help` 查看本地前向网络训练；`reskin-inverse train --help` 查看官方 MagNet 架构的本地重训。它们是可选磁场对照，不是 ViSk 策略。候选通道映射、训练范围和未标定项见[模型说明](MODEL_CALIBRATION_ZH.md#前向网络与数据)。Pollen 的获取和检查见[Pollen 说明](baselines/POLLEN_ZH.md)。
+
+## 官方源码检查
 
 固定参考源码：
 

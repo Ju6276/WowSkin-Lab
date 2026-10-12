@@ -22,7 +22,7 @@
 - Panda 执行器参考：[Menagerie manifest](assets/reference/panda_menagerie/manifest.json) 与 [LICENSE](assets/reference/panda_menagerie/LICENSE)；[robosuite manifest](assets/reference/robosuite_panda/manifest.json) 与 [LICENSE](assets/reference/robosuite_panda/LICENSE)。
 - WowSkin 原厂可视化：[manifest](third_party/wowskin_visualizer/manifest.json)、[LICENSE](third_party/wowskin_visualizer/LICENSE)。
 - 鞭子参考模型：[manifest](assets/whip_reference/manifest.json)、[LICENSE](assets/whip_reference/LICENSE)。不是当前 cable 任务的线材后端。
-- 3D Cal / MagNet 源文件：[manifest](assets/3dcal/upstream/manifest.json)、[LICENSE](assets/3dcal/upstream/LICENSE)。目录中还包含官方 ReSkin 预训练权重；数据与该权重另见 [数据来源](assets/3dcal/manifest.json)，不能由源码许可证推定数据许可。
+- 3D Cal / MagNet 源文件：[manifest](assets/3dcal/upstream/manifest.json)、[LICENSE](assets/3dcal/upstream/LICENSE)。官方 ReSkin 数据与预训练权重按需下载，不随当前源码分发；[数据来源](assets/3dcal/manifest.json)与权重摘要保留在 manifest 中，不能由源码许可证推定数据许可。获取命令见[学习工作流](docs/LEARNING_WORKFLOWS_ZH.md#可选触觉参考模型)。
 - AnySkin CAD：[文件来源与 SHA256](assets/cad/manifest.json)、[几何说明](assets/cad/README_ZH.md)。来源清单未包含明确再分发许可，公开前须核对。
 
 `assets/` 中的原始文件、派生文件及用途应按所在目录 manifest 区分。保留作者、许可与来源，不因文件移动或格式转换删除归属信息。

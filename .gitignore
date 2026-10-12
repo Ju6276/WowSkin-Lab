@@ -7,6 +7,10 @@ outputs/
 MUJOCO_LOG.TXT
 .DS_Store
 assets/pollen/
+# Optional downloaded 3D Cal data and official weights; keep source manifests.
+assets/3dcal/*.csv
+assets/3dcal/*.tar.gz
+assets/3dcal/upstream/*.pth
 third_party/franka_xbox/
 third_party/visuoskin/
 third_party/feel-the-force/

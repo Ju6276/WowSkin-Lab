@@ -2,7 +2,9 @@
 
 Franka 触觉遥操作、RGB-D 数据采集和 ViSk / FTF 算法接入。基于 MuJoCo，支持 Panda / Robotiq 2F-85、键盘 / SpaceMouse / PICO 4，提供方块搬运、线材插扣、喂食、Peg Insert，以及实验性薯片夹取场景。
 
-建议从 Panda 方块任务开始。ViSk 提供数据转换、训练及 各任务的仿真闭环入口；FTF 提供数据导出和标注入口，后续视觉跟踪需要 CUDA。软指腹与磁场是未完成真机标定的本地近似模型；本项目包含数据与环境适配，不是官方论文实验配置的完整复现。未完成项见 [TODO](TODO.md)。
+建议从 Panda 方块任务开始。ViSk 提供数据转换、训练与仿真闭环入口；FTF 提供数据导出和标注入口，后续视觉跟踪需要 CUDA。软指腹与磁场是未完成真机标定的本地近似模型，本项目包含数据与环境适配。薯片夹持仍待调整，保留为实验场景；已知问题统一见 [TODO](TODO.md)。
+
+[启动与录制](#启动与录制) · [其他任务](#其他任务与输入) · [数据与学习](#数据与学习) · [代码与检查](#代码入口与维护)
 
 ## 安装
 
@@ -35,7 +37,7 @@ python3.12 scripts/setup_capture.py
 三种输入默认使用固定机器人基座方向，转动观察视角不改变输入映射：W/S 对应基座 ±X，A/D 对应 −Y/+Y，E/Q 对应 ±Z。键盘旋转键仍绕 TCP 局部轴。**本地桌面工作空间盒子默认关闭**；速度、目标领先量、输入死区与底层控制参数仍保留，详见[控制说明](docs/MODEL_CALIBRATION_ZH.md#生效的控制与质量检查)。`--control-frame view` 和 `--workspace-limits` 分别显式恢复旧视角映射与旧边界。新旧控制配置请使用不同录制目录。
 
 1. **B**：复位，看到红色 `REC capture_…` 后开始操作。
-2. 完成任务，左上角绿色 **SUCCESS** 提示自动达标。
+2. 完成任务，左上角绿色 **SUCCESS** 提示自动达标（薯片试验无自动成功判定）。
 3. **Enter**：结束并标记成功，等待 `SAVING → VERIFYING → SAVED`。
 4. 显示 **SAVED** 后，按 **B** 开始下一条；编号自动递增，重启也能追加。
 
@@ -44,10 +46,10 @@ python3.12 scripts/setup_capture.py
 ## 其他任务与输入
 
 ```bash
+# 单卡扣插线；Panda，默认刚性卡扣
+.venv/bin/mjpython -m wowskin_lab teleop --task cable --cable-layout single_clip --input spacemouse --ideal
 # 双连接座长线＋两柱绕线；约 0.756 m、48 段，两端固定
 .venv/bin/mjpython -m wowskin_lab teleop --task cable --cable-layout routing --input spacemouse --ideal --record-dir data/episodes_routing_v1
-# 单卡扣，上下唇弹性、底座固定；Robotiq + 可选笛卡尔阻抗（强闭合存在下述已知问题）
-.venv/bin/mjpython -m wowskin_lab teleop --task cable --cable-layout single_clip --clip-model elastic_beam --gripper robotiq_2f85 --arm-controller cartesian_impedance --input keyboard --ideal --record-dir data/episodes_elastic_robotiq
 # SERL++ Peg 素材：启动已物理夹持，插入孔座
 .venv/bin/mjpython -m wowskin_lab teleop --task peg_insert --input spacemouse --ideal
 # Panda 喂食：初始化已夹勺，并放好六颗豆子
@@ -67,8 +69,8 @@ Cube、线材、喂食、Peg 均可加 `--gripper robotiq_2f85`，默认 Panda�
 机械臂默认仍为 IK＋关节 PD。可选笛卡尔阻抗和实验弹性卡扣分别启用，不会自动替换：
 
 ```bash
-.venv/bin/mjpython -m wowskin_lab teleop --task cable --cable-layout single_clip --input keyboard --arm-controller cartesian_impedance --ideal --record-dir data/episodes_cartesian_base
-# 弹性卡扣试验：在上述命令加 --clip-model elastic_beam，并另选录制目录
+.venv/bin/mjpython -m wowskin_lab teleop --task cable --cable-layout single_clip --input keyboard --arm-controller cartesian_impedance --clip-model elastic_beam --ideal --record-dir data/episodes_elastic_cartesian
+# Robotiq 版本再加 --gripper robotiq_2f85，并另选录制目录
 ```
 
 笛卡尔阻抗使用固定版 SERL++ 控制函数，reset 仍通过原关节 PD 建立初始夹持。弹性卡扣的上下唇均可弯曲，安装底座固定；这是本地平面离散梁近似，材料与插拔力未标定。默认卡扣仍为刚体；两种线材布局均支持显式选择弹性版。实验范围见[模型说明](docs/MODEL_CALIBRATION_ZH.md#卡扣的物理范围)。
@@ -79,28 +81,14 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 ## 脆性薯片试验
 
-机器人场景沿用喂食的房间与 Franka，移除人体、勺子和豆子，保留 EBiM 原始托盘几何和物理参数，托盘颜色使用原场景碗的蓝绿色材质。薯片约 70×50 mm，两端上翘、两侧下弯，高低边缘相差 24 mm；实体碰撞面与外形一致。启动后空夹爪，按 **V** 切换薯片近景：
+**仍待调整，未验证稳定无损夹取。** 场景为康养房间、Franka／Panda、蓝绿色 EBiM 托盘和马鞍状薯片，无人体或勺子。启动后空夹爪，不自动录制：
 
 ```bash
 .venv/bin/mjpython -m wowskin_lab teleop --task chip_tray --input keyboard --ideal --record-dir data/episodes_chip_tray
 # 接上 SpaceMouse 后可改为 --input spacemouse
 ```
 
-夹爪使用**接触力反馈**：X／SpaceMouse 左键启动力闭环，Z／右键打开；C／两键保持力闭环。键盘 `-`（减号）降低目标力、`=`（等号，不按 Shift）提高目标力，每次 0.01 N；这两个键不调速度。Pico 扳机映射为 0～所选目标力，松开扳机打开。默认目标为 0.05 N，可用 `--chip-grip-force 0.08` 明确更改，界面显示目标和左右实测值。空载、默认目标下每指目标速度约 5 mm/s，接近目标力时自动减速；每指目标速度上限 10 mm/s。目标指左右指腹中较大的法向载荷；反馈来自 MuJoCo 接触求解，**不是 AnySkin 磁场到力的实测标定**。内层仍使用原 Panda 位置伺服，每个物理步根据力误差更新开度，无预设夹持宽度。默认力并不保证无损提起；强度、控制参数与适用范围见配置文件。
-
-显示 `INTACT / BROKEN` 和碎片组数；沿用 B/Enter/N 手动录制操作。**本试验尚未定义自动成功条件**，Enter 是人工标记，不能把它当作自动验证的无损抓取。几何与求解设置见 [chip_tray.json](configs/chip_tray.json)；没有给薯片添加机器人固定约束。原来的喂食任务不变。
-
-复测力闭环与抬升：`.venv/bin/python -m scripts.diagnostics.check_chip_force --forces .05 .08`。raw 的 `gripper_force_feedback/` 另存每步力目标、启用状态、双指载荷、`width_m` 实际宽度和 `servo_target_width_m` 内层伺服目标宽度；宽度由 Panda 指关节计算，不是软指腹表面间距。原 state/action 中的夹爪量仍是实测／指令闭合比例，没有改成牛顿。ViSk/FTF 导出仍用开度动作；让策略输出目标力并在部署时启用相同力闭环，属于尚未完成的独立适配。
-
-独立按压台仍可使用，不自动录制：
-
-```bash
-.venv/bin/mjpython -m wowskin_lab brittle-chip
-# 可选：自动按压／抬起并保存本机演示录像与断裂事件
-.venv/bin/python -m wowskin_lab brittle-chip --headless --video --output outputs/diagnostics/brittle_chip
-```
-
-`Space` 执行一次按压／抬起，再按可停止压头目标；`D/U` 下压／抬起，`R` 重置，`P` 退出。24 个薄片刚体通过 32 条 weld 连接，每条连接按自己的力／力矩断开；分离后的碎片保留碰撞。形状、强度与密度均为[试验参数](configs/brittle_chip.json)，不是实测薯片。模型范围与内部接触处理见[说明](docs/MODEL_CALIBRATION_ZH.md#脆性薯片预分块试验)。机器人夹取版使用相同断裂计算，4 个内圈点与 16 个外圈点构成 24 块／28 条连接。断裂强度未标定，尚未确定可无损夹取的力范围。
+仅此场景的夹爪使用 MuJoCo 接触力反馈：**X** 启用（默认 0.05 N）、**Z** 打开、**C** 保持；**− / =** 每次调低／调高 0.01 N，**V** 切近景。机械臂仍用 IK＋关节 PD。显示 `INTACT / BROKEN`，没有自动 SUCCESS。该反馈不是从 AnySkin 磁场估计的力，也没有把 ViSk 的最后一维改成目标力。详细操作、独立按压台与诊断入口见[采集手册](docs/COLLECTION_ZH.md#薯片试验)，待办见 [TODO](TODO.md#薯片夹持待调整暂不作为训练主线)。
 
 ## 数据与学习
 
@@ -112,7 +100,7 @@ data/episodes/pick_cube/
 
 - **名义 30 Hz**：三路 640×480 RGB、同步米制深度、instruction、对应 state/action；另存实际仿真时间戳。
 - **100 Hz raw**：TCP 基座系 XYZ＋rotvec、线／角速度、七关节位置／速度、夹爪反馈／目标、15 路触觉、基线及质量字段。不是 RPY。
-- **夹爪 state / action 分开**：实测闭合比例作观测，实际下发闭合目标作动作；0 开、1 闭。夹物体时反馈不到 1，动作仍可为 1。另存驱动关节及单位，尚无独立米制宽度字段。
+- **夹爪 state / action 分开**：实测闭合比例作观测，实际下发闭合目标作动作；0 开、1 闭。夹物体时反馈不到 1，动作仍可为 1。另存驱动关节及单位；米制宽度尚未统一接入各任务，只有薯片 raw 的附加组已保存。
 - LeRobot 的 action 是绝对 TCP／夹爪目标；ViSk 导出沿用官方位姿差分规则，得到基座系平移增量＋末端局部旋转增量＋绝对夹爪目标。两者不能直接混用。
 - 成功写入并验证后，图像只留在 LeRobot，raw 不重复存图像。失败／中断保留 raw 和暂存媒体；`INCOMPLETE` 表示写入未完成，不能用于训练。
 
@@ -121,6 +109,8 @@ data/episodes/pick_cube/
 ```
 
 [学习工作流](docs/LEARNING_WORKFLOWS_ZH.md)提供完整命令：**采集成功 episodes → 数据检查 → 导出／官方预处理 → 训练 → MuJoCo 闭环评估**。ViSk 使用三视角＋单块 15 路触觉，动作块 10×7，**6 Hz 策略、100 Hz 控制**；夹爪标签使用实际下发的目标。
+
+ViSk 的学习目标保持视觉＋触觉输入，输出末端运动与夹爪开合，不输出目标力。数据中保存的本体状态用于记录和运动标签构造，当前网络输入键未包含本体状态。FTF 仍须完成官方视觉点跟踪和独立闭环接入，不能直接复用 ViSk checkpoint。
 
 仓库保留代码、测试、依赖、配置、素材来源和操作说明，不分发本机示范、训练权重、验证报告或录像。新使用者需先采集自己的数据，再按工作流训练和评估；仅克隆代码不能复现某次训练的具体数值结果。
 
@@ -132,7 +122,7 @@ ViSk 训练只向 W&B 记录指标（默认项目 `WowSkin-Lab`），不生成 T
 wowskin_lab/
   envs/       场景、夹爪与任务评分
   core/       接触力学、磁场与控制
-  teleop/     键盘、SpaceMouse、Pico
+  teleop/     输入命令、SpaceMouse、Pico 与目标限制
   ui/         操作窗口、触觉／相机／点云预览
   data/       录制、LeRobot、算法导出、坐标变换
   learning/   固定版本官方算法的接入层
@@ -140,8 +130,10 @@ wowskin_lab/
 configs/      相机、控制、评分、传感器参数与上游版本
 assets/       原始／派生素材、来源 manifest 与许可证
 scripts/      安装、训练、评估；diagnostics/ 为可选实验
-tests/       unit、physics、official、artifacts、manual
-docs/        采集、学习、物理模型说明
+tests/        unit、physics、official、artifacts、manual
+docs/         采集、学习、物理模型说明
+data/         本机示范与算法导出，不进 Git
+outputs/      本机权重、标定与诊断输出，不进 Git
 ```
 
 默认采用 MuJoCo 3.15 降阶指腹＋拟合偶极子。`--ideal` 关闭合成触觉噪声、滤波和延迟，不关闭接触力学。控制限制、参数来源与物理失效规则见 [模型说明](docs/MODEL_CALIBRATION_ZH.md)。完整网格对照针对 MuJoCo 3.5，与当前默认环境不同。
@@ -153,6 +145,6 @@ docs/        采集、学习、物理模型说明
 .venv/bin/python -m tests all --list
 ```
 
-物理／artifact 测试可能需要指定 MuJoCo 版本或可选数据／模型，不能把跳过项算作通过。普通遥操作不保存整场诊断；需要时加 `--diagnostic-log`。
+`unit` 检查坐标、输入和动作契约；`physics` 运行接触场景；`official` 检查官方数据与学习接口；`artifacts` 依赖可选数据／权重；`manual` 需要人工操作窗口。Robotiq 强夹持的已知失败保留在物理测试中，不跳过。物理／artifact 检查可能需要特定 MuJoCo 版本或可选模型，不能把跳过项算作通过。普通遥操作不保存整场诊断，需要时加 `--diagnostic-log`；可选对照入口见[模型说明](docs/MODEL_CALIBRATION_ZH.md)。
 
 [采集手册](docs/COLLECTION_ZH.md) · [ViSk / FTF](docs/LEARNING_WORKFLOWS_ZH.md) · [模型、参数与论文](docs/MODEL_CALIBRATION_ZH.md) · [TODO](TODO.md) · [第三方来源与发布事项](THIRD_PARTY.md)
