@@ -130,6 +130,13 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
     if env.cfg.get('clip_model') == 'elastic_beam':
         labels += ['Clip model']
         values += ['Elastic beam | experimental, uncalibrated']
+    if hasattr(env, 'force_grip'):
+        forces = row.get('grip_force_pad_normal_force_n', [0., 0.])
+        labels += ['Grip feedback [N]']
+        values += [(f"{'ON' if row.get('grip_force_enabled') else 'OFF'} "
+                    f"target {row.get('grip_force_target_n', 0.):.3f} "
+                    f"(set {row.get('grip_force_selected_target_n', 0.):.3f}) | "
+                    f"L {forces[0]:.3f} R {forces[1]:.3f} | -/= adjust")]
     if getattr(env, 'keyboard_workspace_limited', False):
         labels += ['Target boundary']
         values += ['STOP: local workspace boundary | H shows bounds']

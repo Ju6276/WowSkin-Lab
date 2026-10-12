@@ -86,7 +86,11 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 # 接上 SpaceMouse 后可改为 --input spacemouse
 ```
 
+夹爪使用**接触力反馈**：X／SpaceMouse 左键启动力闭环，Z／右键打开；C／两键保持力闭环，`- / =` 将目标力减／加 0.01 N。Pico 扳机映射为 0～所选目标力，松开扳机打开。默认目标为 0.05 N，可用 `--chip-grip-force 0.08` 明确更改，界面显示目标和左右实测值。目标指左右指腹中较大的法向载荷；反馈来自 MuJoCo 接触求解，**不是 AnySkin 磁场到力的实测标定**。内层仍使用原 Panda 位置伺服，每个物理步根据力误差更新开度，无预设夹持宽度。默认力并不保证无损提起；强度、控制参数与适用范围见配置文件。
+
 显示 `INTACT / BROKEN` 和碎片组数；沿用 B/Enter/N 手动录制操作。**本试验尚未定义自动成功条件**，Enter 是人工标记，不能把它当作自动验证的无损抓取。几何与求解设置见 [chip_tray.json](configs/chip_tray.json)；没有给薯片添加机器人固定约束。原来的喂食任务不变。
+
+复测力闭环与抬升：`.venv/bin/python -m scripts.diagnostics.check_chip_force --forces .05 .08`。raw 的 `gripper_force_feedback/` 另存每步力目标、启用状态、双指载荷和伺服开度；原 state/action 中的夹爪量仍是实测／指令闭合比例，没有改成牛顿。该试验的自动训练导出尚未验收。
 
 独立按压台仍可使用，不自动录制：
 

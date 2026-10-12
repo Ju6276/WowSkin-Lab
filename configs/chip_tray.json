@@ -2,6 +2,16 @@
   "schema": "chip_tray_scene_v1",
   "provenance": "Local experimental chip on the original EBiM task3 tray, in the existing care room. Tray mesh, inertial and contact properties are retained. Initial height is lowered to rest on the table; the visual material is taken from EBiM's bowl at the user's request.",
   "tray_visual_material_source": "mat_v2_OmniPBR",
+  "grip_force_feedback": {
+    "target_n": 0.05,
+    "admittance_m_per_ns": 0.02,
+    "max_finger_speed_m_s": 0.002,
+    "key_step_n": 0.01,
+    "feedback_source": "MuJoCo all-contact normal force sums on left/right pads, not AnySkin magnetic calibration",
+    "controlled_quantity": "max(left_pad_load, right_pad_load) in N; shared Panda actuator cannot regulate each side independently",
+    "method": "finger target velocity = -gain*(target_force - measured_force); native joint travel and source inner position servo retained",
+    "status": "Local experimental admittance outer loop. Target, gain and slew are explicit controller settings, not material properties or a validated no-break force. No preset grasp width, object filter, attachment or fracture suppression."
+  },
   "chip_overrides": {
     "saddle_height_m": 0.012,
     "sectors": 4,

@@ -229,6 +229,16 @@ MuJoCo 没有设置“玻璃材质”就自动产生裂纹和碎片的内置模�
 
 本项目的 `bond_force_limit_n`、`bond_moment_limit_nm` 都可调整，任意一个连接达到力或力矩阈值便断开；提高力阈值不会消除力矩触发。它们目前只是试验强度，没有实物依据。更换成工业薄片也仍需明确材料和破坏判据，物体名称不能提供这些参数。
 
+### 薯片夹持力反馈
+
+`chip_tray` 的遥操作闭合命令启用 `core/grip_force.py` 中的导纳外环；它按上一物理步的 MuJoCo 接触力更新指关节位置目标，再交给原 Menagerie 位置伺服执行。设两指全部接触的法向力总和为 `F_L,F_R`，则 `F=max(F_L,F_R)`，`q_target_dot=-K*(F_target-F)`。负号对应 Panda 本地关节坐标下的闭合方向。单个耦合驱动无法分别控制两指；选较大值避免平均值掩盖单侧过载，双侧不平衡仍应检查抓姿。
+
+外环不读取物体类别、宽度、位置、质量、破碎状态或成功标签。反馈包含托盘等所有与指腹接触的物体；它不是 AnySkin 15 路磁场的反演力。默认目标 0.05 N、增益 0.02 m/(N·s)、每指目标速度上限 2 mm/s 都是显式实验控制设置；保留原关节行程和执行器限幅，没有增加夹持宽度截断。更换目标力通过 CLI、按键或 API 完成，不改断裂强度。若受力超过目标，外环会退让；若低于目标则继续闭合。没有接触时会继续寻找接触，直到原生行程边界。
+
+目标力是反馈设定值，不是瞬时接触力的硬上限；碰撞仍可能超调。两指互相接触也会产生读数，不能把“力达到目标”单独当作夹住薯片或成功抬起的证据。抬升测试另查薯片质心高度和与薯片本身的接触；这些评估量不进入控制器。
+
+原 7D `step` 的最后一维仍是内层伺服闭合指令；程序化力控需显式 `env.command_gripper(True)`，之后用 `env.step(env.hold_action())` 保持外环。`env.command_gripper(False)` 停止力控并打开。raw 单独保存 `gripper_force_feedback/{enabled,target_n,selected_target_n,pad_normal_force_n,servo_target_closure}`，不会把牛顿伪装成已有训练接口的开度。此模式当前只接入薯片 Panda 场景，不改变其它任务或已有 ViSk checkpoint 的控制语义。
+
 ## 玻璃与连续裂纹：后续研究方向
 
 预分块模型可以接入现有机器人接触、碎片碰撞和录制流程，用于研究“碰撞后损坏／碎裂”的任务。但断裂只沿预定义界面发生；需显式定义界面强度、受拉／剪切判据、分块尺度及能量处理，不能把任意总接触力阈值称为实物玻璃强度。Houdini 的 [玻璃预破碎工具](https://www.sidefx.com/docs/houdini/destruction/glass.html) 和 [glue constraint 工作流](https://www.sidefx.com/docs/houdini/dyno/fracturing.html) 可供参考。

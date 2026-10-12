@@ -17,6 +17,7 @@ from wowskin_lab.envs.feeding import ASSETS, TABLE_TOP, ROBOT_POSITION, selected
 from wowskin_lab.envs.feeding_room import add_care_room
 from wowskin_lab.envs.brittle_chip import configuration, validate_configuration, add_chip, chip_mesh, BreakableChip
 from wowskin_lab.data.cameras import add_recording_cameras
+from wowskin_lab.core.grip_force import GripForceFeedback, pad_normal_forces
 
 
 def scene_config():
@@ -111,11 +112,18 @@ class PandaChipEnv(PandaPickCubeTactileEnv):
     def __init__(self, cfg=None, pollen=False):
         cfg = response_configuration(SimpleNamespace(task=self.task_name)) if cfg is None else dict(cfg)
         cfg.update(brittle_chip=chip_config(), chip_tray=scene_config(), scene_design='care_room_chip_tray_v1')
+        if cfg.get('gripper', 'panda') != 'panda' or cfg.get('gripper_control_mode', 'panda_menagerie_position') != 'panda_menagerie_position':
+            raise ValueError('Chip force feedback currently uses the Panda Menagerie inner servo')
+        force_config = cfg['chip_tray']['grip_force_feedback']
+        if cfg.get('chip_grip_force_n') is not None:
+            force_config['target_n'] = cfg['chip_grip_force_n']
+        self.force_grip = GripForceFeedback(force_config)
         super().__init__(cfg, pollen, xml_factory=tray_scene,
                          contact_body='chip_piece_0', contact_geom='chip_piece_0', object_joint=None)
         self.contact_geoms = self.fracture.piece_geoms
 
     def reset(self, seed=None):
+        self.force_grip.reset()
         if not hasattr(self, 'fracture'):
             pieces, bonds = chip_mesh(self.cfg['brittle_chip'])
             self.fracture = BreakableChip(self.model, self.data, self.cfg['brittle_chip'],
@@ -124,6 +132,43 @@ class PandaChipEnv(PandaPickCubeTactileEnv):
         result = super().reset(seed)
         self.fracture.events = [dict(e, time_s=e['time_s']-.25) for e in self.fracture.events]
         return result
+
+    def command_gripper(self, close):
+        if close:
+            if not self.force_grip.enabled:
+                self.grip_target = float(self.data.qpos[self.finger_q].mean())
+            self.force_grip.enabled = True
+            self.force_grip.input_fraction = 1.
+        else:
+            self.force_grip.enabled = False
+            super().command_gripper(False)
+
+    def gripper_key(self, code):
+        if code in (ord('-'), ord('=')):
+            step = self.force_grip.config['key_step_n']
+            self.force_grip.selected_target_n = max(0., self.force_grip.selected_target_n + (step if code == ord('=') else -step))
+            return True
+        # C holds the selected force, rather than latching the current width.
+        return code == ord('C') and self.force_grip.enabled
+
+    def teleop_gripper(self, fraction):
+        """Pico trigger requests 0..selected force; releasing it opens."""
+        self.command_gripper(fraction > 0.)
+        self.force_grip.input_fraction = float(fraction)
+        return self.gripper_fraction(target=True)
+
+    def control(self, mode=None):
+        self.grip_target = self.force_grip.update(
+            self.grip_target,
+            pad_normal_forces(self.model, self.data, (self.skin_flex, self.passive_flex)),
+            self.model.opt.timestep, self.model.jnt_range[self.finger_joints[0]])
+        super().control(mode)
+
+    def gripper_feedback_sample(self):
+        return dict(enabled=bool(self.force_grip.enabled), target_n=self.force_grip.target_n,
+                    selected_target_n=self.force_grip.selected_target_n,
+                    pad_normal_force_n=pad_normal_forces(self.model, self.data, (self.skin_flex, self.passive_flex)),
+                    servo_target_closure=self.gripper_fraction(target=True))
 
     def after_physics_step(self):
         self.fracture.break_overloaded_bonds()
@@ -149,6 +194,7 @@ class PandaChipEnv(PandaPickCubeTactileEnv):
         _, _, terminated, truncated, row = super().step(action)
         row['chip_xyz_m'] = row.pop('cube_xyz_m')
         row.update(self.evaluation_metrics())
+        row.update({'grip_force_'+key: value for key, value in self.gripper_feedback_sample().items()})
         row['success'] = self.success = False  # Do not inherit the cube's lift evaluator.
         self.last_row = row
         return self.observation(), 0., terminated, truncated, row

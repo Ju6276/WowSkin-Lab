@@ -469,6 +469,8 @@ def task_camera(env, close=False, operator=False):
 
 
 def key_command(env, code):
+    if getattr(env, 'gripper_key', lambda key: False)(code):
+        return
     if code == ord("X"):
         env.command_gripper(True)
     elif code == ord("Z"):
@@ -623,6 +625,10 @@ def response_configuration(args):
             cfg['clip_model'] = args.clip_model
     physics_step_us = getattr(args, 'physics_step_us', None)
     task = getattr(args, 'task', 'pick_cube')
+    if getattr(args, 'chip_grip_force', None) is not None:
+        if task != 'chip_tray':
+            raise ValueError('--chip-grip-force applies only to chip_tray')
+        cfg['chip_grip_force_n'] = args.chip_grip_force
     if task == 'feeding':
         cfg['feeding_setting'] = getattr(args, 'feeding_setting', 'care_room')
     if physics_step_us is None and task in ('pick_cube', 'cable', 'feeding', 'peg_insert', 'chip_tray'):
@@ -792,6 +798,8 @@ def viewer(args):
         env = PandaPickCubeTactileEnv(cfg, pollen=not args.no_pollen)
     title = ('PandaCable / single clip' if cable_task and env.cable_layout == 'single_clip'
              else 'PandaCable' if cable_task else 'PandaFeeding' if feeding_task else 'PandaPegInsert' if peg_task else 'PandaChip' if chip_task else 'PandaPickCube')
+    if chip_task:
+        print(f"Chip force feedback: X/SpaceMouse left enables {env.force_grip.selected_target_n:g} N; Z/right opens; -/= adjusts by 0.01 N; C keeps force loop active. Feedback is MuJoCo pad force, not magnetic uT.", flush=True)
     print('Arm controller: '+env.cfg.get('arm_controller', 'ik_pd'), flush=True)
     if cfg['disable_cartesian_limits']:
         print('Cartesian limits OFF: no workspace, action increment, servo slew or target-lead limits. '
@@ -1170,6 +1178,7 @@ def main():
     parser.add_argument('--feeding-setting', choices=['care_room', 'ebim_station'], default='care_room',
                         help='Feeding setting: seated adult in a local care room (default), or previous isolated EBiM station')
     parser.add_argument('--grip-force', type=float, help='Explicitly enable the OLD local force-limited controller [N/finger]; default uses sourced Menagerie Panda position servo')
+    parser.add_argument('--chip-grip-force', type=float, help='chip_tray force-feedback target [N], controlled on the more loaded pad; default from configs/chip_tray.json')
     parser.add_argument('--ideal', action='store_true', help='Disable synthetic magnetic noise, drift, readout filtering and sample delay; retain contact mechanics and deformation response')
     parser.add_argument('--physics-step-us', type=int, choices=[20, 50, 100, 500, 1000], help='Integration step in microseconds; 500/1000 require reduced skin; recorded in metadata')
     parser.add_argument('--gripper', choices=['panda', 'robotiq_2f85'], default='panda', help='Panda or EBiM Robotiq 2F-85 with local tactile mounts')

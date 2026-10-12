@@ -112,6 +112,12 @@ class RawRobotRecorder:
             policy='Positive volume: continue recording fresh computed fields; warning does not drop frames or end episodes. Nonpositive/nonfinite: physics fault.',
             meaning='Local numerical diagnostic, not a calibrated material limit or magnetometer saturation')
         self.metadata.update(robot_metadata(self.env))
+        if hasattr(self.env, 'gripper_feedback_sample'):
+            self.metadata['gripper_force_feedback'] = dict(
+                config=self.env.force_grip.config,
+                raw_group='gripper_force_feedback',
+                action='7D actions remain inner-servo closure targets; force requests and measured pad forces are separate 100 Hz fields',
+                source='MuJoCo simulated contact force, not a calibrated AnySkin force estimate')
         self._metadata()
         try:
             self.h5 = h5py.File(path/'measurements.h5', 'w')
@@ -147,6 +153,9 @@ class RawRobotRecorder:
             self._append(key, value)
         self._append('gripper_states', e.gripper_fraction())
         self._append('commanded_gripper', e.gripper_fraction(target=True))
+        if hasattr(e, 'gripper_feedback_sample'):
+            for key, value in e.gripper_feedback_sample().items():
+                self._append('gripper_force_feedback/'+key, value)
         action_world = e.hold_action() if row is None else row['action']
         self._append('command_7d', command_in_base(action_world, robot['world_from_base']))
         self._append('command_7d_world', action_world)

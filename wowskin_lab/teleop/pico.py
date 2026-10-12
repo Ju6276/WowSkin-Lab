@@ -254,6 +254,8 @@ class PicoController:
                                     workspace_bounds(env, WORKSPACE), lead_m=.03)
             delta_r = limit_vector(delta_r, self.angular_speed/hz)
         closure = float(right['buttons'][0])
+        if hasattr(env, 'teleop_gripper'):
+            closure = env.teleop_gripper(closure)
         self.status = 'Moving: right trigger closes gripper'
         return np.r_[delta_p, delta_r, closure]
 
