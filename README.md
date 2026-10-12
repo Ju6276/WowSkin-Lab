@@ -89,6 +89,8 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 - `tacto`：使用 [mujoco-tacto](https://github.com/utn-air/mujoco-tacto) 的独立 DIGIT STL 和 TACTO 几何／灯光渲染。
 - `fots`：使用 [FOTS 主分支](https://github.com/Rancho-zhao/FOTS) 的 GelSight 预训练光学模型、背景与像素标定。安装外形是明确标注的矩形几何代理，不是官方 GelSight CAD。
 
+**名称分两层：DIGIT、GelSight 是传感器硬件；TACTO、FOTS 是仿真算法。** FOTS 作者的 MuJoCo 示例实际使用 DIGIT，因此 DIGIT 也可以配 FOTS。当前两个选项同时改变了硬件几何／标定和光学算法，不能当作“同一个传感器上只比较两种算法”的实验。算法差别和来源见[模型说明](docs/MODEL_CALIBRATION_ZH.md#传感器硬件与光学算法)。
+
 两种模块均**安装在原 Panda 指尖末端并向下延伸**；保留原手指外观、碰撞与关节行程，感应面朝向夹持区，TCP 随模块中心更新。DIGIT 是约 34 mm 的独立传感器，不使用带长柄的替代手指。GelSight 外壳仍为本地代理，安装件和惯量尚未实物校验。
 
 输出每指 240×320 RGB、米制光学深度和接触区域；FOTS 还输出 9×11 个标记点的二维像素位移与流图。**目前支持独立按压台和 Panda 方块；尚未接入数据集录制、ViSk、其他任务／夹爪或 Pico。** 不支持的参数会报错，不会静默切回 AnySkin。
