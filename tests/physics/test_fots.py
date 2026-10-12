@@ -168,6 +168,42 @@ np.save(p+'/marker.npy', marker._marker_motion()[..., ::-1])
         finally:
             optics.close()
 
+    def test_rolling_renews_detached_material_anchor(self):
+        xml = '''<mujoco><option gravity="0 0 0"/>
+          <worldbody><geom name="gel" type="box" pos="0 0 -.002" size=".01 .015 .002"/>
+            <site name="cam"/><body pos="0 0 .0045"><freejoint/>
+              <geom name="probe" type="box" size=".004 .004 .005" mass=".02"/>
+            </body></worldbody></mujoco>'''
+        model = mujoco.MjModel.from_xml_string(xml)
+        data = mujoco.MjData(model)
+        optics = FOTSOptical(model, {'sensor': ('cam', 'gel')})
+        try:
+            mujoco.mj_forward(model, data)
+            optics.render(data)
+            geom = model.geom('probe').id
+            old = optics.history['sensor'][geom]
+            # Rotate the block while maintaining the new lower edge's .5 mm
+            # indentation. The centre of the old face has left the gel.
+            angle = .3
+            data.qpos[2] = .004*np.sin(angle)+.005*np.cos(angle)-.0005
+            data.qpos[3:7] = [np.cos(angle/2), np.sin(angle/2), 0, 0]
+            data.time = .1
+            mujoco.mj_forward(model, data)
+            old_point = data.geom_xmat[geom].reshape(3, 3) @ old['local']+data.geom_xpos[geom]
+            self.assertGreater(old_point[2], 0)
+            rolled = optics.render(data)['sensor']
+            self.assertGreater(rolled.normal_force_n, 0)
+            self.assertIsNot(optics.history['sensor'][geom], old)
+            self.assertLess(optics.history['sensor'][geom]['anchor'][2], 0)
+            # Elapsed time alone never adds flow or periodically resets it.
+            fresh = optics.history['sensor'][geom]
+            data.time += 100
+            held = optics.render(data)['sensor']
+            self.assertIs(optics.history['sensor'][geom], fresh)
+            np.testing.assert_array_equal(rolled.marker_displacement_px, held.marker_displacement_px)
+        finally:
+            optics.close()
+
     def test_panda_grasp_lift_release(self):
         env = OpticalPandaEnv(sensor='fots')
         optics = FOTSOptical(env.model, env.sensors)

@@ -43,8 +43,16 @@ def panel(frames, *, depth_max_mm=None, show_mask=False, scale_label=None):
         out.paste(image, (x+(column_width-image.width)//2, y+(image_height-image.height)//2))
     for i, (name, frame) in enumerate(frames.items()):
         y = i*height
-        draw.text((4, y+3), f'{name}: RGB', fill='white')
-        draw.text((column_width+4, y+3), 'Contact mask' if show_mask else 'Depth (um)', fill='white')
+        side = name.split(' / ')[0]
+        label = name.replace('left', 'left (L)', 1) if side == 'left' else (
+            name.replace('right', 'right (R)', 1) if side == 'right' else name)
+        color = '#64dcff' if side == 'left' else ('#ffbc64' if side == 'right' else 'white')
+        draw.text((4, y+3), f'{label}: RGB', fill=color)
+        depth_title = {'tacto_force_adjusted_optical': 'Force+geom. (um)',
+                       'tacto_geometric_optical': 'Optical depth (um)',
+                       'geometric_overlap': 'Geom. overlap (um)',
+                       'legacy_camera_surface_offset': 'Surface offset (um)'}.get(frame.depth_model, 'Depth (um)')
+        draw.text((column_width+4, y+3), 'Contact mask' if show_mask else depth_title, fill='white')
         if has_flow:
             draw.text((2*column_width+4, y+3), 'Marker flow', fill='white')
         paste_image(frame.rgb, 0, y+28)
@@ -96,6 +104,7 @@ def demo(env, optics, destination, *, depth_max_mm=None):
             arrays[f'{side}_time_s'] = frame.time_s
             arrays[f'{side}_normal_force_n'] = frame.normal_force_n
             arrays[f'{side}_render_depth_unit'] = frame.render_depth_unit
+            arrays[f'{side}_depth_model'] = frame.depth_model
             if frame.render_input_depth is not None:
                 arrays[f'{side}_render_input_depth'] = frame.render_input_depth
                 arrays[f'{side}_render_deformation'] = frame.render_deformation
@@ -217,6 +226,19 @@ def viewer(env, optics, input_kind, *, depth_max_mm=None):
                     pixels = np.asarray(Image.fromarray(pixels).resize((w, h)))
                     message = ('W/S +/-base X | A/D -/+base Y | E/Q up/down\nX/Z close/open | I/K L/J U/O rotate' if panda
                                else 'W/S probe +/-Y | A/D -/+X\nE/Q up/down | I/K L/J U/O tilt/twist')
+                    if panda:
+                        message += '\nL: hand +Y | R: hand -Y (fixed fingers)'
+                        from wowskin_lab.ui.task_guides import TaskGuides
+                        with handle.lock():
+                            scene = handle.user_scn
+                            scene.ngeom = 0
+                            hand_rotation = env.data.xmat[env.hand].reshape(3, 3)
+                            for side, sign, color in (('left', 1, [.39, .86, 1, 1]),
+                                                      ('right', -1, [1, .74, .39, 1])):
+                                gel = env.model.geom(env.sensors[side][1]).id
+                                position = env.data.geom_xpos[gel]+sign*.04*hand_rotation[:, 1]
+                                TaskGuides._geom(scene, mujoco.mjtGeom.mjGEOM_SPHERE, [.0015]*3,
+                                                 position, np.eye(3), color, 'L' if sign == 1 else 'R')
                     handle.set_texts([(mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT,
                         optics.label+' optical preview\n'+message+'\nR reset | P exit | No dataset recording', '')])
                     if handle.is_running():

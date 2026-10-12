@@ -29,6 +29,7 @@ class OpticalFrame:
     render_input_depth: np.ndarray | None = None
     render_deformation: np.ndarray | None = None
     render_depth_unit: str = 'metre'
+    depth_model: str = 'unspecified'
 
 
 def contact_forces(model, data, gel):
@@ -160,7 +161,9 @@ class OpticalTactile:
                                          sum(forces.values()), tuple(forces), float(data.time),
                                          contact_mask=valid & (indentation > 0), valid_mask=valid,
                                          camera_depth_m=depths[0].copy(),
-                                         baseline_depth_m=renderer.depth0[0].copy())
+                                         baseline_depth_m=renderer.depth0[0].copy(),
+                                         depth_model=('tacto_force_adjusted_optical' if renderer.force_enabled
+                                                      else 'tacto_geometric_optical'))
         return frames
 
     def close(self):

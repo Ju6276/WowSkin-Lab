@@ -21,6 +21,25 @@ from wowskin_lab.core.arm_control import configure_controller
 OPTICAL_SENSORS = ('tacto', 'digit_fots', 'digit_compare', 'fots', 'gelsight')
 
 
+def configure_digit_solver(option):
+    """Use the pinned MuJoCo-TACTO contact solver for both DIGIT algorithms.
+
+    The AnySkin CG/30/impratio=1/noslip=1 optimization allows substantial
+    creep in a stationary rigid DIGIT grasp. These are source numerical
+    settings, not a change of friction coefficient, force or object pose.
+    """
+    source = ET.parse(ROOT/'third_party/mujoco-tacto/examples/xml/tacto_common.xml').getroot().find('option')
+    for name, default in (('solver', 'Newton'), ('iterations', '100')):
+        option.set(name, source.get(name, default))
+    for name in ('integrator', 'impratio', 'noslip_iterations', 'cone'):
+        option.set(name, source.get(name))
+    if source.find('flag') is not None:
+        flag = option.find('flag')
+        if flag is None:
+            flag = ET.SubElement(option, 'flag')
+        flag.attrib.update(source.find('flag').attrib)
+
+
 def sensor_geometry(sensor):
     if sensor == 'gelsight':
         return source_gelsight_geometry()
@@ -254,7 +273,9 @@ class OpticalBench:
         name = sensor_prefix(sensor)
         root = ET.Element('mujoco', model='WowSkin-Lab | standalone '+sensor)
         ET.SubElement(root, 'compiler', angle='radian')
-        ET.SubElement(root, 'option', timestep='.0005', integrator='implicitfast')
+        option = ET.SubElement(root, 'option', timestep='.0005', integrator='implicitfast')
+        if sensor in ('tacto', 'digit_fots', 'digit_compare'):
+            configure_digit_solver(option)
         visual = ET.SubElement(root, 'visual')
         ET.SubElement(visual, 'headlight', ambient='.7 .7 .7', diffuse='.2 .2 .2', specular='.1 .1 .1')
         asset, world = ET.SubElement(root, 'asset'), ET.SubElement(root, 'worldbody')

@@ -84,6 +84,9 @@ def pick_scene(cfg, layout):
     option.set("iterations", "30")
     option.set("tolerance", "1e-8")
     option.set("noslip_iterations", "1")
+    if cfg.get('sensor') in ('tacto', 'digit_fots', 'digit_compare'):
+        from .optical import configure_digit_solver
+        configure_digit_solver(option)
     if cfg.get('sensor') == 'gelsight':
         # Restore this sensor source's Newton/100 solve. The AnySkin CG/30
         # optimization fails to converge for its hard overlapping contacts.

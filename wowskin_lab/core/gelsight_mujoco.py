@@ -118,7 +118,7 @@ class GelSightMujocoOptical:
                 float(data.time), contact_mask=valid & (indentation > 0), valid_mask=valid,
                 camera_depth_m=depth, baseline_depth_m=baseline.copy(),
                 render_input_depth=raw, render_deformation=native_deformation,
-                render_depth_unit='legacy_opengl_buffer')
+                render_depth_unit='legacy_opengl_buffer', depth_model='legacy_camera_surface_offset')
         return frames
 
     def reset(self):

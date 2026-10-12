@@ -119,6 +119,8 @@ DIGIT、GelSight 是硬件；TACTO、FOTS 是触觉生成算法。**保留 Panda
 
 独立台：**Q/E** 下压／抬起，**W/S、A/D** 平移，**I/K、L/J、U/O** 倾斜／扭转，**R** 复位，**P** 退出。Panda 沿用原键盘操作，**X/Z** 闭合／打开。右侧 RGB／深度／FOTS 标记流保持原图宽高比；**M** 切换深度／接触区。深度灰度范围自动共享并标注 µm；`--depth-display-max-mm 5` 可固定范围。只改变显示，不改原始数值。
 
+Panda 上 **L／left 是手掌坐标系 +Y 的 finger_joint1，R／right 是 −Y 的 finger_joint2**，不随观察相机旋转而交换；主视图有对应的 L／R 标记。TACTO 的 `Force+geom.` 深度包含来源的力相关光学位移，FOTS 的 `Geom. overlap` 是几何重叠，GelSight 的 `Surface offset` 是内部相机相对空载胶面的偏移。它们均显示 µm，但不应当作同一定义的实测压深比较，诊断数据的 `depth_model` 保存这一差别。
+
 DIGIT 每指输出 RGB `320×240×3`、深度和有效区 `320×240`；DIGIT FOTS 另有 `8×9×2` 标记像素位移和流图。GelSight 原图是 `120×160×3`，同时保存米制相机深度与原算法使用的 **OpenGL 缓冲值**，两者单位不同。诊断 `--demo` 保存 NPZ／PNG；`--compare-data` 每种探头保存 80 帧 NPZ、逐帧 CSV、MP4 与报告。详见[字段与比较方法](docs/MODEL_CALIBRATION_ZH.md#digit-双算法比较)。
 
 `--ideal` 关闭 TACTO 的随机 RGB 噪声或 GelSight 的纹理噪声；真实背景本身的纹理仍保留。FOTS 不额外加入随机噪声。`--no-fots-shadow` 可关闭原平面阴影；TACTO 支持 `--tacto-config`、`--tacto-background` 和 `--no-tacto-background`。不人为放大输出，不用目标物体白名单过滤触觉。

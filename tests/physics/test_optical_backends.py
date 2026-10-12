@@ -15,6 +15,39 @@ from wowskin_lab.tools.optical_sensor import demo
 
 
 class BackendChecks(unittest.TestCase):
+    def test_digit_suspended_hold_does_not_creep_or_accumulate_flow(self):
+        env = OpticalPandaEnv(sensor='digit_fots')
+        optics = make_optics(env, 'digit_fots', ideal=True)
+        self.assertEqual(env.model.opt.impratio, 20)
+        self.assertEqual(env.model.opt.noslip_iterations, 5)
+        self.assertEqual(env.model.opt.solver, mujoco.mjtSolver.mjSOL_NEWTON)
+        def move(xyz, seconds):
+            env.target_xyz = np.asarray(xyz, float)
+            for i in range(round(seconds*env.cfg['sample_hz'])):
+                env.step(env.hold_action())
+                if i % 10 == 0:
+                    optics.render(env.data)
+        try:
+            move([.4, 0, .17], 1.5)
+            move([.4, 0, .125], 1.5)
+            env.command_gripper(True)
+            move([.4, 0, .125], 1)
+            move([.4, 0, .23], 2)
+            initial = env.data.xpos[env.probe_body].copy()
+            self.assertGreater(initial[2], .22)
+            max_flow = 0.
+            for _ in range(60):
+                for _ in range(100):
+                    env.step(env.hold_action())
+                frames = optics.render(env.data)
+                for frame in frames.values():
+                    self.assertGreater(frame.normal_force_n, .1)
+                    max_flow = max(max_flow, float(np.linalg.norm(frame.marker_displacement_px, axis=-1).max()))
+            self.assertLess(np.linalg.norm(env.data.xpos[env.probe_body]-initial), .0001)
+            self.assertLess(max_flow, .2)
+        finally:
+            optics.close()
+
     def test_digit_same_physics_and_both_algorithms_release(self):
         a = OpticalPandaEnv(sensor='tacto')
         for sensor in ('digit_fots', 'digit_compare'):

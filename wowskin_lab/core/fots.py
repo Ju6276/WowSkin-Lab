@@ -196,7 +196,7 @@ class FOTSOptical:
                 overlap = np.where(valid & (depth > 0), np.maximum(baseline-depth, 0), 0)
                 current = np.where(valid & (depth > 0), np.minimum(current, depth), current)
                 indentation = np.maximum(indentation, overlap)
-                trajectory = self.trajectory(history, geom, pose, overlap)
+                trajectory = self.trajectory(history, geom, pose, overlap, baseline, depth)
                 if trajectory is not None:
                     contacts.append((overlap, trajectory))
             rgb = self.optics.render(indentation, shadow=self.shadow)
@@ -205,18 +205,49 @@ class FOTSOptical:
                                        float(data.time), marker_image, displacement,
                                        contact_mask=indentation > 0,
                                        valid_mask=valid, camera_depth_m=current,
-                                       baseline_depth_m=baseline.copy())
+                                       baseline_depth_m=baseline.copy(), depth_model='geometric_overlap')
         return frames
 
-    def trajectory(self, history, geom, pose, depth):
+    def trajectory(self, history, geom, pose, depth, baseline, camera_depth):
+        """Track a contacting material point, not the lifetime of a geom pair.
+
+        Rolling can keep two geoms in contact after the original material
+        point has left the gel. Carrying that old anchor forward would feed
+        gross object travel to FOTS as elastic marker shear. Renew the anchor
+        when it leaves the observed gel volume, using geometric depth only;
+        there is no timer, flow cap, force threshold or frozen observation.
+        """
         rows, cols = np.nonzero(depth > 0)
         if not len(rows):
             history.pop(geom, None)
             return None
+        p = self.optics.params
+        pixel_m = 1/(1000*p.mm_to_pixel)
+        if geom in history:
+            entry = history[geom]
+            moved = pose[:3, :3] @ entry['local']+pose[:3, 3]
+            # Pixel centres, not corners; interpolate the curved rest surface.
+            col, row = moved[:2]/pixel_m+[p.sensor_w/2-.5, p.sensor_h/2-.5]
+            touching = False
+            if 0 <= col < p.sensor_w-1 and 0 <= row < p.sensor_h-1:
+                x, y = int(np.floor(col)), int(np.floor(row))
+                patch = baseline[y:y+2, x:x+2]
+                if np.all(patch > 0):
+                    wx, wy = col-x, row-y
+                    surface = np.array([1-wy, wy]) @ patch @ np.array([1-wx, wx])
+                    touching = moved[2] <= surface-self.camera_distance_m
+            if not touching:
+                del history[geom]
         if geom not in history:
-            p = self.optics.params
-            anchor = np.array([(cols.mean()-p.sensor_w/2)/(1000*p.mm_to_pixel),
-                               (rows.mean()-p.sensor_h/2)/(1000*p.mm_to_pixel), 0.])
+            # Select an actually contacting pixel near the patch centroid.
+            # z=0 is not the object surface, especially on curved DIGIT gel.
+            weights = depth[rows, cols]
+            centre = np.array([np.average(cols, weights=weights), np.average(rows, weights=weights)])
+            index = np.argmin((cols-centre[0])**2+(rows-centre[1])**2)
+            row, col = rows[index], cols[index]
+            anchor = np.array([(col+.5-p.sensor_w/2)*pixel_m,
+                               (row+.5-p.sensor_h/2)*pixel_m,
+                               camera_depth[row, col]-self.camera_distance_m])
             history[geom] = dict(pose=pose.copy(), anchor=anchor,
                                  local=pose[:3, :3].T @ (anchor-pose[:3, 3]), angle=0.)
         entry = history[geom]

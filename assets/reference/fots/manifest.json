@@ -23,5 +23,5 @@
     "utils/utils_data/ini_bg_fots_digit.npy": "099404a5cd016bbf6b13c80dcd713122bb151e04506b75f0f02145666e98eef8",
     "utils/utils_data/digit_pad.npy": "758915595513117cec633188ed2d2ba91711843d27db954590844503f92ce12d"
   },
-  "local_adapter": "Unchanged FOTS MLP, smoothing, shadow and MarkerMotion with hardware-specific source weights/background/grid. CPU/private import compatibility. DIGIT shares TACTO CAD contact physics; FOTS uses calibrated orthographic geometric overlap, not TACTO force shift. Legacy --sensor fots retains flat GelSight proxy. Per-geom trajectory history and additive multi-object marker composition are local; not FEM. No upstream edits."
+  "local_adapter": "Unchanged FOTS MLP, smoothing, shadow and MarkerMotion with hardware-specific source weights/background/grid. CPU/private import compatibility. DIGIT shares TACTO CAD contact physics; FOTS uses calibrated orthographic geometric overlap, not TACTO force shift. Legacy --sensor fots retains flat GelSight proxy. Per-geom trajectory history and additive multi-object marker composition are local; not FEM. No upstream edits. Material-point anchors use the rendered object surface including depth and pixel centres, and renew when that point leaves the gel or sensing window; no time/flow cap. Not a stick-slip constitutive model."
 }

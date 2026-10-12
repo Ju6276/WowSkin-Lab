@@ -71,7 +71,7 @@ def compare(destination, *, ideal=True, shadow=True, **tacto_options):
                         reference.setdefault(algorithm, frame.rgb.copy())
                         valid = frame.valid_mask
                         for field in ('rgb', 'indentation_m', 'contact_mask', 'valid_mask',
-                                      'camera_depth_m', 'baseline_depth_m', 'normal_force_n'):
+                                      'camera_depth_m', 'baseline_depth_m', 'normal_force_n', 'depth_model'):
                             append(algorithm+'/'+field, getattr(frame, field))
                         append(algorithm+'/contact_geom_mask',
                                np.isin(np.arange(env.model.ngeom), frame.contacting_geoms))
@@ -121,6 +121,9 @@ def compare(destination, *, ideal=True, shadow=True, **tacto_options):
                 geom_names=[env.model.geom(i).name for i in range(env.model.ngeom)],
                 joint_names=[env.model.joint(i).name for i in range(env.model.njnt)],
                 physics_timestep_s=float(env.model.opt.timestep),
+                solver=dict(name='Newton' if env.model.opt.solver == 2 else str(env.model.opt.solver),
+                            iterations=int(env.model.opt.iterations), impratio=float(env.model.opt.impratio),
+                            noslip_iterations=int(env.model.opt.noslip_iterations)),
                 force_difference_max_n=float(np.max(np.abs(np.array(arrays['tacto/normal_force_n'])-
                                                          np.array(arrays['fots/normal_force_n'])))))
         finally:
