@@ -11,11 +11,22 @@ from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configu
 
 @unittest.skipUnless(mujoco.__version__ == '3.15.0', 'Requires .venv')
 class CartesianLimitTests(unittest.TestCase):
+    def test_default_workspace_box_is_disabled(self):
+        cfg = response_configuration(SimpleNamespace(task='pick_cube', skin_dof='trilinear', ideal=True))
+        env = PandaPickCubeTactileEnv(cfg, pollen=False)
+        env.target_xyz[:] = [.579, 0., .2]
+        applied = env.apply_action_target([.02, 0, 0, 0, 0, 0, .37])
+        self.assertAlmostEqual(env.target_xyz[0], .584)
+        self.assertAlmostEqual(applied[0], .005)
+        contract = robot_metadata(env)['controller_contract']
+        self.assertTrue(contract['cartesian_limits_enabled'])
+        self.assertIsNone(contract['workspace_world_m'])
+
     def test_targets_cross_old_workspace_and_servo_takes_full_target(self):
         for unrestricted in (False, True):
             with self.subTest(unrestricted=unrestricted):
                 cfg = response_configuration(SimpleNamespace(task='pick_cube', skin_dof='trilinear',
-                    ideal=True, no_cartesian_limits=unrestricted))
+                    ideal=True, workspace_limits=True, no_cartesian_limits=unrestricted))
                 env = PandaPickCubeTactileEnv(cfg, pollen=False)
                 env.target_xyz[:] = [.579, 0., .2]
                 env.servo_xyz = env.target_xyz.copy()

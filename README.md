@@ -8,7 +8,7 @@ Franka 触觉遥操作、RGB-D 数据采集和 ViSk / FTF 算法接入。基于 
 
 ## 安装
 
-当前安装入口面向 Apple Silicon macOS、Python 3.12、MuJoCo 3.15，从源码目录运行。Linux / CUDA 全流程支持仍在 TODO 中。
+当前安装入口面向 Apple Silicon macOS、Python 3.12（与 `.python-version` 一致）、MuJoCo 3.15，从源码目录运行。`pyproject.toml` 声明最低 Python 3.10；这不表示完整安装流程已在所有声明版本上验证。Linux / CUDA 全流程支持仍在 TODO 中。
 
 ```bash
 git clone https://github.com/Ju6276/WowSkin-Lab.git
@@ -26,7 +26,7 @@ python3.12 scripts/setup_capture.py
 从项目根目录运行，一次只开一个遥操作窗口：
 
 ```bash
-# 无外设：键盘
+# 无外设：键盘，保存到 data/episodes_keyboard/pick_cube/
 .venv/bin/mjpython -m wowskin_lab teleop --task pick_cube --input keyboard --ideal --record-dir data/episodes_keyboard
 # SpaceMouse：默认追加到 data/episodes/pick_cube/
 .venv/bin/mjpython -m wowskin_lab teleop --task pick_cube --input spacemouse --ideal
@@ -105,7 +105,7 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 TACTO／GelSight 完整长组件替换原短指几何；FOTS 独立模块装在原指尖。保留各自源 CAD、接触参数和光学函数，安装变换与任务控制属于本地适配，详见[模型与来源](docs/MODEL_CALIBRATION_ZH.md#传感器硬件与光学算法)。没有用 AnySkin 参数代替光学传感器。
 
-光学数据使用独立 schema：100 Hz 机器人／接触力，约 30 Hz 场景 RGB-D 和双指光学帧；不填充 AnySkin 15 路字段。三个默认目录分别为 `data/episodes_tacto/`、`data/episodes_digit_fots/`、`data/episodes_gelsight/`。数据字段、独立台按键与验证命令见[光学采集说明](docs/COLLECTION_ZH.md#光学触觉数据)。
+光学数据使用独立 schema：100 Hz 机器人／接触力，约 30 Hz 场景 RGB-D 和双指光学帧；不填充 AnySkin 15 路字段。三个默认采集根目录分别为 `data/episodes_tacto/`、`data/episodes_digit_fots/`、`data/episodes_gelsight/`，录制器会再追加任务名。例如方块成功数据位于 `data/episodes_tacto/pick_cube/lerobot/`；自定义 `--record-dir` 也遵循此规则。数据字段、独立台按键与验证命令见[光学采集说明](docs/COLLECTION_ZH.md#光学触觉数据)。
 
 **使用边界：** FOTS 多刚体接触的 marker 不受所接入源代码支持；GelSight 大平面覆盖整个视野时 RGB 响应可能很弱。原始深度定义不同，不可直接比较为真实压缩或精度。现有 ViSk／FTF 磁场网络不能直接训练光学图像；各任务完整操作成功率与实物标定仍待验证，见 [TODO](TODO.md#独立视触觉传感器与后续应用)。
 

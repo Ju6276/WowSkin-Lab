@@ -41,13 +41,13 @@ AnySkin 的磁化皮肤受接触后变形，改变下方五个三轴磁力计的
 ## 参数来源
 
 - 外形：OnRobot 参考 STL 按厂商平面图缩放至约 42.2×43.6 mm；底座约 11.5 mm、套硅胶后总高约 13.5 mm 来自用户测量。顶部增厚取差值 2 mm。用户确认只包上沿，具体侧壁厚度和下包长度尚未测量。
-- 材料：杨氏模量 30 kPa、泊松比 0.35、密度 1000 kg/m³、摩擦系数 0.6；弹性阻尼 1e-5。完整节点模型使用局部节点阻尼 0.002，降阶任务将节点关节阻尼设为 0。这些是未辨识的本地初值，不是厂商参数或经过验证的经验值。
+- 材料：杨氏模量 30 kPa、泊松比 0.35、密度 1000 kg/m³、摩擦系数 0.6；弹性阻尼 1e-5。机器人上完整节点模型使用局部节点阻尼 0.002，trilinear 降阶节点关节阻尼为 0；独立传感器台（包括默认 trilinear）在 `physics.py` 中统一设置自由度阻尼 0.002，三平移自由度探头另设为 0.02。这些是未辨识的本地初值，不是厂商参数或经过验证的经验值。
 - 磁场：均匀 +Z 磁化 4000 A/m、芯片至软层底面间距 2.2 mm，均未实测辨识。
 - 信号：100 Hz；独立高斯噪声标准差 0.5 μT、一阶滤波时间常数 10 ms、延迟 1 个采样。噪声不累加，线性漂移默认关闭。
 - 标签：接触阈值 0.005 N、滑移速度阈值 0.0005 m/s，为本地标签规则，不是 Pollen 的人工标注。
 - 数值：默认 trilinear 降阶使用 MuJoCo 3.15、discrete、CG、500 μs，不启用内部接触。完整网格对照使用 MuJoCo 3.5；其线材/喂食启用内部接触。线材接触半径 0.2 mm、时间常数 0.2 ms、`solimp=0.98 0.98 0.001 0.5 2` 都是本地数值设置，不是实测材料。尚无完整收敛验证。[MuJoCo 内部接触说明](https://mujoco.readthedocs.io/en/3.5.0/XMLreference.html#flex-contact)
 
-配置：[sensor.json](../configs/sensor.json)、[sensor_hardware.json](../configs/sensor_hardware.json)。
+配置：[sensor.json](../configs/sensor.json)、[sensor_hardware.json](../configs/sensor_hardware.json)。密度 1000 kg/m³ 和弹性阻尼 1e-5 硬编码于 [geometry.py](../wowskin_lab/core/geometry.py)，不在上述 JSON 中；独立台数值阻尼见 [physics.py](../wowskin_lab/core/physics.py)。
 
 ## 夹爪配置来源
 
@@ -124,7 +124,7 @@ Peg 的关节 PD／笛卡尔阻抗对照入口：
 
 没有 TCP 最低高度限制；桌面接触由求解器计算。默认仍保留以下本地控制设置，均不是论文规定，也不是传感器标定：
 
-- **工作空间默认关闭**：只有显式 `--workspace-limits` 才启用旧本地世界坐标盒子：方块 X 0.24–0.58/Y ±0.18/Z≤0.40 m，线材 X 0.24–0.64/Y ±0.22/Z≤0.40 m；喂食使用平移后的范围。H 可查看实际范围。不是厂家可达空间，也不是碰撞边界。
+- **工作空间默认关闭**：只有显式 `--workspace-limits` 才启用旧本地世界坐标盒子：方块 X 0.24–0.58/Y ±0.18/Z≤0.40 m，线材 X 0.24–0.64/Y ±0.22/Z≤0.40 m；喂食使用独立硬编码的世界坐标盒子 X −2.01–−1.26/Y −0.36–0.52/Z≤1.68 m，`care_room` 将 X 上限改为 −1.0 m；该范围不是由方块盒子按基座位姿变换得到。H 可查看实际范围。不是厂家可达空间，也不是碰撞边界。
 - **输入方向固定**：三种输入默认 `--control-frame base`；W/S 对应基座 ±X，A/D 对应 −Y/+Y，E/Q 对应 ±Z。SpaceMouse 平移与旋转参照固定基座，键盘旋转键绕 TCP 局部轴；Pico 的佩戴／对面模式校准用户方向后映射到基座，不参考预览相机。`--control-frame view` 才选择旧视角映射。
 - 每控制步平移分量最多 5 mm、旋转向量长度最多 0.03 rad；IK 使用阻尼迭代、关节边界内侧 0.02 rad，手臂 PD 为 600/45 加偏置力补偿。实际执行器范围沿用模型。
 - **领先量**：键盘/SpaceMouse 为每轴 6 mm、旋转 0.03 rad；Pico 为每轴 30 mm、旋转 0.10 rad。平移到边界时统一缩短整步，不分别裁剪各轴，也不把横向跟踪误差写回移动中的目标。接触时仍会限制进一步积累。
@@ -224,7 +224,7 @@ MuJoCo 没有设置“玻璃材质”就自动产生裂纹和碎片的内置模�
 - 同一连通刚体簇的内部拼接面不参与自碰撞，否则会把物体内部当作外表面互相挤压。代码显式更新碰撞掩码；一旦分成不同连通簇，簇之间立即恢复碰撞。压头、支架和地面的碰撞始终开启，没有全局关闭碎片碰撞。
 - 当前是预定义裂缝的刚体模型，没有连续材料应力、动态生成裂纹、断裂能或碎屑粉化；几何与强度也不能直接用于玻璃。新增 `teleop --task chip_tray` 接入 Franka／AnySkin，原有任务保持不变。该实验暂用人工结果标签，未定义自动无损夹取成功阈值。
 
-机器人版的 [chip_tray.json](../configs/chip_tray.json) 覆盖马鞍幅度为 12 mm（边缘高低差 24 mm），4 内圈点／16 外圈点形成 24 块、28 个连接；碰撞和渲染共用实际薄片网格。托盘沿用 EBiM 的网格、质量、惯量和接触参数，初始化高度调整到桌面，外观使用源场景碗的 `mat_v2_OmniPBR` 蓝绿色材质。碎片使用高位碰撞掩码，保留机器人／指腹原有低位碰撞层。稀疏 CG 迭代上限为 100、容差为 1e-10；30 次迭代不足以解析这些刚性连接。降阶指腹仍使用 discrete 积分，不切换到不兼容的 Newton。初始化沉降期间同样计算断裂，不暂停检测或提高强度。
+机器人版的 [chip_tray.json](../configs/chip_tray.json) 覆盖马鞍幅度为 12 mm（边缘高低差 24 mm），4 内圈点／16 外圈点形成 24 块、28 个连接；碰撞和渲染共用实际薄片网格。托盘沿用 EBiM 的网格、质量、惯量和接触参数，初始化高度调整到桌面，外观使用源场景碗的 `mat_v2_OmniPBR` 蓝绿色材质。碎片使用高位碰撞掩码，保留机器人／指腹原有低位碰撞层。AnySkin 模式下，稀疏 CG 迭代上限为 100、容差为 1e-10；30 次迭代不足以解析这些刚性连接。降阶指腹仍使用 discrete 积分，不切换到不兼容的 Newton。显式选择光学传感器后，最终装配会用光学求解器配置整体替换任务的 `option` 设置；例如 TACTO 改为 Newton／100 与 implicitfast，以上 CG／discrete 描述仅适用于 AnySkin。初始化沉降期间同样计算断裂，不暂停检测或提高强度。
 
 检查入口：`python -m unittest tests.physics.test_brittle_chip tests.physics.test_chip_tray`；涵盖空载保持、受力断裂、加大强度后保持、断裂时状态连续、碎片碰撞、重置及已知载荷下的力矩单位。可用 README 中的无界面命令生成本机视频与每条断键事件。
 
@@ -261,12 +261,12 @@ DIGIT 两条路径分别来自作者的不同模型，不强行共用 CAD、接�
 - 名称加前缀，碰撞 bit 映射到任务场景；有效接触参数先在隔离模型编译，再明确写入，避免继承 Panda 或 AnySkin 默认值。原相机随完整本体移动。
 - Panda 控制仍为项目的 IK／关节 PD 与任务原夹爪位置伺服（方块／喂食／薯片为 Menagerie，线材／Peg 为 robosuite 配置）。机器人场景保留重力 −9.81 m/s²；不沿用 FOTS 无重力按压装置或 TACTO 按压装置的重力补偿。
 - 运行时间步为 0.5 ms。独立诊断探头为 5 mm 球或相近尺度方体／圆柱、20 g、位置伺服 kp=3000、kv=2√(3000×0.02)−1≈14.492，另有 joint damping=1 N·s/m，合计为临界阻尼；该小惯量六轴装置用 implicitfast 积分，属于测试夹具，不是传感器参数。Panda 的源求解器选择不被该夹具覆盖。临界阻尼用于限制测试伺服超调；球／方体／圆柱按压和卸载由独立测试覆盖，不修改传感器薄层或关闭外壳碰撞。
-- `cable --clip-model elastic_beam` 是明确的任务积分例外：原积分器显式处理高刚度卡扣关节弹簧时在 0.5 ms 步长发散，改用 MuJoCo `discrete` 积分。保持来源 Newton 设置、传感器接触参数、卡扣弹簧与碰撞不变。该选择和原因写入采集配置，不改变其它任务。复杂 Peg 分配 128 MiB 求解 arena，避免源多片碰撞模型溢出；不删除接触。
+- `cable --clip-model elastic_beam` 是明确的任务积分例外：原积分器显式处理高刚度卡扣关节弹簧时在 0.5 ms 步长发散，改用 MuJoCo `discrete` 积分。保持来源 Newton 设置、传感器接触参数、卡扣弹簧与碰撞不变。该选择和原因写入采集配置，不改变其它任务。所有光学任务均分配 128 MiB 求解 arena，以容纳包括复杂 Peg 在内的源多片碰撞模型；不删除接触。
 - Mac 仅替换 OpenGL 上下文；私有导入处理旧包路径、CPU checkpoint、NumPy 2 的 `mat` 兼容，不修改上游文件。当前引擎与作者旧 `mujoco_py` 的跨版本接触轨迹尚无逐帧等价证明。
 
 ## DIGIT / TACTO 光学选项
 
-使用 [mujoco-tacto](https://github.com/utn-air/mujoco-tacto/tree/4c396eb802dcbd1f9e6647a31a011f37006c4fc1) `touch_playground_rot.xml` 的完整两网格传感器／长支架和四个接触垫。根部质量 15 g 与惯量直接来自 XML，其余 body 采用源编译值；不使用 standalone URDF 的占位惯量。胶面网格摩擦 `1 .005 .0001`，四垫摩擦 `2 .05 .0001`，均保留有效 source defaults。求解采用来源 Newton／100、implicitfast、elliptic cone、impratio=20、noslip=5、multiccd，容差来自示例 1e-8。
+使用 [mujoco-tacto](https://github.com/utn-air/mujoco-tacto/tree/4c396eb802dcbd1f9e6647a31a011f37006c4fc1) `touch_playground_rot.xml` 的完整两网格传感器／长支架和四个接触垫。根部质量 15 g 与惯量直接来自 XML，其余 body 采用源编译值；不使用 standalone URDF 的占位惯量。胶面网格摩擦 `1 .005 .0001`，四垫摩擦 `2 .05 .0001`，均保留有效 source defaults。求解采用 MuJoCo 默认的 Newton／100（源 XML 未显式指定这两项），以及源示例的 implicitfast、elliptic cone、impratio=20、noslip=5、multiccd，容差来自示例 1e-8。
 
 Renderer、`config_digit.yml` 默认平面光学胶面、内部相机／灯光、背景差分、平滑、随机 RGB 噪声和力相关光学位移均执行原代码；不再覆盖 `_generate_gel_trimesh`。240×320 背景为原 `bg_digit_240_320.jpg`。原力映射为 0–100 N 对应 0–5 mm 光学位移，不是夹爪限力；原噪声 N(0,7)，`--ideal` 关闭随机噪声。
 

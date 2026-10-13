@@ -4,7 +4,6 @@ import unittest
 from types import SimpleNamespace
 import numpy as np
 from wowskin_lab.ui.manufacturer import DEFAULT_SCALING, draw, pygame, upstream
-from wowskin_lab.ui.sensor_compare import RealSensorHUD
 from wowskin_lab.data.sensor_compare import SensorComparison
 
 

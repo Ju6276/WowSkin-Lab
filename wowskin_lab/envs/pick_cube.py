@@ -704,7 +704,7 @@ def response_configuration(args):
     if cfg['skin_dof'] == 'trilinear':
         cfg.update(skin_model_status='Experimental trilinear interpolation; bounding-box bottom attachment; no internal contact',
                    skin_model_source='https://github.com/google-deepmind/mujoco/blob/3.5.0/model/flex/gripper_trilinear.xml',
-                   integrator='discrete', noslip_iterations=0, fem_node_joint_damping=0.,
+                   integrator='discrete', noslip_iterations=0,
                    engine_version=mujoco.__version__)
     if getattr(args, 'task', 'pick_cube') == 'cable':
         cfg['cable_layout'] = getattr(args, 'cable_layout', None) or 'routing'

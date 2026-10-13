@@ -1,7 +1,6 @@
 """Optional torque controller must not change the default or initial grasp."""
 from types import SimpleNamespace
 import unittest
-import mujoco
 import numpy as np
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration, manual_action, keyboard_translation
 from wowskin_lab.envs.cable import PandaCableEnv

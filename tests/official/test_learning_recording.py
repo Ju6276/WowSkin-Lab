@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-import cv2
 import h5py
 import mujoco
 import numpy as np

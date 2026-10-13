@@ -1,7 +1,6 @@
 """Upstream asset integrity, physical rest and raw acquisition for task 3."""
 import hashlib
 import json
-from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -12,9 +11,8 @@ import h5py
 import mujoco
 import numpy as np
 
-from wowskin_lab.core.physics import configuration
 from wowskin_lab.envs.feeding import ASSETS, BEAN_COUNT, HEAD_POSITION, HEAD_SCALE, LEGACY_HEAD_POSITION, ROBOT_POSITION, TABLE_TOP, PandaFeedingEnv, selected_world, feeding_scene
-from wowskin_lab.envs.pick_cube import key_command, response_configuration
+from wowskin_lab.envs.pick_cube import response_configuration
 from wowskin_lab.data.learning_recording import LearningSimRecorder
 from wowskin_lab.data.media import video_path
 

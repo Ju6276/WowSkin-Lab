@@ -59,7 +59,7 @@ class PhysicsWorkerTests(unittest.TestCase):
                     keys.event(key, True)
                     keys.event(key, False)
         handle.on_sync = request_exit
-        with PhysicsWorker(env, handle, keys, model, data) as worker:
+        with PhysicsWorker(env, handle, keys, model, data):
             self.assertEqual(env._viewer_run_io(write_files), 'saved')
             self.assertTrue(committed.is_set())
             self.assertEqual(env.data.time, 0.)

@@ -2,7 +2,6 @@
 import json
 import hashlib
 import unittest
-import xml.etree.ElementTree as ET
 import numpy as np
 from wowskin_lab.paths import ROOT
 

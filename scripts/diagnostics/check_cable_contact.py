@@ -1,7 +1,6 @@
 """Physical cable grasp/lift/tug diagnostic; no scripted routing-success claim."""
 import json
 import time
-import numpy as np
 import mujoco
 import imageio.v3 as iio
 from wowskin_lab.paths import ROOT

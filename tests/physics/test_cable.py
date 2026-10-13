@@ -1,6 +1,4 @@
 """Cable scene isolation and cross-model channel contract regression checks."""
-import json
-import hashlib
 import unittest
 import xml.etree.ElementTree as ET
 import numpy as np
@@ -41,7 +39,7 @@ class CableChecks(unittest.TestCase):
 
     @unittest.skipUnless((ROOT/'assets/ebim/manifest.json').exists(), 'Download optional EBiM assets first')
     def test_scene_and_seven_action_interface_do_not_export_cube_success(self):
-        from wowskin_lab.envs.cable import PandaCableEnv,CABLE_COUNT,CABLE_LENGTH
+        from wowskin_lab.envs.cable import PandaCableEnv
         env=PandaCableEnv(pollen=False)
         root=ET.fromstring(env.xml)
         self.assertIsNone(root.find(".//body[@name='cube']"))

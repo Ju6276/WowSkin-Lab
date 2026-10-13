@@ -26,6 +26,7 @@ class ResponseSemantics(unittest.TestCase):
         env.drift_rate = np.zeros((5, 3)); env.zero_time = 0.
         with patch.object(env, 'magnetic_field', side_effect=[np.full((5, 3), i) for i in (1., 2., 3., 4.)]) as field:
             initial = env.tactile_readout({'min_volume_ratio': 1., 'passive_min_volume_ratio': 1.})
+            np.testing.assert_array_equal(initial['magnetic_ut'], 1.)
             env.data.time = 2.
             warning = env.tactile_readout({'min_volume_ratio': .1, 'passive_min_volume_ratio': 1.})
             self.assertTrue(warning['tactile_valid'])

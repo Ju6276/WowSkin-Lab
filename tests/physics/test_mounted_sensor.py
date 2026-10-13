@@ -1,16 +1,10 @@
 """Published checkpoint fidelity and physically mounted sensor invariants."""
-import csv
-import importlib.util
-from pathlib import Path
-import tempfile
 import unittest
 
 import mujoco
 import numpy as np
-import torch
 
 from wowskin_lab.envs.franka import FrankaTactileSim
-from wowskin_lab.baselines.pollen import CHANNELS, RESOURCE_DIR, PollenPredictor, read_csv
 
 
 @unittest.skipUnless(mujoco.__version__.startswith('3.5.'),

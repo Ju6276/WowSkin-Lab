@@ -79,16 +79,11 @@ def main(argv=None):
         if not optical_backend and not any(a.split('=')[0] in ('--magnetic-fit', '--reskin-model') for a in rest):
             rest = ['--magnetic-fit', str(ROOT/'configs/magnetic_fit_pollen_nonslip.json'), *rest]
         task = 'pick_cube'
-        cable_layout = 'routing'
         for i, value in enumerate(rest):
             if value.startswith('--task='):
                 task = value.split('=', 1)[1]
             elif value == '--task' and i+1 < len(rest):
                 task = rest[i+1]
-            elif value.startswith('--cable-layout='):
-                cable_layout = value.split('=', 1)[1]
-            elif value == '--cable-layout' and i+1 < len(rest):
-                cable_layout = rest[i+1]
         if task not in ('pick_cube', 'cable', 'feeding', 'peg_insert', 'chip_tray'):
             parser.error('--task must be pick_cube, cable, feeding, peg_insert or chip_tray')
         if not any(a.split('=')[0] == '--record-format' for a in rest):

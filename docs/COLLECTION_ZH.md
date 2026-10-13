@@ -48,7 +48,7 @@
 
 普通任务 X/Z 闭合/张开，C 保持当前开度。方块/喂食默认采用 Menagerie Panda 位置伺服；执行器的 ±100 N 是上限而非持续夹持力。线材采用 [robosuite Panda](../assets/reference/robosuite_panda/manifest.json) 的每指独立位置伺服：1000 N/m、每指 ±20 N，并保留其关节阻尼、惯量和摩擦参数；本地安装位置及行程另行保留。这是基准控制参数，不是真机接触力标定。`--grip-force` 才显式启用旧力限制器；普通任务默认的 -/= 不调力。薯片是单独的力反馈实验，按键语义见下节。
 
-V 切换近景/全景，Esc 恢复全景；鼠标左拖旋转、右拖平移、滚轮缩放。逗号/句号调整触觉显示比例。R/Backspace 复位，P 保存并退出。F 仅用于方块自动短测，不能用于线材或喂食。
+V 切换近景/全景，Esc 恢复全景；鼠标左拖旋转、右拖平移、滚轮缩放。AnySkin 面板用逗号/句号调整触觉显示比例；光学 HUD 中逗号切换深度／接触区，句号无作用。R/Backspace 复位，P 保存并退出。F 仅用于方块自动短测，不能用于线材或喂食。
 
 左侧默认只保留输入状态、任务进度、录制状态和简短操作提示。H 展开/收起磁场模型、夹爪驱动、接触力、网格质量、求解耗时及 IK 等诊断；收起只影响文字显示，不影响物理计算、录制字段或三路相机/触觉。录制异常、网格警告和物理故障仍会提示。
 
@@ -165,11 +165,11 @@ H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机
 
 - `observation.images.tactile_left/right`：双指 RGB 视频。DIGIT 每指 320×240×3，GelSight 120×160×3；shape 顺序为高、宽、通道。
 - `lerobot/optical/chunk-000/episode_000000.h5`：`timestamp` 与 `frames/000000/left|right/`。保存无损原生 RGB、`indentation_m`、原始相机／空载深度、接触／有效掩码、原算法缓冲及其单位、力、传感器相机位姿和源版本。无损 RGB 与视频并存是用于源算法比较的明确保留；raw 不再另存图像。
-- FOTS 在来源支持时另存 `marker_displacement_px`（9×11×2）与流图；`marker_status` 明确区分无接触、接触和多 body 不支持。TACTO／GelSight 不伪造 marker，多物体 FOTS 不用零填充冒充有效数据。
+- FOTS 在来源支持时另存 `marker_displacement_px`（9×11×2）与流图；`marker_status` 的实际值为 `no_contact`（无接触）、`single_contact`（单 body 接触）、`multiple_bodies_unsupported`（多 body 不支持）；未提供 marker 的后端使用 `not_provided`。TACTO／GelSight 不伪造 marker，多物体 FOTS 不用零填充冒充有效数据。
 - `observation.tactile_contact_force`：双指 MuJoCo 接触法向力诊断，单位 N，不是真机传感器直接读出的力。不自动作为策略输入。
 - 100 Hz state/action、关节、速度、相机基座系变换、instruction 与磁场录制沿用同一契约。成功段编码后通过官方 LeRobot 读取和无损光学时间戳校验，随后可开始下一段；中断保留 raw 与暂存媒体。
 
-光学数据不能直接送入现有 ViSk／FTF 15 路磁场转换器；入口会明确拒绝，后续需独立图像编码器适配。`dataset-check` 检查五路视频和光学扩展。切换传感器／算法、装配、光学参数后使用新目录；默认分别为 `data/episodes_tacto`、`data/episodes_digit_fots`、`data/episodes_gelsight`。
+光学数据不能直接送入现有 ViSk／FTF 15 路磁场转换器；入口会明确拒绝，后续需独立图像编码器适配。`dataset-check` 检查五路视频和光学扩展。切换传感器／算法、装配、光学参数后使用新目录；默认采集根目录分别为 `data/episodes_tacto`、`data/episodes_digit_fots`、`data/episodes_gelsight`，其下再追加任务名；例如方块成功数据为 `data/episodes_tacto/pick_cube/lerobot/`。
 
 ## Instruction、RGB-D 与多次采集
 

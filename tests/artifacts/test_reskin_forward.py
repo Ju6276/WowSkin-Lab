@@ -91,8 +91,6 @@ class MappedResponseChecks(unittest.TestCase):
 
     def test_recording_does_not_mix_dipole_raw_with_empirical_delta(self):
         from types import SimpleNamespace
-        from pathlib import Path
-        import tempfile
         from wowskin_lab.baselines.reskin_contact import ReskinContactResponse
         from wowskin_lab.data.recording import magnetic_baseline, magnetic_metadata
         response = ReskinContactResponse(self.path, extrapolate=True)

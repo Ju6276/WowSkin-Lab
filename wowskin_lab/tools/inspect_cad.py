@@ -1,5 +1,4 @@
 """Reproduce per-component STL size comparisons. STL coordinates assumed metres."""
-from pathlib import Path
 import json
 import struct
 

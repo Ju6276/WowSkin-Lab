@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 import mujoco
 import numpy as np
 
-from wowskin_lab.envs.franka import FrankaTactileSim, mount_reference
+from wowskin_lab.envs.franka import mount_reference
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, rotation_matrix, scripted_action, task_camera
 from wowskin_lab.ui.tactile import TactileHUD
 

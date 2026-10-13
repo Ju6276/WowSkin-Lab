@@ -25,8 +25,8 @@ def initialize(env, cfg, factory, contact_body, contact_geom):
     size = root.find('size')
     if size is None:
         size = ET.SubElement(root, 'size')
-    # Dense source Newton needs more arena for the original multi-part peg.
-    # Allocate memory; do not drop contacts or change the solver.
+    # Use the same arena allocation for every optical task; the original
+    # multi-part peg needs this capacity. Do not drop contacts or change solvers.
     for name in ('njmax', 'nconmax', 'nstack'):
         size.attrib.pop(name, None)
     size.set('memory', '128M')

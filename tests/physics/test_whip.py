@@ -4,7 +4,6 @@ import json
 import unittest
 import xml.etree.ElementTree as ET
 
-import mujoco
 import numpy as np
 
 from wowskin_lab.envs.whip import ASSETS, WhipBench

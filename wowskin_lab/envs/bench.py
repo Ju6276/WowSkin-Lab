@@ -9,7 +9,6 @@ import mujoco
 import numpy as np
 
 from wowskin_lab.core.physics import CHANNELS, TactileSim, configuration
-from wowskin_lab.paths import ROOT
 from wowskin_lab.ui.keyboard import ViewerKeyboard
 from wowskin_lab.ui.sensor_compare import SimSensorHUD, show_comparison
 from wowskin_lab.ui.channel_alignment import OFFICIAL_TO_REFERENCE, POSITIONS, official_values

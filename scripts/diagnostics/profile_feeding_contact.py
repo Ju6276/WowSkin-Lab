@@ -7,7 +7,6 @@ import pstats
 import time
 from types import SimpleNamespace
 
-import mujoco
 import numpy as np
 import torch
 

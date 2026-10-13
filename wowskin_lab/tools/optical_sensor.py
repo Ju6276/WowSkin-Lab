@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 import time
 
-import mujoco
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 

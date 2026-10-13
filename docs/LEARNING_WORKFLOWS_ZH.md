@@ -38,7 +38,7 @@ B 复位后开始录制；绿色 SUCCESS 不会自动停录，Enter 保存成功
   --workspace data/exports/visk_cube/workspace
 ```
 
-`--episodes capture_000000 capture_000002` 可选择演示。喂食任务换成 `feeding`，线材换成 `cable` 或 `cable_insert`。不同控制配置的数据须分别导出，不与默认 cube 数据混合。
+仅 `dataset-export` 支持追加 `--episodes capture_000000 capture_000002` 来选择演示；`official prepare` 和 `official process-visk-sim` 不支持该参数。喂食任务换成 `feeding`，线材换成 `cable` 或 `cable_insert`。不同控制配置的数据须分别导出，不与默认 cube 数据混合。
 
 ViSk 原转换器生成 `processed_data_pkl_aa/pick_cube.pkl`，其中含图像、位姿、夹爪状态、触觉及统计量。本地桥接器按真实时间戳对齐，并用录制起止事件截取片段。原加载器继续执行采样、基线扣除、归一化和动作块构造。腕部图像沿用官方转换器裁掉右侧 20% 再缩放的规则，在线输入也执行同一裁剪。
 
@@ -55,7 +55,7 @@ ViSk 原转换器生成 `processed_data_pkl_aa/pick_cube.pkl`，其中含图像�
 - 本项目已选定 **6 Hz**：30 Hz 图像经公开加载器默认 `subsample=5` 后构造标签，部署按同一间隔执行。论文 IV-A 的 10 Hz 不作为当前配置；以后若改频率，需要同时重新转换标签与修改部署时钟，不能只加快执行。
 - 论文 III-A 在遥操作速度方向上加入小角度随机扰动；当前本地采集没有复现该示教扰动。`--ideal` 控制的是触觉读出噪声等，不是该方向扰动。任务与数据量也不是论文实验配置。[论文 III-A / IV-A](https://arxiv.org/html/2410.17246v2#S3.SS1)
 
-补丁、来源和 SHA256 保存在 workspace 的 `manifest.json`。官方参考 checkout 不修改。这是带明确数据／环境适配的官方算法流程，不能称为硬件、任务和论文成绩的完整复现。
+补丁保存在 workspace 根目录的独立 `.patch` 文件中；`manifest.json` 保存来源、SHA256 和适配元数据。官方参考 checkout 不修改。这是带明确数据／环境适配的官方算法流程，不能称为硬件、任务和论文成绩的完整复现。
 
 确认转换报告 `dataset_loader_validated=true` 后，可手动训练：
 
@@ -115,7 +115,13 @@ FTF 从同一份记录中选择固定相机 1、2，腕部数据仍留在公共�
 3. 检查轨迹、点数配置及官方机器人参考点与本地 TCP 配准。
 4. 机器人分支运行 `train.py agent=p3po suite=p3po dataloader=p3po`，之后对接官方触觉反馈控制。
 
-Mac 可做导出、视频预处理、初始 PKL 与标注。固定版本 DIFT/CoTracker 路径直接依赖 CUDA/xformers，需要在 CUDA 环境继续处理；FTF MuJoCo 策略闭环尚未接入。自建任务需准备点数一致的 YAML，用 `official prepare ftf-robot --task-config PATH.yaml` 生成工作目录，命令见其 `COMMANDS.md`。
+Mac 可做导出、视频预处理、初始 PKL 与标注。固定版本 DIFT/CoTracker 路径直接依赖 CUDA/xformers，需要在 CUDA 环境继续处理；FTF MuJoCo 策略闭环尚未接入。自建任务需准备点数一致的 YAML，使用以下完整命令生成工作目录；`--task` 应与 YAML 配置文件名（不含扩展名）一致，后续命令见生成目录中的 `COMMANDS.md`。
+
+```bash
+.venv/bin/python -m wowskin_lab official prepare ftf-robot \
+  --workspace data/exports/ftf_custom/workspace --data-root data/exports/ftf_custom \
+  --task custom_task --task-config PATH/custom_task.yaml
+```
 
 ## FTF 人手示范分支
 

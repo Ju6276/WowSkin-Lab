@@ -362,6 +362,7 @@ def viewer(env, args):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+    p.set_defaults(task='cable')
     p.add_argument('mode', choices=['viewer', 'check'], nargs='?', default='viewer')
     p.add_argument('--reskin-model', type=Path)
     p.add_argument('--reskin-extrapolate', action='store_true')
@@ -375,8 +376,7 @@ def main():
         p.error('--reskin-extrapolate requires --reskin-model')
     if args.samples < 1 or args.seconds < 0:
         p.error('samples must be positive; seconds must be nonnegative')
-    cfg = configuration()
-    cfg['cable_layout'] = args.cable_layout
+    cfg = response_configuration(args)
     if args.cable_layout == 'single_clip' and args.output == ROOT/'outputs/diagnostics/cable_scene':
         args.output = ROOT/'outputs/diagnostics/cable_insert_scene'
     if args.reskin_model:

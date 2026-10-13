@@ -1,6 +1,5 @@
 """Render the unmodified OnRobot CAD in MuJoCo, separately from elastic simulation."""
 import argparse
-from pathlib import Path
 import time
 
 import mujoco
