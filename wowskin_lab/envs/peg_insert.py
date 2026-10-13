@@ -13,7 +13,6 @@ import numpy as np
 
 from wowskin_lab.core.arm_control import joint_pd_reset
 from wowskin_lab.paths import ROOT
-from wowskin_lab.envs.franka import mount_reference
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, pick_scene, rotation_matrix
 from wowskin_lab.envs.task_evaluation import task_config
 
@@ -145,19 +144,17 @@ class PandaPegInsertEnv(PandaPickCubeTactileEnv):
         d.qpos[self.arm_q] = self.joint_target
         d.qvel[:] = 0.
         mujoco.mj_forward(m, d)
-        self.baseline = self.magnetic_field().copy()
+        if not self.is_optical:
+            self.baseline = self.magnetic_field().copy()
         width = c['initial_pinch_width_m']
         if self.cfg.get('gripper') == 'robotiq_2f85':
             from .robotiq import initialize_gap
             initialize_gap(m, d, self.cfg['total_height_m'], width)
         else:
-            gap = 2*(.04+mount_reference(self.cfg)['position_m'][1]-self.cfg['total_height_m'])
+            gap = np.linalg.norm(np.diff(self.sensor_surfaces(), axis=0))
             d.qpos[self.finger_q] = -(gap-width)/2
             mujoco.mj_forward(m, d)
-        surfaces = []
-        for name in ('wowskin_mount', 'silicone_mount'):
-            bid = m.body(name).id
-            surfaces.append(d.xpos[bid]+d.xmat[bid].reshape(3,3)@np.array([0.,0.,self.cfg['total_height_m']]))
+        surfaces = self.sensor_surfaces()
         pinch = np.mean(surfaces, axis=0)
         rotation = peg_rotation
         quat = np.zeros(4)

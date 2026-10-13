@@ -83,49 +83,31 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 ## 可选视触觉传感器
 
-DIGIT、GelSight 是硬件；TACTO、FOTS 是触觉生成算法。**保留 Panda 原手指，将完整传感器模块附加到指尖末端**，感应面朝夹持区；不替换原手指、不添加闭合空隙或夹持附着。
-
-- `tacto`：DIGIT 独立 CAD＋原 TACTO 相机、灯光、背景校正、噪声、力相关光学位移、RGB／深度。
-- `digit_fots`：同一 DIGIT CAD＋FOTS 的 **DIGIT 专用**权重、背景和标记网格；原平滑、阴影、膨胀／剪切／扭转模型均执行。
-- `digit_compare`：**同一个 MuJoCo 状态同时运行以上两种算法**，并排显示和保存。两者保留各自的投影与深度生成方式，不做增益对齐；区别见[模型说明](docs/MODEL_CALIBRATION_ZH.md#digit-双算法比较)。
-- `gelsight`：移植 [GelSightMujoco](https://github.com/rlamprell/GelSightMujoco) 的完整外壳／玻璃／胶面／接触层／内部相机，执行原 Phong 光学、平滑、阴影及纹理噪声。不是此前的矩形代理，也不冒称 GelSight Mini。
-- `fots`：保留的旧 **GelSight 标定＋平面代理**选项，便于已有命令兼容；不是 `digit_fots` 或 `gelsight` 的别名。
-- `anyskin`：默认磁场传感器，原采集与策略流程不变。
+每次只选一种传感器，左右各装一个同类型模块。默认 AnySkin；DIGIT 可选 TACTO 或 FOTS，GelSight 使用独立的 GelSightMujoco 原模型（不是 Mini）。三种光学配置均接入 Panda 五类任务、三路场景 RGB-D、双指光学显示和手动录制；Robotiq 光学安装尚未接入。
 
 ```bash
-# 可选安装到同一个 .venv；上游源码／权重／CAD 单独下载
-.venv/bin/python scripts/setup_upstream.py --only tacto fots gelsight_mujoco
+# 可选依赖装到同一个 .venv，固定源代码／CAD／权重版本
+.venv/bin/python scripts/setup_upstream.py --only tacto fots_mujoco gelsight_mujoco
 .venv/bin/python -m pip install -r requirements/tacto.txt
 .venv/bin/python -m pip install --no-deps -e third_party/mujoco-tacto
 
-# DIGIT 双算法独立台：可选 sphere / box / cylinder 探头
-.venv/bin/mjpython -m wowskin_lab sensor --sensor digit_compare --probe-shape box --ideal
-# Panda 双指实时比较；也可 --input spacemouse
-.venv/bin/mjpython -m wowskin_lab teleop --sensor digit_compare --task pick_cube --input keyboard --ideal
-# 单独算法：将 digit_compare 改为 tacto 或 digit_fots
+# 三选一；--task 可换 cable / feeding / peg_insert / chip_tray
+.venv/bin/mjpython -m wowskin_lab teleop --sensor digit --optics tacto --task pick_cube --input keyboard
+.venv/bin/mjpython -m wowskin_lab teleop --sensor digit --optics fots --task pick_cube --input keyboard
+.venv/bin/mjpython -m wowskin_lab teleop --sensor gelsight --task pick_cube --input keyboard
 
-# 真正独立的 GelSight MuJoCo 模型
-.venv/bin/mjpython -m wowskin_lab sensor --sensor gelsight --ideal
-.venv/bin/mjpython -m wowskin_lab teleop --sensor gelsight --task pick_cube --input keyboard --ideal
-
-# 同轨迹／同物理状态的数据比较：三种探头，按压、滑动、扭转、倾斜、释放与再次接触
-.venv/bin/mjpython -m wowskin_lab sensor --sensor digit_compare --ideal --compare-data --output outputs/diagnostics/digit_compare
-# 方块抓取／抬升／释放，保存两指的全部光学输出
-.venv/bin/mjpython -m wowskin_lab teleop --sensor digit_compare --task pick_cube --ideal --demo --output outputs/diagnostics/digit_cube
-
-# 独立执行原作者函数的数值对照及接触回归
-.venv/bin/python -m unittest tests.physics.test_optical_tactile tests.physics.test_fots tests.physics.test_optical_backends
+# 独立按压台：球／方体／圆柱探头；两套 DIGIT 各自原模型的比较
+.venv/bin/mjpython -m wowskin_lab sensor --sensor digit --optics fots --probe-shape box
+.venv/bin/python -m wowskin_lab digit-compare --ideal
 ```
 
-独立台：**Q/E** 下压／抬起，**W/S、A/D** 平移，**I/K、L/J、U/O** 倾斜／扭转，**R** 复位，**P** 退出。Panda 沿用原键盘操作，**X/Z** 闭合／打开。右侧 RGB／深度／FOTS 标记流保持原图宽高比；**M** 切换深度／接触区。深度灰度范围自动共享并标注 µm；`--depth-display-max-mm 5` 可固定范围。只改变显示，不改原始数值。
+任务窗口操作与上文相同，**B 开始、Enter 保存**。光学图位于左下，三路相机位于右侧；逗号 `,` 切换深度／接触区。**ROBOT LEFT / RIGHT 按机器人手掌 +Y / −Y 定义，不随观察视角交换**。`--ideal` 关闭 TACTO 随机 RGB 噪声或 GelSight 纹理噪声，不删除原背景；FOTS 不额外添加随机噪声。
 
-Panda 上 **L／left 是手掌坐标系 +Y 的 finger_joint1，R／right 是 −Y 的 finger_joint2**，不随观察相机旋转而交换；主视图有对应的 L／R 标记。TACTO 的 `Force+geom.` 深度包含来源的力相关光学位移，FOTS 的 `Geom. overlap` 是几何重叠，GelSight 的 `Surface offset` 是内部相机相对空载胶面的偏移。它们均显示 µm，但不应当作同一定义的实测压深比较，诊断数据的 `depth_model` 保存这一差别。
+TACTO／GelSight 完整长组件替换原短指几何；FOTS 独立模块装在原指尖。保留各自源 CAD、接触参数和光学函数，安装变换与任务控制属于本地适配，详见[模型与来源](docs/MODEL_CALIBRATION_ZH.md#传感器硬件与光学算法)。没有用 AnySkin 参数代替光学传感器。
 
-DIGIT 每指输出 RGB `320×240×3`、深度和有效区 `320×240`；DIGIT FOTS 另有 `8×9×2` 标记像素位移和流图。GelSight 原图是 `120×160×3`，同时保存米制相机深度与原算法使用的 **OpenGL 缓冲值**，两者单位不同。诊断 `--demo` 保存 NPZ／PNG；`--compare-data` 每种探头保存 80 帧 NPZ、逐帧 CSV、MP4 与报告。详见[字段与比较方法](docs/MODEL_CALIBRATION_ZH.md#digit-双算法比较)。
+光学数据使用独立 schema：100 Hz 机器人／接触力，约 30 Hz 场景 RGB-D 和双指光学帧；不填充 AnySkin 15 路字段。三个默认目录分别为 `data/episodes_tacto/`、`data/episodes_digit_fots/`、`data/episodes_gelsight/`。数据字段、独立台按键与验证命令见[光学采集说明](docs/COLLECTION_ZH.md#光学触觉数据)。
 
-`--ideal` 关闭 TACTO 的随机 RGB 噪声或 GelSight 的纹理噪声；真实背景本身的纹理仍保留。FOTS 不额外加入随机噪声。`--no-fots-shadow` 可关闭原平面阴影；TACTO 支持 `--tacto-config`、`--tacto-background` 和 `--no-tacto-background`。不人为放大输出，不用目标物体白名单过滤触觉。
-
-**本次 sensor 功能范围：独立台、Panda 方块、原算法光学功能和原始输出比较。** 不是只绘制示意图；源码对照测试检查原始 RGB、深度或标记值。GelSight 内部相机固定到来源的深度裁剪参数，避免外部场景尺寸改变光学响应；旧 `mujoco_py` 与当前引擎的整条链路等价性仍待验证。光学图像尚未接入 LeRobot／ViSk，也未接其他任务、Robotiq 或 Pico；这些是单独的应用工作。原算法的刚性接触／光学形变近似不等于材料 FEM；MuJoCo 支持软体，但本次没有用未标定的胶体力学冒充作者模型。安装件和硬件标定状态见[模型说明](docs/MODEL_CALIBRATION_ZH.md#传感器硬件与光学算法)及 [TODO](TODO.md)。
+**使用边界：** FOTS 多刚体接触的 marker 不受所接入源代码支持；GelSight 大平面覆盖整个视野时 RGB 响应可能很弱。原始深度定义不同，不可直接比较为真实压缩或精度。现有 ViSk／FTF 磁场网络不能直接训练光学图像；各任务完整操作成功率与实物标定仍待验证，见 [TODO](TODO.md#独立视触觉传感器与后续应用)。
 
 ## 脆性薯片试验
 
@@ -147,7 +129,7 @@ data/episodes/pick_cube/
 ```
 
 - **名义 30 Hz**：三路 640×480 RGB、同步米制深度、instruction、对应 state/action；另存实际仿真时间戳。
-- **100 Hz raw**：TCP 基座系 XYZ＋rotvec、线／角速度、七关节位置／速度、夹爪反馈／目标、15 路触觉、基线及质量字段。不是 RPY。
+- **AnySkin 100 Hz raw**：TCP 基座系 XYZ＋rotvec、线／角速度、七关节位置／速度、夹爪反馈／目标、15 路触觉、基线及质量字段。不是 RPY。
 - **夹爪 state / action 分开**：实测闭合比例作观测，实际下发闭合目标作动作；0 开、1 闭。夹物体时反馈不到 1，动作仍可为 1。另存驱动关节及单位；米制宽度尚未统一接入各任务，只有薯片 raw 的附加组已保存。
 - LeRobot 的 action 是绝对 TCP／夹爪目标；ViSk 导出沿用官方位姿差分规则，得到基座系平移增量＋末端局部旋转增量＋绝对夹爪目标。两者不能直接混用。
 - 成功写入并验证后，图像只留在 LeRobot，raw 不重复存图像。失败／中断保留 raw 和暂存媒体；`INCOMPLETE` 表示写入未完成，不能用于训练。
@@ -179,12 +161,12 @@ configs/      相机、控制、评分、传感器参数与上游版本
 assets/       原始／派生素材、来源 manifest 与许可证
 scripts/      安装、训练、评估；diagnostics/ 为可选实验
 tests/        unit、physics、official、artifacts、manual
-docs/         采集、学习、物理模型说明
+docs/         采集、学习、模型参数与论文索引
 data/         本机示范与算法导出，不进 Git
 outputs/      本机权重、标定与诊断输出，不进 Git
 ```
 
-默认采用 MuJoCo 3.15 降阶指腹＋拟合偶极子。`--ideal` 关闭合成触觉噪声、滤波和延迟，不关闭接触力学。控制限制、参数来源与物理失效规则见 [模型说明](docs/MODEL_CALIBRATION_ZH.md)。完整网格对照针对 MuJoCo 3.5，与当前默认环境不同。
+默认 AnySkin 采用 MuJoCo 3.15 降阶指腹＋拟合偶极子；光学选项使用各自源模型。`--ideal` 关闭合成触觉噪声、滤波和延迟，不关闭接触力学。控制限制、参数来源与物理失效规则见 [模型说明](docs/MODEL_CALIBRATION_ZH.md)。完整网格对照针对 MuJoCo 3.5，与当前默认环境不同。
 
 ```bash
 # 以下检查包含学习接口，先按学习文档获取固定版 ViSk
@@ -195,4 +177,4 @@ outputs/      本机权重、标定与诊断输出，不进 Git
 
 `unit` 检查坐标、输入和动作契约；`physics` 运行接触场景；`official` 检查官方数据与学习接口；`artifacts` 依赖可选数据／权重；`manual` 需要人工操作窗口。Robotiq 强夹持的已知失败保留在物理测试中，不跳过。物理／artifact 检查可能需要特定 MuJoCo 版本或可选模型，不能把跳过项算作通过。普通遥操作不保存整场诊断，需要时加 `--diagnostic-log`；可选对照入口见[模型说明](docs/MODEL_CALIBRATION_ZH.md)。
 
-[采集手册](docs/COLLECTION_ZH.md) · [ViSk / FTF](docs/LEARNING_WORKFLOWS_ZH.md) · [模型、参数与论文](docs/MODEL_CALIBRATION_ZH.md) · [TODO](TODO.md) · [第三方来源与发布事项](THIRD_PARTY.md)
+[采集手册](docs/COLLECTION_ZH.md) · [ViSk / FTF](docs/LEARNING_WORKFLOWS_ZH.md) · [模型与参数](docs/MODEL_CALIBRATION_ZH.md) · [论文与算法](docs/PAPERS_ZH.md) · [TODO](TODO.md) · [第三方来源与发布事项](THIRD_PARTY.md)

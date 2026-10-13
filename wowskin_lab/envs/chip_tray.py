@@ -17,7 +17,7 @@ from wowskin_lab.envs.feeding import ASSETS, TABLE_TOP, ROBOT_POSITION, selected
 from wowskin_lab.envs.feeding_room import add_care_room, update_care_room_view
 from wowskin_lab.envs.brittle_chip import configuration, validate_configuration, add_chip, chip_mesh, BreakableChip
 from wowskin_lab.data.cameras import add_recording_cameras
-from wowskin_lab.core.grip_force import GripForceFeedback, pad_normal_forces
+from wowskin_lab.core.grip_force import GripForceFeedback
 
 
 def scene_config():
@@ -43,7 +43,8 @@ def tray_scene(cfg, layout):
     robot.set('quat', '.7071067811865476 0 0 .7071067811865476')
     for geom in [root.find(".//default[@class='panda/collision']/geom"),
                  *[root.find(f".//geom[@name='{n}']") for n in ('standard_shell', 'silicone_backing')]]:
-        geom.set('contype', '32'); geom.set('conaffinity', '1')
+        if geom is not None:
+            geom.set('contype', '32'); geom.set('conaffinity', '1')
     for flex in robot.iter('flexcomp'):
         flex.find('contact').set('contype', '16')
         flex.find('contact').set('conaffinity', '17')
@@ -93,7 +94,7 @@ def tray_scene(cfg, layout):
     add_care_room(root)
     for parent in root.iter():
         for child in list(parent):
-            if child.tag == 'camera':
+            if child.tag == 'camera' and not child.get('name', '').startswith('optical_'):
                 parent.remove(child)
     hand = root.find(".//body[@name='hand']")
     tcp_z = float(hand.find("site[@name='tactile_tcp']").get('pos').split()[2])
@@ -160,7 +161,7 @@ class PandaChipEnv(PandaPickCubeTactileEnv):
     def control(self, mode=None):
         self.grip_target = self.force_grip.update(
             self.grip_target,
-            pad_normal_forces(self.model, self.data, (self.skin_flex, self.passive_flex)),
+            self.pad_forces(),
             self.model.opt.timestep, self.model.jnt_range[self.finger_joints[0]])
         super().control(mode)
 
@@ -170,7 +171,7 @@ class PandaChipEnv(PandaPickCubeTactileEnv):
         closed = self.model.jnt_range[self.finger_joints, 0]
         return dict(enabled=bool(self.force_grip.enabled), target_n=self.force_grip.target_n,
                     selected_target_n=self.force_grip.selected_target_n,
-                    pad_normal_force_n=pad_normal_forces(self.model, self.data, (self.skin_flex, self.passive_flex)),
+                    pad_normal_force_n=self.pad_forces(),
                     width_m=float(np.sum(self.data.qpos[self.finger_q]-closed)),
                     servo_target_width_m=float(np.sum(self.grip_target-closed)),
                     servo_target_closure=self.gripper_fraction(target=True))

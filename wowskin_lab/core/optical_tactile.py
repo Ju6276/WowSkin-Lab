@@ -30,14 +30,18 @@ class OpticalFrame:
     render_deformation: np.ndarray | None = None
     render_depth_unit: str = 'metre'
     depth_model: str = 'unspecified'
+    marker_status: str = 'not_provided'
 
 
 def contact_forces(model, data, gel):
+    gels = set(np.atleast_1d(gel).tolist())
     forces, force = {}, np.zeros(6)
     for index, contact in enumerate(data.contact):
-        if gel not in (contact.geom1, contact.geom2):
+        if not gels.intersection((contact.geom1, contact.geom2)):
             continue
-        other = contact.geom2 if contact.geom1 == gel else contact.geom1
+        other = contact.geom2 if contact.geom1 in gels else contact.geom1
+        if other in gels:
+            continue
         if other < 0:
             raise NotImplementedError('Optical flex contact surface export is not implemented')
         mujoco.mj_contactForce(model, data, index, force)
@@ -99,31 +103,12 @@ class OpticalTactile:
         self.config_path = str(config_path or get_digit_config_path())
         self.model, self.ideal = model, ideal
         self.sensors, self.renderers = {}, {}
-        reference = mujoco.MjData(model)
-        mujoco.mj_forward(model, reference)
         try:
             for name, (site, gel) in sensors.items():
-                site_id, gel_id = model.site(site).id, model.geom(gel).id
-                self.sensors[name] = (site_id, gel_id)
-                renderer_class = Renderer
-                if model.geom_type[gel_id] == mujoco.mjtGeom.mjGEOM_MESH:
-                    surface = geom_mesh(model, gel_id)
-                    rotation = reference.site_xmat[site_id].reshape(3, 3).T
-                    pose = np.eye(4)
-                    pose[:3, :3] = rotation @ reference.geom_xmat[gel_id].reshape(3, 3)
-                    pose[:3, 3] = rotation @ (reference.geom_xpos[gel_id]-reference.site_xpos[site_id])
-                    surface.apply_transform(pose)
-                    # Use the actual CAD's outward curved surface, seen from
-                    # inside the sensor. No upstream mesh-loader 1.02 scaling.
-                    surface.update_faces(surface.face_normals[:, 2] < -1e-6)
-                    surface.faces = surface.faces[:, ::-1]
-
-                    class SensorRenderer(Renderer):
-                        def _generate_gel_trimesh(self, mesh=surface):
-                            return mesh.copy()
-
-                    renderer_class = SensorRenderer
-                self.renderers[name] = renderer_class(width, height, background_bgr, self.config_path)
+                site_id = model.site(site).id
+                gel_ids = tuple(model.geom(g).id for g in ((gel,) if isinstance(gel, str) else gel))
+                self.sensors[name] = (site_id, gel_ids)
+                self.renderers[name] = Renderer(width, height, background_bgr, self.config_path)
                 if self.renderers[name].nb_cam != 1:
                     raise ValueError('The DIGIT adapter requires one camera per module; it cannot discard extra cameras')
         except Exception:
@@ -151,7 +136,7 @@ class OpticalTactile:
                 # of sensordata, no pixel-grid layout assumption, no whitelist.
                 normal[key] = force
             colors, depths = renderer.render(poses, normal, noise=not self.ideal)
-            # A ray outside the actual curved gel has baseline depth=0
+            # A ray outside the configured optical gel has baseline depth=0
             # (renderer background sentinel), not a gel at the camera centre.
             # Subtract only where both surfaces exist; keep raw depths and
             # validity so outside-of-sensor pixels are never reported as data.

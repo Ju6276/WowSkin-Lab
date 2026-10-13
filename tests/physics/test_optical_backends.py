@@ -3,6 +3,7 @@ from types import ModuleType
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import cv2
 import mujoco
@@ -15,64 +16,43 @@ from wowskin_lab.tools.optical_sensor import demo
 
 
 class BackendChecks(unittest.TestCase):
-    def test_digit_suspended_hold_does_not_creep_or_accumulate_flow(self):
-        env = OpticalPandaEnv(sensor='digit_fots')
-        optics = make_optics(env, 'digit_fots', ideal=True)
-        self.assertEqual(env.model.opt.impratio, 20)
-        self.assertEqual(env.model.opt.noslip_iterations, 5)
-        self.assertEqual(env.model.opt.solver, mujoco.mjtSolver.mjSOL_NEWTON)
-        def move(xyz, seconds):
-            env.target_xyz = np.asarray(xyz, float)
-            for i in range(round(seconds*env.cfg['sample_hz'])):
-                env.step(env.hold_action())
-                if i % 10 == 0:
-                    optics.render(env.data)
-        try:
-            move([.4, 0, .17], 1.5)
-            move([.4, 0, .125], 1.5)
-            env.command_gripper(True)
-            move([.4, 0, .125], 1)
-            move([.4, 0, .23], 2)
-            initial = env.data.xpos[env.probe_body].copy()
-            self.assertGreater(initial[2], .22)
-            max_flow = 0.
-            for _ in range(60):
-                for _ in range(100):
-                    env.step(env.hold_action())
-                frames = optics.render(env.data)
-                for frame in frames.values():
-                    self.assertGreater(frame.normal_force_n, .1)
-                    max_flow = max(max_flow, float(np.linalg.norm(frame.marker_displacement_px, axis=-1).max()))
-            self.assertLess(np.linalg.norm(env.data.xpos[env.probe_body]-initial), .0001)
-            self.assertLess(max_flow, .2)
-        finally:
-            optics.close()
-
-    def test_digit_same_physics_and_both_algorithms_release(self):
-        a = OpticalPandaEnv(sensor='tacto')
-        for sensor in ('digit_fots', 'digit_compare'):
-            b = OpticalPandaEnv(sensor=sensor)
-            for name in ('body_pos', 'body_quat', 'geom_pos', 'geom_quat', 'geom_friction',
-                         'geom_contype', 'geom_conaffinity', 'body_mass', 'body_inertia', 'jnt_range'):
-                np.testing.assert_array_equal(getattr(a.model, name), getattr(b.model, name))
-            np.testing.assert_array_equal(a.data.qpos, b.data.qpos)
-        optics = make_optics(b, 'digit_compare', ideal=True)
-        try:
-            with tempfile.TemporaryDirectory() as directory:
-                report = demo(b, optics, Path(directory))
-            self.assertTrue(.09 < report['lift_m'] < .12)
-            self.assertTrue(.119 < report['released_cube_z_m'] < .121)
+    def test_optical_physics_does_not_load_anyskin_profiles(self):
+        # Exercise actual model construction; a sensor-profile change must not
+        # affect the independent optical hardware through the shared arm code.
+        with patch('wowskin_lab.envs.pick_cube.configuration',
+                   side_effect=AssertionError('AnySkin profile loaded')):
+            for sensor in ('tacto', 'digit_fots', 'gelsight'):
+                with self.subTest(sensor=sensor):
+                    env = OpticalPandaEnv(sensor=sensor)
+                    self.assertEqual(env.model.nflex, 0)
+                    self.assertNotIn('skin_model_source', env.cfg)
+                    self.assertTrue(env.cfg['disable_workspace_limits'])
+    def test_gelsight_contact_and_solver_match_source(self):
+        source = mujoco.MjModel.from_xml_path(str(SOURCE/'models/gripper_testbed_PickandPlace.xml'))
+        env = OpticalPandaEnv(sensor='gelsight')
+        for attr in ('solver', 'integrator', 'iterations', 'tolerance', 'cone',
+                     'jacobian', 'impratio', 'noslip_iterations', 'enableflags', 'disableflags'):
+            self.assertEqual(getattr(env.model.opt, attr), getattr(source.opt, attr), attr)
+        for i in range(source.ngeom):
+            name = source.geom(i).name
+            if not name.startswith('gelsight0:'):
+                continue
             for side in ('left', 'right'):
-                t = report['lifted'][side+' / TACTO']
-                f = report['lifted'][side+' / FOTS']
-                self.assertEqual(t['normal_force_n'], f['normal_force_n'])
-                self.assertGreater(t['normal_force_n'], .1)
-                self.assertGreater(t['max_indentation_mm'], f['max_indentation_mm'])
-                self.assertGreater(f['max_indentation_mm'], 0)
-                for algorithm in ('TACTO', 'FOTS'):
-                    self.assertEqual(report['released'][side+' / '+algorithm]['max_indentation_mm'], 0)
-        finally:
-            optics.close()
+                target = env.model.geom(f'source_gelsight_{side}_{name.split(":")[1]}').id
+                for attr in ('friction', 'solref', 'solimp', 'condim', 'margin', 'gap', 'priority', 'solmix'):
+                    values = getattr(env.model, 'geom_'+attr)[target]
+                    np.testing.assert_array_equal(values, getattr(source, 'geom_'+attr)[i], err_msg=name+' '+attr)
+                for attr in ('pos', 'quat', 'size', 'type'):
+                    np.testing.assert_array_equal(getattr(env.model,'geom_'+attr)[target],getattr(source,'geom_'+attr)[i])
+        for side in ('left','right'):
+            old, new = source.body('gelsight_sensor_body0').id, env.model.body(f'source_gelsight_{side}_module').id
+            for attr in ('mass', 'inertia', 'ipos', 'iquat'):
+                np.testing.assert_allclose(getattr(env.model,'body_'+attr)[new],getattr(source,'body_'+attr)[old],atol=1e-10)
+            oldcam, newcam = source.camera('gelsight0:camera').id, env.model.camera(f'optical_source_gelsight_{side}_camera').id
+            for attr in ('pos', 'quat', 'fovy'):
+                np.testing.assert_array_equal(getattr(env.model,'cam_'+attr)[newcam],getattr(source,'cam_'+attr)[oldcam])
+            self.assertEqual(env.model.body(f'{side}_finger').geomnum,0)
+        np.testing.assert_allclose(np.linalg.norm(np.diff(env.sensor_surfaces(),axis=0)),.08,atol=1e-6)
 
     def test_gelsight_original_image_function_and_noise(self):
         renderer = GelSightRenderer(ideal=True)
@@ -98,32 +78,6 @@ class BackendChecks(unittest.TestCase):
         # only enters normals/lighting. Do not invent noise in saved geometry.
         np.testing.assert_array_equal(first[1], second[1])
 
-    def test_digit_marker_shear_twist_and_recontact(self):
-        env = OpticalBench(sensor='digit_compare', probe_shape='box')
-        optics = make_optics(env, 'digit_compare', ideal=True)
-        def capture(target):
-            env.data.ctrl[:] = target
-            frames = None
-            for i in range(100):
-                env.step(np.zeros(6))
-                if i % 10 == 9:
-                    frames = optics.render(env.data)
-            return frames['DIGIT / FOTS']
-        try:
-            pressed = capture([0, 0, -.012, 0, 0, 0])
-            moved = capture([.002, 0, -.012, 0, 0, .35])
-            self.assertEqual(pressed.marker_displacement_px.shape[-1], 2)
-            self.assertEqual(pressed.marker_displacement_px.size, 9*8*2)
-            self.assertGreater(np.abs(pressed.marker_displacement_px-moved.marker_displacement_px).max(), 1)
-            released = capture([0, 0, 0, 0, 0, 0])
-            np.testing.assert_array_equal(released.marker_displacement_px, 0)
-            self.assertEqual(optics.fots.history['DIGIT'], {})
-            capture([0, 0, -.012, 0, 0, 0])
-            optics.reset()
-            self.assertEqual(optics.fots.history, {})
-        finally:
-            optics.close()
-
     def test_gelsight_transparency_metric_depth_and_unload(self):
         env = OpticalBench(sensor='gelsight')
         optics = make_optics(env, 'gelsight', ideal=True)
@@ -137,6 +91,15 @@ class BackendChecks(unittest.TestCase):
             self.assertEqual(pressed.rgb.shape, (120, 160, 3))
             self.assertGreater(pressed.normal_force_n, .1)
             self.assertTrue(.001 < pressed.indentation_m.max() < .003)
+            # A new recorder created under load must retain the same unloaded
+            # reference, rather than subtracting away the existing contact.
+            started_under_load = make_optics(env, 'gelsight', ideal=True)
+            try:
+                fresh = started_under_load.render(env.data)[key]
+                np.testing.assert_array_equal(fresh.indentation_m,pressed.indentation_m)
+                np.testing.assert_array_equal(fresh.rgb,pressed.rgb)
+            finally:
+                started_under_load.close()
             self.assertGreater(np.abs(pressed.rgb.astype(float)-original.rgb).mean(), .1)
             self.assertEqual(pressed.render_depth_unit, 'legacy_opengl_buffer')
             self.assertTrue(((pressed.render_input_depth >= 0)&(pressed.render_input_depth <= 1)).all())

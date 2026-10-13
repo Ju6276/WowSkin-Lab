@@ -1,0 +1,9 @@
+{
+  "sample_hz": 100,
+  "timestep_s": 0.0005,
+  "timestep_source": "Local robot/bench integration resolution; 0.5 ms, finer than the upstream 2 ms scenes. Sensor solver settings are loaded separately from its own repository.",
+  "friction": 0.6,
+  "friction_source": "Existing task object friction; sensor contact parameters come from each distinct source model (TACTO/FOTS MuJoCo/GelSight), never this task value.",
+  "arm_controller": "ik_pd",
+  "control_source": "Existing Panda teleoperation IK/joint-PD runner; task defaults use pinned Menagerie (cube/feeding/chip) or robosuite (cable/peg) gripper servos. Not a DIGIT or GelSight hardware specification."
+}

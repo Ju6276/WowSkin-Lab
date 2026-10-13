@@ -24,6 +24,12 @@ class CameraPreview:
     def __enter__(self):
         # Same cameras, aspect ratio and full RGB size used by acquisition.
         self.renderer = mujoco.Renderer(self.model, width=640, height=480)
+        try:
+            if hasattr(self.hud, "bind"):
+                self.hud.bind(self.model, self.data)
+        except BaseException:
+            self.renderer.close()
+            raise
         return self
 
     def __exit__(self, *exc):
@@ -31,6 +37,8 @@ class CameraPreview:
             self.cloud.close()
         finally:
             self.renderer.close()
+            if hasattr(self.hud, "close"):
+                self.hud.close()
 
     def key(self, code):
         handled = self.cloud.key(code)

@@ -58,7 +58,8 @@ def _validate(path):
         if np.sum(phase == 0) < 60 or not np.any(phase == 1) or np.sum(phase == 2) < 20:
             raise ValueError('Missing actual pre-roll, demonstration or post-roll; cannot fabricate boundaries')
         for key, shape in [('cartesian_states', (6,)), ('commanded_pose', (6,)),
-                           ('arm_qpos', (7,)), ('arm_qvel', (7,)), ('sensor_states', (15,))]:
+                           ('arm_qpos', (7,)), ('arm_qvel', (7,)),
+                           *(([('optical_contact_force_n', (2,))] if meta.get('tactile_modality') == 'optical' else [('sensor_states', (15,))]))]:
             if f[key].shape != (len(times), *shape) or not np.isfinite(f[key][:]).all():
                 raise ValueError(f'Invalid {key}')
         if not np.all(np.diff(f['camera_timestamp'][:]) > 0):
@@ -74,6 +75,9 @@ def _validate(path):
                     for key in (f'camera{camera}', f'valid_camera{camera}'):
                         if depth[key].shape != (len(f['camera_timestamp']), 480, 640):
                             raise ValueError(f'Invalid depth stream {key}')
+        if meta.get('tactile_modality') == 'optical':
+            from .optical_recording import optical_path, validate_optical
+            validate_optical(optical_path(path, meta), f['camera_timestamp'][:])
     return meta
 
 
@@ -95,6 +99,8 @@ def _video_frames(path, times, keep):
 
 
 def _export_ftf(source, target_root, demo, meta):
+    if meta.get('tactile_modality') == 'optical':
+        raise ValueError('FTF magnetic adapter does not consume optical images; use the native optical dataset')
     from omegaconf import OmegaConf
     from wowskin_lab.learning.official import verify_reference
     reference, spec, _ = verify_reference('ftf-robot')
@@ -180,6 +186,8 @@ def export_dataset(directory, output, algorithm, episodes=None):
     if not candidates:
         raise ValueError('No reviewed successful episodes selected')
     metadata = [_validate(p) for p in candidates]
+    if any(m.get('tactile_modality') == 'optical' for m in metadata):
+        raise ValueError('ViSk/FTF magnetic adapters need 15 magnetic channels; optical datasets require an image-tactile policy adapter')
     if len({m['task'] for m in metadata}) != 1:
         raise ValueError('Select one task per algorithm export')
     # Different sensor/physics profiles are explicit dataset variants, not an

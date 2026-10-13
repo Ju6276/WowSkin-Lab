@@ -1,6 +1,6 @@
 """Independent optical benches and Panda mounts, sharing the arm controller.
 
-Original DIGIT STL / GelSightMujoco CAD, or the legacy flat FOTS proxy;
+Separate source DIGIT models / GelSightMujoco CAD;
 rigid contact and unchanged upstream optical algorithms. Frames are not
 passed off as the existing ViSk AnySkin observations.
 """
@@ -14,40 +14,59 @@ import mujoco
 import numpy as np
 
 from wowskin_lab.paths import ROOT
-from wowskin_lab.envs.franka import HOME
-from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, pick_scene, response_configuration
-from wowskin_lab.core.arm_control import configure_controller
-
-OPTICAL_SENSORS = ('tacto', 'digit_fots', 'digit_compare', 'fots', 'gelsight')
+from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv
 
 
-def configure_digit_solver(option):
-    """Use the pinned MuJoCo-TACTO contact solver for both DIGIT algorithms.
+def configure_optical_solver(option, sensor):
+    """Replace the host options, including engine defaults, with sensor source.
 
-    The AnySkin CG/30/impratio=1/noslip=1 optimization allows substantial
-    creep in a stationary rigid DIGIT grasp. These are source numerical
-    settings, not a change of friction coefficient, force or object pose.
+    Integration step and gravity belong to the Panda/bench runner. Do not
+    leave CG, cone, Jacobian, tolerance or flags inherited from an AnySkin task.
     """
-    source = ET.parse(ROOT/'third_party/mujoco-tacto/examples/xml/tacto_common.xml').getroot().find('option')
-    for name, default in (('solver', 'Newton'), ('iterations', '100')):
-        option.set(name, source.get(name, default))
-    for name in ('integrator', 'impratio', 'noslip_iterations', 'cone'):
-        option.set(name, source.get(name))
-    if source.find('flag') is not None:
-        flag = option.find('flag')
-        if flag is None:
-            flag = ET.SubElement(option, 'flag')
-        flag.attrib.update(source.find('flag').attrib)
+    import copy
+    timestep = option.get('timestep')
+    gravity = option.get('gravity', '0 0 -9.81')
+    option.clear()
+    if sensor == 'tacto':
+        source = ET.parse(ROOT/'third_party/mujoco-tacto/examples/xml/tacto_common.xml').getroot()
+    elif sensor == 'digit_fots':
+        source = ET.parse(ROOT/'third_party/FOTS-mujoco/assets/gel/fots_mujoco.xml').getroot()
+    elif sensor == 'gelsight':
+        from wowskin_lab.core.gelsight_mujoco import SOURCE
+        source = ET.parse(SOURCE/'models/gripper_testbed_PickandPlace.xml').getroot()
+    else:
+        raise ValueError(f'Unknown optical backend: {sensor}')
+    for item in source.findall('option'):
+        option.attrib.update(item.attrib)
+        option.extend(copy.deepcopy(list(item)))
+    if sensor == 'tacto':
+        scene = ET.parse(ROOT/'third_party/mujoco-tacto/examples/xml/touch_playground_rot.xml').getroot()
+        for item in scene.findall('option'):
+            option.attrib.update(item.attrib)
+    option.set('timestep', timestep)
+    # The source zero-gravity press fixture is not the robot task.
+    option.set('gravity', gravity)
+
+
+def optical_configuration(args, sensor):
+    """Robot/runner settings only: never load the magnetic skin profiles."""
+    cfg = json.loads((ROOT/'configs/optical.json').read_text())
+    cfg.update(sensor=sensor, skin_dof=None, gripper='panda', seed=getattr(args, 'seed', 0),
+               disable_cartesian_limits=bool(getattr(args, 'no_cartesian_limits', False)),
+               disable_workspace_limits=True, teleop_frame='base', teleop_base_lateral_sign=1.,
+               translation_target_limiter='direction_preserving_v1',
+               camera_profile='three_view', scene_design='industrial_workcell_v1')
+    return cfg
 
 
 def sensor_geometry(sensor):
     if sensor == 'gelsight':
         return source_gelsight_geometry()
-    return gelsight_geometry() if sensor == 'fots' else digit_geometry()
+    return digit_geometry(sensor)
 
 
 def sensor_prefix(sensor):
-    return 'source_gelsight' if sensor == 'gelsight' else ('gelsight' if sensor == 'fots' else 'digit')
+    return 'source_gelsight' if sensor == 'gelsight' else 'digit'
 
 
 def sensor_registration(sensor, names):
@@ -55,15 +74,35 @@ def sensor_registration(sensor, names):
     for key, name in names.items():
         if sensor == 'gelsight':
             result[key] = (f'optical_{name}_camera', f'{name}_friction')
+        elif sensor in ('tacto', 'digit_fots'):
+            from .digit_sources import registration
+            result[key] = registration(sensor, name)
         else:
-            result[key] = (f'{name}_{"surface" if sensor == "digit_fots" else "camera"}', f'{name}_gel')
+            result[key] = (f'{name}_camera', f'{name}_gel')
     return result
 
 
+@lru_cache(maxsize=1)
 def source_gelsight_geometry():
-    # Source housing y bounds: +/-18 mm. Its glass front is source z=34.001 mm.
-    # Rotate +source Z into the gap (-finger Y), and source Y down the finger.
-    return dict(proximal_z=0., gel_center_z=.018)
+    """Align the long housing axis to the finger, with its tail proximal."""
+    import trimesh
+    from wowskin_lab.core.gelsight_mujoco import SOURCE
+    scene = ET.parse(SOURCE/'models/gripper_testbed_PickandPlace.xml').getroot()
+    mesh = scene.find("asset/mesh[@name='front_cover']")
+    vertices = trimesh.load(SOURCE/'models/meshes'/mesh.get('file'), force='mesh').vertices
+    vertices = vertices*np.fromstring(mesh.get('scale'), sep=' ')
+    source = ET.parse(SOURCE/'models/assets/gelsight_mountable0.xml').getroot()
+    contact = source.find(".//geom[@name='gelsight0:friction']")
+    surface = np.fromstring(contact.get('pos'), sep=' ')
+    surface[2] += np.fromstring(contact.get('size'), sep=' ')[2]
+    # +source X (the 50 mm tail) -> -finger Z, +source Y -> finger X,
+    # +source Z (outward sensing normal) -> -finger Y, into the jaw gap.
+    rotation = np.array([[0., 1., 0.], [0., 0., -1.], [-1., 0., 0.]])
+    position = np.array([0., surface[2], vertices[:, 0].max()])
+    quat = np.empty(4)
+    mujoco.mju_mat2Quat(quat, rotation.ravel())
+    return dict(proximal_z=0., gel_center_z=float((rotation@surface+position)[2]),
+                position=position, quaternion=quat, source_surface=surface)
 
 
 def add_source_gelsight(asset, body, name, *, friction=.6):
@@ -84,8 +123,9 @@ def add_source_gelsight(asset, body, name, *, friction=.6):
     original = ET.parse(SOURCE/'models/assets/gelsight_mountable0.xml').getroot().find('body')
     module = copy.deepcopy(original)
     module.set('name', name+'_module')
-    module.set('pos', '0 .034001 .018')
-    module.set('quat', '.7071067811865476 .7071067811865476 0 0')
+    geometry = source_gelsight_geometry()
+    module.set('pos', ' '.join(map(str, geometry['position'])))
+    module.set('quat', ' '.join(map(str, geometry['quaternion'])))
     for geom in module.findall('geom'):
         geom.set('name', name+'_'+geom.get('name').split(':')[-1])
         for attr in ('mesh', 'material'):
@@ -103,107 +143,30 @@ def add_source_gelsight(asset, body, name, *, friction=.6):
 
 
 def mount_optical(root, sensor, *, friction):
-    add = add_source_gelsight if sensor == 'gelsight' else (add_gelsight if sensor == 'fots' else add_digit)
+    add = add_source_gelsight if sensor == 'gelsight' else (add_fots_digit if sensor == 'digit_fots' else add_digit)
     mount_modules(root, sensor_prefix(sensor), add, sensor_geometry(sensor), friction=friction)
 
 
-@lru_cache(maxsize=1)
-def digit_geometry():
-    import trimesh
-    path = ROOT/'third_party/mujoco-tacto/meshes/digit.STL'
-    if not path.is_file():
-        raise FileNotFoundError('Run .venv/bin/python scripts/setup_upstream.py --only tacto')
-    source = trimesh.load(path, force='mesh')
-    parts = list(source.split(only_watertight=False))
-    # The outermost +X connected component is the source CAD's curved gel.
-    index = max(range(len(parts)), key=lambda i: parts[i].bounds[1, 0])
-    gel = parts.pop(index)
-    housing = trimesh.util.concatenate(parts)
-    # Native +X normal -> finger -Y; native +Y -> finger +X.
-    rotation = np.array([[0., 1., 0.], [-1., 0., 0.], [0., 0., 1.]])
-    origin = [gel.bounds[1, 0], gel.bounds.mean(axis=0)[1], source.bounds[0, 2]]
-    transform = np.eye(4)
-    transform[:3, :3], transform[:3, 3] = rotation, -rotation @ origin
-    for mesh in (housing, gel):
-        mesh.apply_transform(transform)
-    return dict(path=path, meshes=(housing, gel), proximal_z=0.,
-                gel_center_z=float(gel.bounds.mean(axis=0)[2]))
+def digit_geometry(sensor='tacto'):
+    from .digit_sources import geometry
+    return geometry(sensor)
 
 
-def add_digit(asset, body, name, *, friction=.6):
-    geometry = digit_geometry()
-    for index, material in ((0, '.08 .09 .10 1'), (1, '.15 .17 .18 1')):
-        mesh = f'digit_mesh_{index}'
-        if asset.find(f"mesh[@name='{mesh}']") is None:
-            source = geometry['meshes'][index]
-            ET.SubElement(asset, 'mesh', name=mesh,
-                          vertex=' '.join(map(str, source.vertices.ravel())),
-                          face=' '.join(map(str, source.faces.ravel())))
-        ET.SubElement(body, 'geom', name=f'{name}_{"housing" if index == 0 else "gel"}',
-                      type='mesh', mesh=mesh, rgba=material, contype='2', conaffinity='7',
-                      friction=f'{friction} .005 .0001', solref='.002 1', group='0')
-    # Source URDF gives 0.1 kg but placeholder inertia=1. Use its mass and an
-    # explicit uniform bounding-box inertia, not a fictitious calibrated tensor.
-    bounds = geometry['meshes'][0].bounds.copy()
-    bounds[0] = np.minimum(bounds[0], geometry['meshes'][1].bounds[0])
-    bounds[1] = np.maximum(bounds[1], geometry['meshes'][1].bounds[1])
-    size = bounds[1]-bounds[0]
-    inertia = .1/12 * np.array([size[1]**2+size[2]**2, size[0]**2+size[2]**2, size[0]**2+size[1]**2])
-    ET.SubElement(body, 'inertial', mass='.1', pos=' '.join(map(str, bounds.mean(axis=0))),
-                  diaginertia=' '.join(map(str, inertia)))
-    # Inward camera at Y=22 mm; its -Z axis looks at the gel front Y=0.
-    ET.SubElement(body, 'site', name=f'{name}_camera',
-                  pos=f'0 .022 {geometry["gel_center_z"]}',
-                  quat='.7071067811865476 -.7071067811865476 0 0', size='.001', rgba='0 0 0 0')
-    ET.SubElement(body, 'site', name=f'{name}_surface',
-                  pos=f'0 0 {geometry["gel_center_z"]}',
-                  quat='.7071067811865476 .7071067811865476 0 0', size='.001', rgba='0 0 0 0')
+def add_digit(asset, body, name, *, friction=None):
+    from .digit_sources import add
+    return add(asset, body, name, sensor='tacto')
 
 
-def mount_digits(root, *, friction):
-    mount_modules(root, 'digit', add_digit, digit_geometry(), friction=friction)
-
-
-def gelsight_geometry():
-    from wowskin_lab.core.fots import upstream
-    params, *_ = upstream()
-    return dict(width=params.sensor_w/params.mm_to_pixel/1000,
-                height=params.sensor_h/params.mm_to_pixel/1000,
-                gel_center_z=.012,
-                proximal_z=.012-params.sensor_h/params.mm_to_pixel/2000-.002)
-
-
-def add_gelsight(asset, body, name, *, friction=.6):
-    """Flat calibration-window proxy, not an official GelSight housing CAD.
-
-    The source gelsight_pad.npy is flat. Active size uses source pixel/mm;
-    2 mm backing and rectangular housing are explicit local mount geometry.
-    """
-    geometry = gelsight_geometry()
-    x, z = geometry['width']/2, geometry['height']/2
-    center = geometry['gel_center_z']
-    ET.SubElement(body, 'geom', name=f'{name}_housing', type='box',
-                  pos=f'0 .006 {center}', size=f'{x+.002} .004 {z+.002}',
-                  rgba='.12 .13 .15 1', contype='2', conaffinity='7',
-                  friction=f'{friction} .005 .0001', solref='.002 1')
-    ET.SubElement(body, 'geom', name=f'{name}_gel', type='box',
-                  pos=f'0 .001 {center}', size=f'{x} .001 {z}',
-                  rgba='.65 .68 .72 1', contype='2', conaffinity='7',
-                  friction=f'{friction} .005 .0001', solref='.002 1')
-    # +X right, +Y image-down (finger +Z), +Z outward (finger -Y).
-    ET.SubElement(body, 'site', name=f'{name}_camera', pos=f'0 0 {center}',
-                  quat='.7071067811865476 .7071067811865476 0 0', size='.001', rgba='0 0 0 0')
-
-
-def mount_gelsights(root, *, friction):
-    mount_modules(root, 'gelsight', add_gelsight, gelsight_geometry(), friction=friction)
+def add_fots_digit(asset, body, name, *, friction=None):
+    from .digit_sources import add
+    return add(asset, body, name, sensor='digit_fots')
 
 
 def mount_modules(root, prefix, add, geometry, *, friction):
-    """Append a fixed module at the stock distal tip; preserve every finger geom.
+    """Replace stock geometry for a complete finger; tip-mount bare modules.
 
-    Sensing face stays on finger Y=0; housing extends away from the jaw gap.
-    Mount pose is a local assembly, not a verified manufacturing adapter.
+    Sensing faces remain at finger Y=0, preserving the 80 mm jaw opening.
+    Source CAD is not cut, rescaled or replaced by a geometric proxy.
     """
     import trimesh
     paths = {item.get('name', Path(item.get('file', '')).stem): item.get('file')
@@ -212,77 +175,44 @@ def mount_modules(root, prefix, add, geometry, *, friction):
               for name in ('finger_0', 'finger_1'))
     for side in ('left', 'right'):
         finger = root.find(f".//body[@name='{side}_finger']")
+        # Complete source long assemblies replace the stock finger geometry:
+        # TACTO has its finger stub; GelSight its mountable housing tail.
+        # FOTS is a bare module, retained on the original tip instead.
+        replacement = add in (add_digit, add_source_gelsight)
+        if replacement:
+            for item in list(finger):
+                if item.tag in ('geom', 'inertial'):
+                    finger.remove(item)
         mount = ET.SubElement(finger, 'body', name=f'{prefix}_{side}_mount',
-                              pos=f'0 0 {tip-geometry["proximal_z"]}')
+                              pos=f'0 0 {(0. if replacement else tip)-geometry["proximal_z"]}')
         add(root.find('asset'), mount, f'{prefix}_{side}', friction=friction)
 
 
 class OpticalPandaEnv(PandaPickCubeTactileEnv):
-    """Reuse Panda's command/IK/PD methods, with a separate optical lifecycle."""
+    """Standalone compatibility entry; same lifecycle as all task environments."""
     def __init__(self, args=None, *, sensor='tacto'):
-        cfg = response_configuration(args or SimpleNamespace(task='pick_cube'))
-        cfg.update(json.loads((ROOT/'configs/gripper_control.json').read_text()))
-        cfg.update(sensor=sensor, skin_dof=None, camera_profile='three_view',
-                   scene_design='industrial_workcell_v1')
-        configure_controller(cfg)
-        self.cfg = cfg
-        self.model = mujoco.MjModel.from_xml_string(pick_scene(cfg, []))
-        self.data, self.ik_data = mujoco.MjData(self.model), mujoco.MjData(self.model)
-        self.arm_joints = [self.model.joint(f'joint{i}').id for i in range(1, 8)]
-        self.arm_q, self.arm_v = self.model.jnt_qposadr[self.arm_joints], self.model.jnt_dofadr[self.arm_joints]
-        self.arm_controls = [self.model.actuator(f'actuator{i}').id for i in range(1, 8)]
-        self.finger_joints = [self.model.joint(f'finger_joint{i}').id for i in (1, 2)]
-        self.finger_q, self.finger_v = self.model.jnt_qposadr[self.finger_joints], self.model.jnt_dofadr[self.finger_joints]
-        self.gripper_control = self.model.actuator('fingers_actuator').id
-        self.gripper_controls = [self.gripper_control]
-        self.tcp_site, self.hand = self.model.site('tactile_tcp').id, self.model.body('hand').id
-        self.probe_body = self.model.body('cube').id
-        self.cube_q = self.model.jnt_qposadr[self.model.joint('cube_joint').id]
-        prefix = sensor_prefix(sensor)
-        self.sensors = sensor_registration(sensor, {side: f'{prefix}_{side}' for side in ('left', 'right')})
-        self.reset()
-
-    def reset(self, seed=None):
-        mujoco.mj_resetData(self.model, self.data)
-        self.data.qpos[self.arm_q] = HOME
-        mujoco.mj_forward(self.model, self.data)
-        self.joint_target = HOME.copy()
-        self.target_xyz = self.data.site_xpos[self.tcp_site].copy()
-        self.servo_xyz = self.target_xyz.copy()
-        self.target_rotation = self.data.site_xmat[self.tcp_site].reshape(3, 3).copy()
-        self.servo_rotation = self.target_rotation.copy()
-        self.grip_target, self.tug_until, self.mouse_wrench = 0., 0., np.zeros(6)
-        for _ in range(round(.25/self.cfg['timestep_s'])):
-            self.control()
-            mujoco.mj_step(self.model, self.data)
-        mujoco.mj_forward(self.model, self.data)
-        self.data.time = 0.
-
-    def step(self, action):
-        self.apply_action_target(action)
-        self.solve_ik()
-        for _ in range(round(1/self.cfg['sample_hz']/self.cfg['timestep_s'])):
-            self.control()
-            mujoco.mj_step(self.model, self.data)
-        mujoco.mj_forward(self.model, self.data)
+        super().__init__(optical_configuration(args or SimpleNamespace(), sensor), pollen=False)
 
 
 class OpticalBench:
     def __init__(self, *, sensor='tacto', probe_shape='sphere'):
-        is_fots = sensor == 'fots'
         name = sensor_prefix(sensor)
         root = ET.Element('mujoco', model='WowSkin-Lab | standalone '+sensor)
         ET.SubElement(root, 'compiler', angle='radian')
         option = ET.SubElement(root, 'option', timestep='.0005', integrator='implicitfast')
-        if sensor in ('tacto', 'digit_fots', 'digit_compare'):
-            configure_digit_solver(option)
+        configure_optical_solver(option, sensor)
+        # This six-axis diagnostic position servo is local, unlike the source
+        # motor-driven arm. Integrate its velocity damping implicitly: the
+        # source Euler step is unstable for this small probe's rotational DOF.
+        # Contact stiffness, friction and sensor geometry remain source values.
+        option.set('integrator', 'implicitfast')
         visual = ET.SubElement(root, 'visual')
         ET.SubElement(visual, 'headlight', ambient='.7 .7 .7', diffuse='.2 .2 .2', specular='.1 .1 .1')
         asset, world = ET.SubElement(root, 'asset'), ET.SubElement(root, 'worldbody')
         ET.SubElement(world, 'light', pos='0 -.3 .5')
         ET.SubElement(world, 'geom', type='plane', size='.3 .3 .01', rgba='.3 .35 .4 1')
         body = ET.SubElement(world, 'body', pos='0 0 .05', quat='.7071067811865476 -.7071067811865476 0 0')
-        add = add_source_gelsight if sensor == 'gelsight' else (add_gelsight if is_fots else add_digit)
+        add = add_source_gelsight if sensor == 'gelsight' else (add_fots_digit if sensor == 'digit_fots' else add_digit)
         add(asset, body, name)
         geometry = sensor_geometry(sensor)
         probe = ET.SubElement(world, 'body', name='probe', pos=f'0 {geometry["gel_center_z"]} .065')
@@ -295,8 +225,12 @@ class OpticalBench:
             raise ValueError(f'Unsupported probe shape: {probe_shape}')
         ET.SubElement(probe, 'geom', name='probe', type=probe_shape, size=sizes[probe_shape], mass='.02', rgba='.2 .6 .9 1')
         actuator = ET.SubElement(root, 'actuator')
+        # Diagnostic fixture, not a sensor material parameter. The former
+        # underdamped 20 g servo overshot a 12 mm target step through the thin
+        # source contact plane. Critical damping includes the joint's 1 Ns/m.
+        translation_kv = 2*np.sqrt(3000*.02)-1.
         for axis in 'xyz':
-            ET.SubElement(actuator, 'position', joint=f'probe_{axis}', kp='3000', kv='5')
+            ET.SubElement(actuator, 'position', joint=f'probe_{axis}', kp='3000', kv=str(translation_kv))
         for axis in 'xyz':
             ET.SubElement(actuator, 'position', joint=f'probe_r{axis}', kp='1', kv='.02')
         self.model = mujoco.MjModel.from_xml_string(ET.tostring(root, encoding='unicode'))

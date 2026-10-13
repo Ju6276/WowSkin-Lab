@@ -112,18 +112,23 @@ r.r.delete()
         np.testing.assert_array_equal(second.indentation_m, depth/2)
         np.testing.assert_array_equal(first.rgb, rgb)
 
-    def test_modules_preserve_stock_fingers_and_opening(self):
+    def test_modules_use_replacement_or_tip_mount_and_preserve_opening(self):
         original = ET.parse(FRANKA_REPO/'franka_sim/envs/xmls/panda.xml').getroot()
-        self.assertLess(np.ptp(digit_geometry()['meshes'][0].vertices[:, 2]), .035)
-        for backend, prefix in (('tacto', 'digit'), ('fots', 'gelsight')):
+        # Preserve the author's complete stub, not a locally shortened shell.
+        self.assertGreater(np.ptp(digit_geometry()['bounds'][:, 2]), .1)
+        for backend, prefix in (('tacto', 'digit'), ('digit_fots', 'digit')):
             env = OpticalPandaEnv(sensor=backend)
             root = ET.fromstring(build_scene(env.cfg, []))
             for side in ('left', 'right'):
                 old = original.find(f".//body[@name='{side}_finger']")
                 new = root.find(f".//body[@name='{side}_finger']")
-                self.assertEqual([g.attrib for g in old.findall('geom')],
-                                 [g.attrib for g in new.findall('geom')])
-                self.assertEqual(old.find('inertial').attrib, new.find('inertial').attrib)
+                if backend == 'tacto':
+                    self.assertEqual(new.findall('geom'), [])
+                    self.assertIsNone(new.find('inertial'))
+                    self.assertEqual(new.find(f"body[@name='{prefix}_{side}_mount']").get('pos'), '0 0 0.0')
+                else:
+                    self.assertEqual([g.attrib for g in old.findall('geom')], [g.attrib for g in new.findall('geom')])
+                    self.assertEqual(old.find('inertial').attrib, new.find('inertial').attrib)
                 self.assertEqual(old.find('joint').attrib, new.find('joint').attrib)
                 self.assertIsNotNone(new.find(f"body[@name='{prefix}_{side}_mount']"))
             self.assertEqual(root.find(".//default[@class='finger']/joint").get('range'), '-0.04 0')
@@ -131,11 +136,11 @@ r.r.delete()
             env.data.qpos[env.finger_q] = 0
             mujoco.mj_forward(env.model, env.data)
             def front(side):
-                site = env.model.site(f'{prefix}_{side}_camera').id
-                position = env.data.site_xpos[site].copy()
                 if backend == 'tacto':
-                    position -= .022*env.data.site_xmat[site].reshape(3, 3)[:, 2]
-                return position
+                    site = env.model.site(f'{prefix}_{side}_camera').id
+                    return env.data.site_xpos[site]-.022*env.data.site_xmat[site].reshape(3,3)[:,2]
+                gel = env.model.geom(env.sensors[side][1]).id
+                return env.data.geom_xpos[gel]+env.model.geom_size[gel,2]*env.data.geom_xmat[gel].reshape(3,3)[:,2]
             self.assertAlmostEqual(np.linalg.norm(front('left')-front('right')), .08)
 
     def test_multi_contact_and_global_rotation(self):
@@ -197,8 +202,8 @@ r.r.delete()
                 self.assertGreater(report['lifted'][side]['max_indentation_mm'], .01)
                 self.assertEqual(report['released'][side]['normal_force_n'], 0.)
                 self.assertEqual(report['released'][side]['max_indentation_mm'], 0.)
-            # Reproduce a broad object behind the curved gel's border. Rays
-            # missing the baseline gel must not become -camera_distance depth.
+            # Original default TACTO optical gel is flat and fills its view.
+            # It must not be replaced by the former local curved CAD surface.
             env.target_xyz = np.array([.40, 0., .125])
             for _ in range(150):
                 env.step(env.hold_action())
@@ -206,10 +211,10 @@ r.r.delete()
             for _ in range(100):
                 env.step(env.hold_action())
             for frame in optics.render(env.data).values():
-                self.assertTrue((~frame.valid_mask).any())
+                self.assertTrue(frame.valid_mask.all())
                 self.assertGreater(frame.normal_force_n, .1)
                 invalid_background = (frame.baseline_depth_m == 0) & (frame.camera_depth_m > 0)
-                self.assertTrue(invalid_background.any())
+                self.assertFalse(invalid_background.any())
                 np.testing.assert_array_equal(frame.indentation_m[invalid_background], 0.)
                 self.assertFalse(frame.contact_mask[invalid_background].any())
                 np.testing.assert_allclose(frame.indentation_m[frame.valid_mask],

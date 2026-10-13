@@ -73,7 +73,7 @@ def pick_scene(cfg, layout):
         for child in list(parent):
             if child.tag == "camera" and not child.get('name', '').startswith('optical_'):
                 parent.remove(child)
-    optical = cfg.get('sensor') in ('tacto', 'digit_fots', 'digit_compare', 'fots', 'gelsight')
+    optical = cfg.get('sensor') in ('tacto', 'digit_fots', 'gelsight')
     optical_label = 'dual optical: '+str(cfg.get('sensor'))
     root.set("model", "WowSkin-Lab | PandaPickCube: " + (optical_label if optical else "WowSkin + plain silicone"))
     # Broad box/flex contacts create hundreds of constraints. CG avoids the
@@ -84,18 +84,9 @@ def pick_scene(cfg, layout):
     option.set("iterations", "30")
     option.set("tolerance", "1e-8")
     option.set("noslip_iterations", "1")
-    if cfg.get('sensor') in ('tacto', 'digit_fots', 'digit_compare'):
-        from .optical import configure_digit_solver
-        configure_digit_solver(option)
-    if cfg.get('sensor') == 'gelsight':
-        # Restore this sensor source's Newton/100 solve. The AnySkin CG/30
-        # optimization fails to converge for its hard overlapping contacts.
-        # No contact is removed and no closure/force cap is introduced.
-        from wowskin_lab.core.gelsight_mujoco import SOURCE
-        source_option = ET.parse(SOURCE/'models/gripper_testbed_PickandPlace.xml').getroot().find('option')
-        option.set('solver', source_option.get('solver', 'Newton'))
-        option.set('iterations', source_option.get('iterations', '100'))
-        option.set('noslip_iterations', source_option.get('noslip_iterations', '0'))
+    if optical:
+        from .optical import configure_optical_solver
+        configure_optical_solver(option, cfg['sensor'])
     if cfg.get('skin_dof') == 'trilinear':
         # Required by MuJoCo 3.15's implicit flex elasticity integration.
         option.set('integrator', 'discrete')
@@ -220,8 +211,15 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
             from .robotiq import replace_gripper
             original_factory = xml_factory
             xml_factory = lambda c, l: replace_gripper(original_factory(c, l), c)
-        TactileSim.__init__(self, cfg, xml_factory=xml_factory, mount_body="wowskin_mount",
-                           contact_body=contact_body, contact_geom=contact_geom)
+        from wowskin_lab.core import optical_physics
+        self.is_optical = optical_physics.enabled(cfg)
+        if self.is_optical:
+            if cfg.get('gripper') != 'panda':
+                raise ValueError('Source optical mounts currently require Panda fingers; no Robotiq optical mount yet')
+            optical_physics.initialize(self, cfg, xml_factory, contact_body, contact_geom)
+        else:
+            TactileSim.__init__(self, cfg, xml_factory=xml_factory, mount_body="wowskin_mount",
+                               contact_body=contact_body, contact_geom=contact_geom)
         self.cfg.update(cfg)
         self.initialize_mounts_and_arm()
         self.tcp_site = self.model.site("tactile_tcp").id
@@ -244,7 +242,7 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         self.cube_q = self.model.jnt_qposadr[self.model.joint(object_joint).id] if object_joint else None
         self.ik_data = mujoco.MjData(self.model)
         self.predictor = None
-        if pollen:
+        if pollen and not self.is_optical:
             from wowskin_lab.baselines.pollen import PollenPredictor
             self.predictor = PollenPredictor()
         self.reskin_response = None
@@ -293,22 +291,46 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         self.initial_cube_z = float(self.data.xpos[self.probe_body, 2])
         if self.pick_place is not None:
             self.pick_place.reset(cube_corners(self), TABLE_Z)
-        self.baseline = self.magnetic_field().copy()
-        self.filtered[:] = 0.
-        self.delay.clear()
-        self.delay.extend(np.zeros((5, 3)) for _ in range(self.cfg["delay_samples"]))
-        self.drift_rate = self.rng.normal(0, self.cfg["drift_ut_per_s"], (5, 3))
+        if not self.is_optical:
+            self.baseline = self.magnetic_field().copy()
+            self.filtered[:] = 0.
+            self.delay.clear()
+            self.delay.extend(np.zeros((5, 3)) for _ in range(self.cfg["delay_samples"]))
+            self.drift_rate = self.rng.normal(0, self.cfg["drift_ut_per_s"], (5, 3))
         self.zero_time = self.data.time = 0.
         self.last_row = None
         return self.observation(), {"uncalibrated": True}
 
     def observation(self):
-        return dict(tcp_position_m=self.data.site_xpos[self.tcp_site].copy(),
+        obs = dict(tcp_position_m=self.data.site_xpos[self.tcp_site].copy(),
                     tcp_rotvec_rad=rotation_vector(self.data.site_xmat[self.tcp_site]),
                     gripper_closed_fraction=self.gripper_fraction(),
                     cube_position_m=self.data.xpos[self.probe_body].copy(),
-                    magnetic_ut=(self.last_row["magnetic_ut"].copy() if self.last_row else np.full(15, np.nan) if getattr(self, "reskin_response", None) else np.zeros(15)),
                     joint_positions=self.data.qpos[self.arm_q].copy())
+        if not self.is_optical:
+            obs['magnetic_ut'] = (self.last_row['magnetic_ut'].copy() if self.last_row else
+                                 np.full(15, np.nan) if self.reskin_response else np.zeros(15))
+        return obs
+
+    def sample(self, controller=None):
+        if self.is_optical:
+            from wowskin_lab.core.optical_physics import sample
+            return sample(self, controller or (lambda _: self.control()))
+        return super().sample(controller)
+
+    def sensor_surfaces(self):
+        if self.is_optical:
+            from wowskin_lab.core.optical_physics import surfaces
+            return surfaces(self)
+        return np.array([self.to_world(np.array([0., 0., self.cfg['total_height_m']]), b)
+                         for b in (self.mount_body, self.passive_mount)])
+
+    def pad_forces(self):
+        if self.is_optical:
+            from wowskin_lab.core.optical_physics import contact_state
+            return np.array([contact_state(self, s)['normal_force_n'] for s in ('left','right')])
+        from wowskin_lab.core.grip_force import pad_normal_forces
+        return pad_normal_forces(self.model, self.data, (self.skin_flex, self.passive_flex))
 
     def gripper_closed_target(self):
         if self.cfg.get('gripper') == 'robotiq_2f85':
@@ -456,9 +478,10 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         row["pollen_probability"] = self.predictor.update(row["magnetic_ut"]) if self.predictor and np.isfinite(row['magnetic_ut']).all() else float("nan")
         row["tug_force_n"] = .5 if self.data.time < self.tug_until else 0.
         row["lift_m"] = max(0., float(row["cube_xyz_m"][2])-self.initial_cube_z)
-        row["gripper_gap_m"] = float(np.linalg.norm(self.to_world(np.array([0., 0., self.cfg["total_height_m"]]))
-                                - self.to_world(np.array([0., 0., self.cfg["total_height_m"]]), self.passive_mount)))
-        row["grasped"] = bool(row["normal_force_n"] > .01 and row["passive_normal_force_n"] > .01)
+        surfaces = self.sensor_surfaces()
+        row["gripper_gap_m"] = float(np.linalg.norm(surfaces[0]-surfaces[1]))
+        target_forces = row.get('target_normal_forces_n', [row['normal_force_n'], row['passive_normal_force_n']])
+        row["grasped"] = bool(np.all(np.asarray(target_forces) > .01))
         row["phase"] = self.phase
         row["episode_id"] = self.episode_id
         row["success"] = bool(row["grasped"] and row["lift_m"] > .06)
@@ -587,6 +610,12 @@ def save_records(rows, output):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(output/"episode.npz", **{key: np.array([r[key] for r in rows]) for key in rows[0]})
+    if 'magnetic_ut' not in rows[0]:
+        with (output/'contact.csv').open('w', newline='') as stream:
+            writer = csv.writer(stream)
+            writer.writerow(['time_s', 'robot_left_force_n', 'robot_right_force_n'])
+            writer.writerows([r['time_s'], r['normal_force_n'], r['passive_normal_force_n']] for r in rows)
+        return
     with (output/"inference.csv").open("w", newline="") as stream:
         writer = csv.writer(stream)
         lift_header = ['lift_m'] if 'lift_m' in rows[0] else []
@@ -638,7 +667,21 @@ def scripted_action(env):
 
 
 def response_configuration(args):
-    cfg = configuration(seed=getattr(args, 'seed', 0))
+    optical = getattr(args, 'sensor_backend', None)
+    if optical:
+        from .optical import optical_configuration
+        cfg = optical_configuration(args, optical)
+        for name in ('reskin_model', 'magnetic_fit', 'pad_backing_contact', 'finger_contact_stop', 'grip_force'):
+            if getattr(args, name, None):
+                raise ValueError(f'{name} is an AnySkin option; cannot apply it to {optical}')
+        cfg['optical_ideal'] = bool(getattr(args, 'ideal', False))
+        cfg['optical_shadow'] = not bool(getattr(args, 'no_fots_shadow', False))
+        depth_range = getattr(args, 'depth_display_max_mm', None)
+        if depth_range is not None and (not np.isfinite(depth_range) or depth_range <= 0):
+            raise ValueError('Optical depth display maximum must be finite and positive')
+        cfg['optical_depth_display_max_mm'] = depth_range
+    else:
+        cfg = configuration(seed=getattr(args, 'seed', 0))
     if getattr(args, 'pad_backing_contact', False):
         cfg['pad_backing_contact'] = True
     # Explicit operational option, not a repair of the deformation model.
@@ -657,7 +700,7 @@ def response_configuration(args):
     cfg['gripper'] = getattr(args, 'gripper', 'panda')
     if cfg['gripper'] == 'robotiq_2f85' and getattr(args, 'grip_force', None) is not None:
         raise ValueError('Robotiq uses the sourced hinge servo; --grip-force is a Panda legacy option')
-    cfg['skin_dof'] = getattr(args, 'skin_dof', 'trilinear')
+    cfg['skin_dof'] = None if optical else getattr(args, 'skin_dof', 'trilinear')
     if cfg['skin_dof'] == 'trilinear':
         cfg.update(skin_model_status='Experimental trilinear interpolation; bounding-box bottom attachment; no internal contact',
                    skin_model_source='https://github.com/google-deepmind/mujoco/blob/3.5.0/model/flex/gripper_trilinear.xml',
@@ -675,21 +718,21 @@ def response_configuration(args):
         cfg['chip_grip_force_n'] = args.chip_grip_force
     if task == 'feeding':
         cfg['feeding_setting'] = getattr(args, 'feeding_setting', 'care_room')
-    if physics_step_us is None and task in ('pick_cube', 'cable', 'feeding', 'peg_insert', 'chip_tray'):
+    if not optical and physics_step_us is None and task in ('pick_cube', 'cable', 'feeding', 'peg_insert', 'chip_tray'):
         # Feeding's recorded 6D spoon motion becomes unstable at 100 us and
         # passes at 50 us with this thin-silicone/contact configuration.
         # This costs throughput; the sensor/control clock remains 100 Hz.
         physics_step_us = 500 if cfg['skin_dof'] == 'trilinear' else (50 if task == 'feeding' else 100)
-    if physics_step_us is not None and physics_step_us > 100 and cfg['skin_dof'] != 'trilinear':
+    if not optical and physics_step_us is not None and physics_step_us > 100 and cfg['skin_dof'] != 'trilinear':
         raise ValueError('Steps above 100 us are tested only with the reduced skin')
-    if task in ('pick_cube', 'peg_insert'):
+    if not optical and task in ('pick_cube', 'peg_insert'):
         # Same full FEM/contact model; sparse CG avoids dense Jacobian work.
         # Keep the selected integration step in acquisition metadata.
         cfg['constraint_jacobian'] = 'sparse'
     if physics_step_us is not None:
         cfg['timestep_s'] = physics_step_us*1e-6
         cfg['timestep_source'] = 'Teleoperation numerical integration setting; 100 Hz sensor clock retained'
-    if getattr(args, 'ideal', False):
+    if not optical and getattr(args, 'ideal', False):
         cfg.update(noise_ut=0., drift_ut_per_s=0., filter_tau_s=0., delay_samples=0)
     if getattr(args, 'grip_force', None) is not None:
         cfg['gripper_control_mode'] = 'legacy_force_limited'
@@ -712,7 +755,8 @@ def demo(args):
     cfg = response_configuration(args)
     env = PandaPickCubeTactileEnv(cfg, pollen=not args.no_pollen)
     from wowskin_lab.ui.tactile import TactileHUD
-    hud = TactileHUD(env)
+    from wowskin_lab.ui.optical import OpticalHUD
+    hud = OpticalHUD(env) if env.is_optical else TactileHUD(env)
     out = Path(args.output)
     out.mkdir(parents=True, exist_ok=True)
     renderer = mujoco.Renderer(env.model, height=600, width=800) if args.render else None
@@ -846,7 +890,10 @@ def viewer(args):
         print(f"Chip force feedback: X/SpaceMouse left enables {env.force_grip.selected_target_n:g} N; Z/right opens; -/= adjusts by 0.01 N; C keeps force loop active. Feedback is MuJoCo pad force, not magnetic uT.", flush=True)
     print('Arm controller: '+env.cfg.get('arm_controller', 'ik_pd'), flush=True)
     print('Finger-to-finger contact stop: '+('ON (open to release)' if env.cfg.get('finger_contact_stop') else 'OFF'), flush=True)
-    print('Pad backing contacts: '+('ON (experimental; extra contact cost)' if env.cfg.get('pad_backing_contact') else 'OFF (legacy model; strong compression remains unresolved)'), flush=True)
+    if not env.is_optical:
+        print('Pad backing contacts: '+('ON (experimental; extra contact cost)' if env.cfg.get('pad_backing_contact') else 'OFF (legacy model; strong compression remains unresolved)'), flush=True)
+    else:
+        print('Optical sensor: '+env.cfg['sensor']+' | Robot left/right fingers | , toggles depth/mask', flush=True)
     if cfg['disable_cartesian_limits']:
         print('Cartesian limits OFF: no workspace, action increment, servo slew or target-lead limits. '
               'Centered input retains the target; focus loss still cancels outstanding motion. '
@@ -860,7 +907,8 @@ def viewer(args):
         print(f"Gripper: local, uncalibrated per-finger drive limit {env.grip_force:.2f} N; "
               "configs/gripper_control.json (--grip-force overrides the initial value)", flush=True)
     from wowskin_lab.ui.tactile import TactileHUD
-    hud = TactileHUD(env)
+    from wowskin_lab.ui.optical import OpticalHUD
+    hud = OpticalHUD(env) if env.is_optical else TactileHUD(env)
     if cable_task and hud.reskin_mode:
         hud.subtitle = 'Experimental cable proxy [uT]'
         hud.footer = 'NOT calibrated | cable/probe mismatch'
@@ -1149,7 +1197,7 @@ def viewer(args):
                     input_status=input_status, recorder=recorder, recording_notice=recording_notice,
                     diagnostics=show_diagnostics, realtime_factor=realtime_factor, loop_hz=loop_hz)
                 if fault:
-                    magnetic_response = ('Forward MLP (experimental)' if env.cfg.get('reskin_model') else
+                    magnetic_response = (env.cfg['sensor'] if env.is_optical else 'Forward MLP (experimental)' if env.cfg.get('reskin_model') else
                         'Dipole + fitted gains' if env.cfg.get('magnetic_fit') else 'Dipole (unfitted)')
                     labels, text = fault_overlay(fault, row, magnetic_response)
                 if not handle.is_running():
@@ -1198,6 +1246,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["viewer", "demo"], nargs="?", default="viewer")
     parser.add_argument("--no-pollen", action="store_true")
+    parser.add_argument("--sensor-backend", choices=("tacto", "digit_fots", "gelsight"), help=argparse.SUPPRESS)
+    parser.add_argument('--no-fots-shadow', action='store_true', help='Disable source FOTS planar shadow for comparison')
+    parser.add_argument('--depth-display-max-mm', type=float, help='Optical preview range only; saved depths remain unchanged')
     parser.add_argument("--render", action="store_true")
     parser.add_argument("--seconds", type=float, default=0.,
                         help='Optional wall-clock limit; 0 runs until P/window close. Exiting interrupts an active recording.')

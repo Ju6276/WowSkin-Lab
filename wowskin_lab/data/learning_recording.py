@@ -25,7 +25,8 @@ class LearningSimRecorder(RawRobotRecorder):
         try:
             self.metadata.update(phase_codes={'0': 'actual pre-roll', '1': 'demonstration', '2': 'actual post-roll'},
                                  pre_roll_samples=61, post_roll_samples=20,
-                                 algorithm='none; select ViSk or FTF at export time',
+                                 algorithm=('none; optical image policy adapter required' if self.optics else
+                                            'none; select ViSk or FTF at export time'),
                                  joint_recording='measurements.h5: arm_qpos (rad), arm_qvel (rad/s), joint order in metadata')
             self._metadata()
             # Genuine observations for FTF's 40-sample tactile history and

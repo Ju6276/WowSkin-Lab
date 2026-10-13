@@ -124,6 +124,9 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
                (' | A:-Y D:+Y' if env.cfg.get('teleop_frame') == 'base' and env.cfg.get('teleop_base_lateral_sign') == 1. else '')+
                ' | local workspace '+
                ('OFF' if env.cfg.get('disable_workspace_limits') or env.cfg.get('disable_cartesian_limits') else 'ON (H: bounds)')]
+    if getattr(env, 'is_optical', False):
+        labels += ['Sensor']
+        values += [env.cfg['sensor']+' | robot LEFT / RIGHT | , depth/mask']
     if env.cfg.get('arm_controller') == 'cartesian_impedance':
         labels += ['Arm control']
         values += ['Cartesian impedance (SERL++)']
@@ -160,13 +163,14 @@ def operator_overlay(env, row, *, title, input_kind, input_status, recorder,
         labels += ['Workspace [world m]']
         values += ['OFF' if np.isinf(bounds).all() else
                    ' | '.join(f'{axis} {lo:g}..{hi:g}' for axis, lo, hi in zip('XYZ', *bounds))]
-        model = ('Forward MLP (experimental)' if env.cfg.get('reskin_model') else
+        model = (env.cfg['sensor'] if getattr(env, 'is_optical', False) else 'Forward MLP (experimental)' if env.cfg.get('reskin_model') else
                  'Dipole + fitted gains' if env.cfg.get('magnetic_fit') else 'Dipole (unfitted)')
-        labels += ['Magnetic model', 'Gripper', 'Finger load [N]', 'Mesh min V/V0',
+        labels += ['Sensor model', 'Gripper', 'Finger load [N]', 'Mesh min V/V0',
                    'Real time', 'Physics / sensor', 'Target XYZ [m]']
         values += [model, env.cfg['gripper_control_mode'],
                    f"L {row['normal_force_n']:.3f} | R {row['passive_normal_force_n']:.3f}",
-                   f"L {row['min_volume_ratio']:.3f} | R {row['passive_min_volume_ratio']:.3f}",
+                   ('N/A: source rigid contact' if getattr(env, 'is_optical', False) else
+                    f"L {row['min_volume_ratio']:.3f} | R {row['passive_min_volume_ratio']:.3f}"),
                    f'{realtime_factor:.2f}x | {loop_hz:.1f} updates/s',
                    f"{row.get('physics_and_sensor_wall_s', 0.)*1000:.1f} ms | "
                    f"{row.get('total_contacts', 0)} contacts / {row.get('constraint_rows', 0)} constraints",

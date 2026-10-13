@@ -137,11 +137,13 @@ class InputChecks(unittest.TestCase):
             action, moving = manual_action(env, keys.sample().held, moving, camera_azimuth=135)
             env.step(action)
         end = env.data.site_xpos[env.tcp_site].copy()
-        forward = view_translation([0, 1, 0], 135)
+        # Default teleoperation is robot-base aligned, independent of the
+        # camera. The old assertion still assumed the removed view default.
+        forward = np.array([1., 0., 0.])
         distance = np.dot(end-start, forward)
         self.assertGreater(distance, .03)
         self.assertLess(distance, .045)
-        self.assertLess(abs(np.dot(end-start, view_translation([1, 0, 0], 135))), .001)
+        self.assertLess(abs((end-start)[1]), .001)
         keys.event(ord('W'), False)
         release = end.copy()
         for _ in range(50):

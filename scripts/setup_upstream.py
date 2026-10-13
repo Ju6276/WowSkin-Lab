@@ -17,7 +17,7 @@ def main():
     parser.add_argument('--only', nargs='+', choices=list(manifest), help='Fetch only selected repositories')
     args = parser.parse_args()
     folders = dict(visk='visuoskin', ftf='feel-the-force', franka='franka_xbox', openteach='Open-Teach',
-                   tacto='mujoco-tacto', fots='FOTS', gelsight_mujoco='GelSightMujoco')
+                   tacto='mujoco-tacto', fots_mujoco='FOTS-mujoco', gelsight_mujoco='GelSightMujoco')
     selected = set(args.only or manifest)
     if 'visk' in selected:
         selected.add('openteach')  # The original XArm environment imports its network helpers even offline.
@@ -25,7 +25,7 @@ def main():
         if name not in selected:
             continue
         parent = ROOT/'third_party'/('dependencies' if name == 'openteach' else 'official')
-        if name in ('franka', 'tacto', 'fots', 'gelsight_mujoco'):
+        if name in ('franka', 'tacto', 'fots_mujoco', 'gelsight_mujoco'):
             parent = ROOT/'third_party'
         directory = parent/folders[name]
         if not directory.exists():

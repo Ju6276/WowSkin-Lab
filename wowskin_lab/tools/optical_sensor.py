@@ -1,4 +1,4 @@
-"""Complete upstream optical pipelines and same-state DIGIT comparison."""
+"""Source optical sensor pipelines on standalone fixtures and Panda."""
 import argparse
 from contextlib import nullcontext
 import json
@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from wowskin_lab.envs.optical import OpticalBench, OpticalPandaEnv
 
 
-def panel(frames, *, depth_max_mm=None, show_mask=False, scale_label=None):
+def panel(frames, *, depth_max_mm=None, show_mask=False, scale_label=None, mask_key='M'):
     """Shared, labelled depth contrast for display only; never alter raw frames."""
     if any(name.endswith(' / TACTO') for name in frames) and any(name.endswith(' / FOTS') for name in frames):
         # Side by side, both with the same labelled depth scale. RGB and
@@ -50,6 +50,7 @@ def panel(frames, *, depth_max_mm=None, show_mask=False, scale_label=None):
         draw.text((4, y+3), f'{label}: RGB', fill=color)
         depth_title = {'tacto_force_adjusted_optical': 'Force+geom. (um)',
                        'tacto_geometric_optical': 'Optical depth (um)',
+                       'fots_author_perspective_depth': 'Source depth (um)',
                        'geometric_overlap': 'Geom. overlap (um)',
                        'legacy_camera_surface_offset': 'Surface offset (um)'}.get(frame.depth_model, 'Depth (um)')
         draw.text((column_width+4, y+3), 'Contact mask' if show_mask else depth_title, fill='white')
@@ -71,9 +72,11 @@ def panel(frames, *, depth_max_mm=None, show_mask=False, scale_label=None):
         mode = scale_label or ('AUTO shared' if depth_max_mm is None else 'FIXED')
         draw.text((4, y+351), f'{mode}: {lo*1e6:.2f}..{hi*1e6:.2f} um', fill='#8bd0e7')
         draw.text((4, y+376), f'Max: {frame.indentation_m.max()*1e6:.2f} um | Normal: {frame.normal_force_n:.3f} N', fill='white')
-        draw.text((4, y+401), 'M: depth / mask', fill='#8bd0e7')
+        draw.text((4, y+401), f'{mask_key}: depth / mask', fill='#8bd0e7')
         if frame.valid_mask is not None and not frame.valid_mask.all():
             draw.text((column_width+4, y+401), 'Blue-gray: outside gel', fill='#8bd0e7')
+        if frame.marker_status == 'multiple_bodies_unsupported':
+            draw.text((column_width+4, y+401), 'Flow unavailable: multi-body', fill='#ffbc64')
         if frame.marker_displacement_px is not None:
             displacement = np.linalg.norm(frame.marker_displacement_px, axis=-1).max()
             draw.text((column_width+4, y+401), f'Marker max: {displacement:.3f} px (raw)', fill='white')
@@ -105,6 +108,7 @@ def demo(env, optics, destination, *, depth_max_mm=None):
             arrays[f'{side}_normal_force_n'] = frame.normal_force_n
             arrays[f'{side}_render_depth_unit'] = frame.render_depth_unit
             arrays[f'{side}_depth_model'] = frame.depth_model
+            arrays[f'{side}_marker_status'] = frame.marker_status
             if frame.render_input_depth is not None:
                 arrays[f'{side}_render_input_depth'] = frame.render_input_depth
                 arrays[f'{side}_render_deformation'] = frame.render_deformation
@@ -235,12 +239,13 @@ def viewer(env, optics, input_kind, *, depth_max_mm=None):
                             hand_rotation = env.data.xmat[env.hand].reshape(3, 3)
                             for side, sign, color in (('left', 1, [.39, .86, 1, 1]),
                                                       ('right', -1, [1, .74, .39, 1])):
-                                gel = env.model.geom(env.sensors[side][1]).id
+                                gel_name = env.sensors[side][1]
+                                gel = env.model.geom(gel_name if isinstance(gel_name, str) else gel_name[0]).id
                                 position = env.data.geom_xpos[gel]+sign*.04*hand_rotation[:, 1]
                                 TaskGuides._geom(scene, mujoco.mjtGeom.mjGEOM_SPHERE, [.0015]*3,
                                                  position, np.eye(3), color, 'L' if sign == 1 else 'R')
                     handle.set_texts([(mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT,
-                        optics.label+' optical preview\n'+message+'\nR reset | P exit | No dataset recording', '')])
+                        optics.label+'\n'+message+'\nR reset | P exit | No dataset recording', '')])
                     if handle.is_running():
                         handle.set_images([(mujoco.MjrRect(viewport.left+viewport.width-w-10,
                                            viewport.bottom+10, w, h), pixels)])
@@ -260,31 +265,24 @@ def main(argv=None, *, mounted=False, sensor='tacto'):
     parser.add_argument('--ideal', action='store_true', help='Disable source random noise (TACTO RGB / GelSight texture); FOTS is deterministic')
     parser.add_argument('--depth-display-max-mm', type=float, default=None,
                         help='Fixed grayscale maximum in mm; default auto contrast shared by both fingers. Display only.')
-    if sensor in ('tacto', 'digit_compare'):
+    if sensor == 'tacto':
         parser.add_argument('--tacto-config', type=Path, help='TACTO YAML for camera/lights/noise/force settings')
         backgrounds = parser.add_mutually_exclusive_group()
         backgrounds.add_argument('--tacto-background', type=Path, help='Real empty-contact image; default upstream DIGIT background')
         backgrounds.add_argument('--no-tacto-background', action='store_true', help='Pure optical rendering without background calibration')
-    if sensor in ('fots', 'digit_fots', 'digit_compare'):
+    if sensor == 'digit_fots':
         parser.add_argument('--no-fots-shadow', action='store_true', help='Disable the original FOTS planar shadow for comparison')
     parser.add_argument('--demo', action='store_true', help='Run physical contact/unload without a GUI')
-    if sensor == 'digit_compare' and not mounted:
-        parser.add_argument('--compare-data', action='store_true', help='Record matched sphere/box/cylinder trajectories and compare native outputs')
     parser.add_argument('--output', type=Path, default=Path('outputs/diagnostics')/sensor)
     args = parser.parse_args(argv)
     if args.depth_display_max_mm is not None and (not np.isfinite(args.depth_display_max_mm) or args.depth_display_max_mm <= 0):
         parser.error('--depth-display-max-mm must be finite and positive')
-    if getattr(args, 'compare_data', False):
-        from .optical_compare import compare
-        return compare(args.output, ideal=args.ideal, shadow=not args.no_fots_shadow,
-                       config_path=args.tacto_config,
-                       background=None if args.no_tacto_background else (args.tacto_background or 'upstream'))
     env = OpticalPandaEnv(args, sensor=sensor) if mounted else OpticalBench(sensor=sensor, probe_shape=args.probe_shape)
     from wowskin_lab.core.optical_backends import make_optics
     options = {}
-    if sensor in ('fots', 'digit_fots', 'digit_compare'):
+    if sensor == 'digit_fots':
         options['shadow'] = not args.no_fots_shadow
-    if sensor in ('tacto', 'digit_compare'):
+    if sensor == 'tacto':
         options.update(background=None if args.no_tacto_background else (args.tacto_background or 'upstream'),
                        config_path=args.tacto_config)
     optics = make_optics(env, sensor, ideal=args.ideal, **options)

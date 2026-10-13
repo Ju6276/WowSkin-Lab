@@ -19,6 +19,7 @@ from .instructions import episode_instruction
 from .depth import DEPTH_PATH, load_depth_frame
 from .media import video_path, depth_path
 from .cameras import active_cameras, recorded_camera_ids, camera_configuration
+from .optical_recording import OPTICAL_PATH, optical_path, validate_optical
 
 VERSION = '0.3.3'
 FORMAT = 'v2.1'
@@ -39,7 +40,7 @@ def upstream():
     return LeRobotDataset
 
 
-def features(camera_ids=(1, 2, 52)):
+def features(camera_ids=(1, 2, 52), optical=False, optical_rgb_shape=(320, 240, 3)):
     def vector(size, names=None, dtype='float32'):
         return dict(dtype=dtype, shape=(size,), names=names)
     result = {
@@ -60,6 +61,12 @@ def features(camera_ids=(1, 2, 52)):
     for camera in camera_ids:
         result[f'observation.images.camera{camera}'] = dict(
             dtype='video', shape=(480, 640, 3), names=['height', 'width', 'channels'])
+    if optical:
+        result.pop('observation.tactile')
+        result['observation.tactile_contact_force'] = vector(2, ['robot_left_normal_N', 'robot_right_normal_N'])
+        for side in ('left', 'right'):
+            result[f'observation.images.tactile_{side}'] = dict(
+                dtype='video', shape=tuple(optical_rgb_shape), names=['height', 'width', 'channels'])
     return result
 
 
@@ -70,7 +77,7 @@ def signature(meta):
                 camera_configuration=meta.get('camera_configuration'))
 
 
-def gr00t_modalities(camera_ids=(1, 2, 52)):
+def gr00t_modalities(camera_ids=(1, 2, 52), optical=False):
     """Original N1 schema. This is a field map, not a trained VLA adapter."""
     pose = dict(eef_position=dict(start=0, end=3, dtype='float32', absolute=True),
                 eef_rotation=dict(start=3, end=6, dtype='float32', absolute=True, rotation_type='axis_angle'),
@@ -79,9 +86,14 @@ def gr00t_modalities(camera_ids=(1, 2, 52)):
     for name, end in [('joint_position', 7), ('joint_velocity', 7), ('tcp_velocity', 6), ('tactile', 15)]:
         state[name] = dict(start=0, end=end, dtype='float32', absolute=True,
                            original_key=f'observation.{name}')
-    return dict(state=state, action=pose,
+    result = dict(state=state, action=pose,
         video={f'camera{i}': dict(original_key=f'observation.images.camera{i}') for i in camera_ids},
         annotation={'human.action.task_description': dict(original_key=ANNOTATION)})
+    if optical:
+        state.pop('tactile')
+        for side in ('left','right'):
+            result['video']['tactile_'+side] = dict(original_key='observation.images.tactile_'+side)
+    return result
 
 
 def append_raw_episode(source, destination, *, progress=None, finalize=None):
@@ -92,7 +104,8 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
     source, destination = Path(source).resolve(), Path(destination).resolve()
     meta = _validate(source)
     camera_ids = recorded_camera_ids(meta)
-    if meta.get('magnetic_source') != 'fitted_dipole':
+    optical = meta.get('tactile_modality') == 'optical'
+    if not optical and meta.get('magnetic_source') != 'fitted_dipole':
         raise ValueError('LeRobot U1..U5 schema currently requires fitted_dipole; network candidate channels need a separate schema')
     with h5py.File(source/'measurements.h5') as raw:
         if 'tcp_velocity' not in raw:
@@ -104,15 +117,15 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
         raise RuntimeError(f'Previous LeRobot write failed: {pending}. Raw data are preserved; export to a new directory.')
     if destination.exists():
         contract = json.loads(contract_file.read_text())
-        if contract['schema'] not in ('wowskin_lerobot_v3', 'wowskin_lerobot_v4'):
+        if contract['schema'] not in ('wowskin_lerobot_v3', 'wowskin_lerobot_v4', 'wowskin_lerobot_optical_v1'):
             raise ValueError('Earlier LeRobot recording schema; choose a new collection directory (old data are preserved)')
         if {'camera_ids': [1, 2], 'camera_configuration': None, **contract['signature']} != signature(meta):
             raise ValueError('Different control/physics/sensor configuration; choose a separate collection directory')
         ds = Dataset(REPO_ID, root=destination, video_backend='pyav')
     else:
-        ds = Dataset.create(REPO_ID, fps=30, features=features(camera_ids), root=destination,
+        ds = Dataset.create(REPO_ID, fps=30, features=features(camera_ids, optical, meta.get('optical', {}).get('rgb_shape', (320,240,3))), root=destination,
                             robot_type='franka_panda_wowskin', video_backend='pyav', image_writer_threads=2)
-        contract = dict(schema='wowskin_lerobot_v4', lerobot_version=VERSION, format=FORMAT,
+        contract = dict(schema='wowskin_lerobot_optical_v1' if optical else 'wowskin_lerobot_v4', lerobot_version=VERSION, format=FORMAT,
             signature=signature(meta), pose_frame='robot_base', pose_rotation='rotation vector, not RPY',
             state='measured TCP xyz metres + rotvec radians + measured gripper closure',
             action='absolute commanded TCP xyz + rotvec + gripper target issued immediately after the observation',
@@ -131,8 +144,11 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
                 camera_ids=list(camera_ids), includes='One map per camera + masks, timestamps, intrinsics and per-frame base/world extrinsics',
                 compatibility='Extension: not automatically consumed by upstream LeRobot v2.1 or GR00T N1'),
             scope='scripted or teleoperated simulation; uncalibrated tactile; no paper task validation')
+        if optical:
+            contract.update(tactile=meta['optical'], optical_path=OPTICAL_PATH)
+            contract['raw'] = '100 Hz robot/force state and calibration in raw/; task RGB/depth once in LeRobot; native lossless optical arrays plus encoded tactile RGB videos in LeRobot'
         contract_file.write_text(json.dumps(contract, indent=2)+'\n')
-        (destination/'meta/modality.json').write_text(json.dumps(gr00t_modalities(camera_ids), indent=2)+'\n')
+        (destination/'meta/modality.json').write_text(json.dumps(gr00t_modalities(camera_ids, optical), indent=2)+'\n')
     sources = destination/'meta/wowskin_sources.jsonl'
     previous = [json.loads(line) for line in sources.read_text().splitlines()] if sources.exists() else []
     digest = hashlib.sha256((source/'measurements.h5').read_bytes()).hexdigest()
@@ -144,9 +160,12 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
     pending.write_text(f'Packing {source}\n')
     source_videos = [video_path(source, i, meta) for i in camera_ids]
     caps = [cv2.VideoCapture(str(path)) for path in source_videos]
+    optical_file = None
     count, max_clock_offset = 0, 0.
     episode_index = ds.num_episodes
     try:
+        if optical:
+            optical_file = h5py.File(optical_path(source, meta))
         instruction = episode_instruction(meta['task'], meta.get('instruction'))
         if ds.meta.get_task_index(instruction) is None:
             ds.meta.add_task(instruction)
@@ -156,7 +175,7 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
         with h5py.File(source/'measurements.h5') as f:
             times, camera_times = f['timestamp'][:], f['camera_timestamp'][:]
             indices = np.searchsorted(times, camera_times-1e-9)
-            if not np.allclose(times[indices], camera_times, atol=1e-8):
+            if np.any(indices >= len(times)) or not np.allclose(times[indices], camera_times, atol=1e-8, rtol=0):
                 raise ValueError('Camera frame is not synchronous with a raw observation')
             # Preserve every actual RGB frame, including pre/post-roll, so
             # downstream FTF can reuse this single video without padding.
@@ -182,7 +201,6 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
                     'observation.joint_position': f['arm_qpos'][i].astype('float32'),
                     'observation.joint_velocity': f['arm_qvel'][i].astype('float32'),
                     'observation.tcp_velocity': f['tcp_velocity'][i].astype('float32'),
-                    'observation.tactile': f['sensor_states'][i].astype('float32'),
                     'aux.sim_timestamp': np.array([times[i]], dtype='float64'),
                     'aux.action_timestamp': np.array([f['command_timestamp'][next_i]], dtype='float64'),
                     'aux.raw_sample_index': np.array([i], dtype='int64'),
@@ -191,6 +209,12 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
                     'aux.acquisition_phase': np.array([f['phase'][i]], dtype='int64'),
                     ANNOTATION: np.array([instruction_index], dtype='int64'),
                 }
+                if optical:
+                    frame['observation.tactile_contact_force'] = f['optical_contact_force_n'][i].astype('float32')
+                    for side in ('left','right'):
+                        frame['observation.images.tactile_'+side] = optical_file[f'frames/{j:06d}/{side}/rgb'][:]
+                else:
+                    frame['observation.tactile'] = f['sensor_states'][i].astype('float32')
                 for camera, (_, bgr) in zip(camera_ids, decoded):
                     frame[f'observation.images.camera{camera}'] = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
                 if not all(np.isfinite(v).all() for v in frame.values()):
@@ -202,7 +226,7 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
                     progress('SAVING', f'Preparing LeRobot frames {count}/{len(indices)}')
             if any(c.read()[0] for c in caps):
                 raise ValueError('Extra video frames without source timestamps')
-        progress('SAVING', f'Encoding {len(camera_ids)} videos and writing Parquet ({count} frames)')
+        progress('SAVING', f'Encoding {len(ds.meta.video_keys)} videos and writing Parquet ({count} frames)')
         ds.save_episode()
         depth_relative = None
         if meta.get('depth', {}).get('enabled'):
@@ -212,11 +236,17 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
             target = destination/depth_relative
             target.parent.mkdir(parents=True, exist_ok=True)
             _link(depth_path(source, meta), target)
+        optical_relative = None
+        if optical:
+            optical_relative = OPTICAL_PATH.format(episode_chunk=ds.meta.get_episode_chunk(episode_index), episode_index=episode_index)
+            target = destination/optical_relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _link(optical_path(source, meta), target)
         provenance = dict(episode_index=episode_index, source=str(source),
                           source_relative=os.path.relpath(source, destination), sha256=digest,
                           frames=count, max_nominal_clock_offset_s=max_clock_offset,
                           source_method=meta['source'], status=meta['status'],
-                          instruction=instruction, depth_path=depth_relative)
+                          instruction=instruction, depth_path=depth_relative, optical_path=optical_relative)
         if 'task_evaluation' in meta:
             provenance['task_evaluation'] = meta['task_evaluation']
         with sources.open('a') as stream:
@@ -233,6 +263,8 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
         print(f'LeRobot {FORMAT}: {destination}, episode {episode_index}, {count} frames', flush=True)
         return provenance
     finally:
+        if optical_file:
+            optical_file.close()
         for c in caps:
             c.release()
         ds.stop_image_writer()
@@ -261,6 +293,18 @@ def verified_media(source, native, provenance):
             raise ValueError('Do not remove original depth: lossless copy check failed')
         old_files.append(old)
         meta['depth']['path'] = os.path.relpath(target, source)
+    if meta.get('tactile_modality') == 'optical':
+        old, target = optical_path(source, meta), native/provenance['optical_path']
+        with old.open('rb') as a, target.open('rb') as b:
+            if hashlib.file_digest(a, 'sha256').digest() != hashlib.file_digest(b, 'sha256').digest():
+                raise ValueError('Lossless optical copy verification failed')
+        for side in ('left','right'):
+            video = native/ds.meta.get_video_file_path(ep, 'observation.images.tactile_'+side)
+            with av.open(str(video)) as stream:
+                if sum(1 for _ in stream.decode(video=0)) != meta['camera_frames']:
+                    raise ValueError('Optical video frame count differs')
+        old_files.append(old)
+        meta['optical']['path'] = os.path.relpath(target, source)
     meta['lerobot_episode_index'] = ep
     return meta, old_files
 
@@ -299,7 +343,7 @@ class LeRobotSimRecorder(LearningSimRecorder):
             contract_path = self.collection_root/'lerobot/meta/wowskin.json'
             if contract_path.exists():
                 contract = json.loads(contract_path.read_text())
-                if contract['schema'] not in ('wowskin_lerobot_v3', 'wowskin_lerobot_v4'):
+                if contract['schema'] not in ('wowskin_lerobot_v3', 'wowskin_lerobot_v4', 'wowskin_lerobot_optical_v1'):
                     raise ValueError('Older collection schema; choose a new --record-dir, without overwriting old data')
                 from .robot_state import robot_metadata
                 current = dict(simulation_config=self.env.cfg, source=self.source,
@@ -380,14 +424,15 @@ def validate_dataset(directory):
     checked, video_counts, depth_counts = [], {}, {}
     contract = json.loads((root/'meta/wowskin.json').read_text())
     has_depth = contract.get('depth', {}).get('enabled', False)
-    camera_ids = tuple(int(key.rsplit('camera', 1)[1]) for key in ds.meta.video_keys)
+    camera_ids = tuple(int(key.rsplit('camera', 1)[1]) for key in ds.meta.video_keys if '.camera' in key)
     for episode in ds.meta.episodes:
         lo, hi = int(ds.episode_data_index['from'][episode]), int(ds.episode_data_index['to'][episode])
         for index in sorted({lo, (lo+hi)//2, hi-1}):
             sample = ds[index]
-            for camera in camera_ids:
-                image = sample[f'observation.images.camera{camera}']
-                if image.shape != (3, 480, 640) or not torch.isfinite(image).all():
+            for key in ds.meta.video_keys:
+                image = sample[key]
+                h, w, channels = ds.features[key]['shape']
+                if image.shape != (channels, h, w) or not torch.isfinite(image).all():
                     raise ValueError('Invalid official decoded image')
             checked.append(index)
         for camera in ds.meta.video_keys:
@@ -404,6 +449,12 @@ def validate_dataset(directory):
                     raise ValueError('Language annotation does not match task_index')
                 if not ds.meta.tasks[int(row['task_index'])].strip():
                     raise ValueError('Empty task instruction')
+        if contract.get('optical_path'):
+            path = root/contract['optical_path'].format(episode_chunk=ds.meta.get_episode_chunk(episode), episode_index=episode)
+            # HF's numpy formatter casts floating arrays to float32 even for
+            # a float64 feature. Compare original Arrow/Python values instead.
+            times = np.asarray(ds.hf_dataset.with_format(None)['aux.sim_timestamp'][lo:hi], dtype=np.float64).reshape(-1)
+            validate_optical(path, times)
         if has_depth:
             for index in range(lo, hi):
                 row = numeric[index]

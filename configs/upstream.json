@@ -15,9 +15,9 @@
     "url": "https://github.com/utn-air/mujoco-tacto.git",
     "revision": "4c396eb802dcbd1f9e6647a31a011f37006c4fc1"
   },
-  "fots": {
+  "fots_mujoco": {
     "url": "https://github.com/Rancho-zhao/FOTS.git",
-    "revision": "6c930af58f57b22fdec4f442d9c615c311c5ee75"
+    "revision": "4bd82cfc75ad8d600b2008df513b28cf04611610"
   },
   "gelsight_mujoco": {
     "url": "https://github.com/rlamprell/GelSightMujoco.git",

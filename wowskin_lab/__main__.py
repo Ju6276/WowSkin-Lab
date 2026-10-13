@@ -16,6 +16,7 @@ COMMANDS = {
     'whip': 'Published 25-link whip: independent bending/swinging dynamics comparator',
     'brittle-chip': 'Experimental potato chip: prefragmented bodies with load-triggered weld failure',
     'sensor': 'Standalone sensor viewer/demo',
+    'digit-compare': 'Compare native TACTO and FOTS DIGIT models on matched probe commands',
     'franka-bench': 'Mounted sensor probe viewer/demo',
     'pollen': 'Published Pollen checkpoint download/evaluation',
     'reskin-response': 'Local position/depth to magnetic response model using 3D Cal data',
@@ -37,14 +38,29 @@ def main(argv=None):
                      'Use `official status` and docs/LEARNING_WORKFLOWS_ZH.md for the official pipelines.')
     command = parser.parse_args(argv[:1]).command
     rest = argv[1:]
+    optical_backend = None
     if command in ('sensor', 'teleop'):
-        sensor_parser = argparse.ArgumentParser(add_help=False)
-        from .envs.optical import OPTICAL_SENSORS
-        sensor_parser.add_argument('--sensor', choices=('anyskin', *OPTICAL_SENSORS), default='anyskin')
+        sensor_parser = argparse.ArgumentParser(prog=f'python -m wowskin_lab {command}', add_help=False,
+                                                description='Sensor selection; task options follow below.')
+        sensor_parser.add_argument('--sensor', choices=('anyskin', 'digit', 'gelsight'), default='anyskin',
+                                   help='One hardware type per run (default: anyskin)')
+        sensor_parser.add_argument('--optics', choices=('tacto', 'fots'), default=None,
+                                   help='DIGIT renderer (default: tacto); not used by other sensors')
         sensor_args, rest = sensor_parser.parse_known_args(rest)
-        if sensor_args.sensor in OPTICAL_SENSORS:
+        if any(arg in ('-h', '--help') for arg in rest):
+            sensor_parser.print_help()
+        if sensor_args.optics and sensor_args.sensor != 'digit':
+            parser.error('--optics selects the DIGIT algorithm; use --sensor digit')
+        if sensor_args.sensor in ('digit', 'gelsight'):
             from .tools.optical_sensor import main as optical
-            return optical(rest, mounted=command == 'teleop', sensor=sensor_args.sensor)
+            backend = ('digit_fots' if sensor_args.optics == 'fots' else 'tacto') if sensor_args.sensor == 'digit' else 'gelsight'
+            if command == 'sensor' or '--demo' in rest:
+                return optical(rest, mounted=command == 'teleop', sensor=backend)
+            optical_backend = backend
+            rest = ['--sensor-backend', backend, *rest]
+    if command == 'digit-compare':
+        from .tools.optical_compare import main as compare
+        return compare(rest)
     if command == 'dataset-export':
         from .data.dataset_export import main as export_data
         return export_data(rest)
@@ -58,9 +74,9 @@ def main(argv=None):
         from .learning.official import main as official
         return official(rest)
     if command in ('teleop', 'pick-demo'):
-        if not any(a.split('=')[0] == '--skin-dof' for a in rest):
+        if not optical_backend and not any(a.split('=')[0] == '--skin-dof' for a in rest):
             rest = ['--skin-dof', 'trilinear', *rest]
-        if not any(a.split('=')[0] in ('--magnetic-fit', '--reskin-model') for a in rest):
+        if not optical_backend and not any(a.split('=')[0] in ('--magnetic-fit', '--reskin-model') for a in rest):
             rest = ['--magnetic-fit', str(ROOT/'configs/magnetic_fit_pollen_nonslip.json'), *rest]
         task = 'pick_cube'
         cable_layout = 'routing'
@@ -82,7 +98,7 @@ def main(argv=None):
         else:
             rest = ['--no-pollen', *rest]
         if command == 'teleop' and not any(a.split('=')[0] == '--record-dir' for a in rest):
-            directory = 'data/episodes'
+            directory = 'data/episodes'+('_'+optical_backend if optical_backend else '')
             rest = ['--record-dir', str(ROOT/directory), *rest]
         rest = ['viewer' if command == 'teleop' else 'demo', *rest]
         module = 'envs.pick_cube'

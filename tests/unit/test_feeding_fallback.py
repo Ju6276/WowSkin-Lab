@@ -1,5 +1,4 @@
 from collections import deque
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -14,6 +13,7 @@ class FeedingFallbackTests(unittest.TestCase):
     def test_failed_cg_sample_restores_state_and_observation_history(self):
         # Use a tiny real MjModel; no slow scene construction for retry logic.
         env = object.__new__(PandaFeedingEnv)
+        env.is_optical = False
         env.cfg = {"skin_dof": "full"}
         env.model = mujoco.MjModel.from_xml_string('<mujoco><worldbody><body><freejoint/><geom size=".01"/></body></worldbody></mujoco>')
         env.data = mujoco.MjData(env.model)
@@ -45,3 +45,14 @@ class FeedingFallbackTests(unittest.TestCase):
         with patch.object(PandaPickCubeTactileEnv,'sample',side_effect=sample):
             self.assertTrue(env.sample()['valid'])
         self.assertEqual(env.cg_fallbacks,1)
+
+    def test_optical_failure_does_not_switch_the_source_solver(self):
+        env = object.__new__(PandaFeedingEnv)
+        env.is_optical = True
+        env.model = mujoco.MjModel.from_xml_string('<mujoco/>')
+        env.model.opt.solver = mujoco.mjtSolver.mjSOL_CG
+        with patch.object(PandaPickCubeTactileEnv, 'sample', side_effect=RuntimeError('MuJoCo instability/warning')) as sample:
+            with self.assertRaisesRegex(RuntimeError, 'MuJoCo instability'):
+                env.sample()
+        sample.assert_called_once_with(None)
+        self.assertEqual(env.model.opt.solver, mujoco.mjtSolver.mjSOL_CG)

@@ -24,7 +24,7 @@ from wowskin_lab.envs.pick_cube import (
     PandaPickCubeTactileEnv, pick_scene, TABLE_Z, MOTION_KEYS, ROTATE_AXES,
     manual_action, key_command, keyboard_translation, response_configuration,
 )
-from wowskin_lab.envs.franka import apply_free_camera, ViewerStyleGuard, mount_reference
+from wowskin_lab.envs.franka import apply_free_camera, ViewerStyleGuard
 from wowskin_lab.ui.keyboard import ViewerKeyboard, MOVE_AXES, ESC, BACKSPACE
 from wowskin_lab.ui.tactile import TactileHUD
 
@@ -135,6 +135,9 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         if cfg.get('clip_model') == 'elastic_beam':
             from .elastic_clip import configuration as elastic_configuration
             cfg.setdefault('elastic_clip', elastic_configuration())
+            if cfg.get('sensor'):
+                cfg['optical_task_integrator'] = 'discrete'
+                cfg['optical_task_integrator_reason'] = 'MuJoCo discrete stiffness integration for the clip hinge springs; source optical solver/contact/optics otherwise retained. Explicit spring integration diverges at 0.5 ms.'
         elif cfg.get('clip_model', 'rigid') != 'rigid':
             raise ValueError('Unknown clip model')
         self.cable_layout = cfg.setdefault('cable_layout', 'routing')
@@ -159,17 +162,19 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         # full-node model. V/V0=0.15 is only a warning, not a stop. Radius is a NUMERICAL
         # collision thickness (also affects the external contact surface), not
         # a measured silicone thickness or a change to EBiM cable parameters.
-        for key, value in dict(cap_top_inner_fraction=.85, fem_internal_contact=True,
-                               fem_contact_radius_m=.0002, fem_contact_timeconst_s=.0002,
-                               fem_contact_solimp=[.98, .98, .001, .5, 2.]).items():
-            cfg.setdefault(key, value)
+        if not cfg.get('sensor'):
+            for key, value in dict(cap_top_inner_fraction=.85, fem_internal_contact=True,
+                                   fem_contact_radius_m=.0002, fem_contact_timeconst_s=.0002,
+                                   fem_contact_solimp=[.98, .98, .001, .5, 2.]).items():
+                cfg.setdefault(key, value)
         # The default 0.9/0.95 contact impedance lets thin rim tetrahedra
         # compress into the warning range during one-sided cable shear.
         # This is a numerical contact constraint (internal AND external),
         # not measured silicone stiffness. Nonpositive volumes remain invalid.
-        cfg['silicone_numerics'] = 'cable edge-contact mesh + internal constraints; material uncalibrated'
-        if cfg.get('skin_dof') == 'trilinear':
-            cfg['silicone_numerics'] = 'Trilinear reduced skin, bottom nodes pinned; material uncalibrated'
+        if not cfg.get('sensor'):
+            cfg['silicone_numerics'] = 'cable edge-contact mesh + internal constraints; material uncalibrated'
+            if cfg.get('skin_dof') == 'trilinear':
+                cfg['silicone_numerics'] = 'Trilinear reduced skin, bottom nodes pinned; material uncalibrated'
         super().__init__(cfg, pollen=pollen, xml_factory=cable_scene,
                          contact_body='wire_B_last', contact_geom=f'wire_G{self.cable_count-2}', object_joint=None)
         self.contact_geoms = {self.model.geom(f'wire_G{i}').id for i in range(self.cable_count-1)}

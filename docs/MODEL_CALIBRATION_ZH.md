@@ -201,12 +201,7 @@ raw 保存的是处理后的动作；原始输入及逐次裁剪／重锚事件�
 
 ## 触觉仿真与标定文献
 
-相关方法均尚未接入本项目；文献中的保证不能直接归给当前 MuJoCo 后端。
-
-- **TacIPC**（RA-L 2024）：[论文](https://arxiv.org/abs/2311.05843)、[代码](https://github.com/Ailon-Island/TacIPC)。FEM＋IPC 弹性层求解，防接触穿透和单元翻转；可借鉴指腹材料、固定边界与接触算法，输出形变后仍需另建磁场模块。
-- **TACTO**（RA-L / ICRA 2022）：[论文](https://arxiv.org/abs/2012.08456)、[代码](https://github.com/facebookresearch/tacto)。物理引擎与光学触觉渲染分工，生成 DIGIT / OmniTact 图像；适合借鉴软件分层，不负责精确 FEM 接触求解。
-- **DiffTactile**（ICLR 2024）：[论文](https://arxiv.org/abs/2403.08716)、[项目](https://difftactile.github.io/)、[代码](https://github.com/Genesis-Embodied-AI/DiffTactile)。可微 FEM 与多材料接触，包含线材任务和参数辨识；可借鉴实测轨迹拟合、留出验证，但光学观测换成磁场需要新增观测模型。
-- **3D Cal / ReSkin 扩展**：[论文](https://arxiv.org/abs/2511.03078)、[ReSkin 说明](https://rohankotanu.github.io/3DCal/reskin.html)、[代码](https://github.com/rohankotanu/py3DCal)、[数据及权重](https://zenodo.org/records/18462608)。已知 XY / 压入深度采集磁场，官方 MagNet 是 15 路磁场→位置/深度的逆模型。这里的前向 MLP 是本地训练的模型，不是官方前向模型；线材与 WowSkin 迁移尚未验证。
+论文用途、公开代码和本项目接入状态集中在[论文与算法索引](PAPERS_ZH.md)。下面只保留求解器选择和本地模型的具体适配说明；引用论文不表示本项目已获得其精度或物理保证。
 
 ## Mac 上可借鉴的触觉求解器
 
@@ -215,7 +210,7 @@ raw 保存的是处理后的动作；原始输入及逐次裁剪／重锚事件�
 - **IPC Toolkit / PolyFEM**：[IPC Toolkit](https://github.com/ipc-sim/ipc-toolkit) 提供屏障能量、连续碰撞检测、摩擦及导数；它本身没有材料物理或完整求解器。官方建议结合 [PolyFEM](https://polyfem.github.io/)。接入时仍须实现传感器材料、边界与形变到磁场的模型。
 - **TACTO**：[源码与兼容说明](https://github.com/facebookresearch/tacto)。原版使用 PyBullet＋Pyrender，不强制依赖 CUDA，原 GUI 有 macOS 兼容限制。本项目已接入固定版 MuJoCo 移植与 CGL 预览，见下文 DIGIT / TACTO 选项；不等于原 PyBullet 整套示例均已验证。其 RGB / 深度不直接生成 AnySkin 的 15 路磁场，也不能替换硅胶 FEM 接触求解。
 
-TacIPC 和 CPU IPC 路线仍是候选；TACTO 是可选光学预览后端。替换形变求解器后，磁场响应与实物标定仍需要单独处理。
+TacIPC 和 CPU IPC 路线仍是候选；TACTO 已接入 Panda 光学显示与录制。替换形变求解器后，磁场响应与实物标定仍需要单独处理。
 
 ## 脆性薯片预分块试验
 
@@ -255,59 +250,57 @@ MuJoCo 没有设置“玻璃材质”就自动产生裂纹和碎片的内置模�
 
 ## 传感器硬件与光学算法
 
-DIGIT、GelSight 指硬件几何、胶体、相机和照明；TACTO、FOTS 指生成触觉观测的方法。两种算法都能服务于同一种硬件，不能用算法名推断硬件种类。
+硬件和算法分开选择：`--sensor digit --optics tacto|fots`、`--sensor gelsight`。`digit-compare` 是独立比较工具。旧平面代理、正交深度、自定义材料点重锚与多物体 marker 叠加均已移除。
 
-- [TACTO](https://github.com/facebookresearch/tacto)：根据物体网格／位姿、胶面、内部相机和灯光进行三维渲染，再处理背景和噪声；包含力相关的光学位姿调整近似，输出 RGB 和深度。原版没有 FOTS 那套膨胀／剪切／扭转标记运动模型。官方明确不保证接触形变和摩擦动力学精确。
-- [FOTS](https://github.com/Rancho-zhao/FOTS)：从接触深度求表面法线及位置，由实测标定训练的 MLP 生成颜色，另有阴影与标记运动模型。它不限定物理引擎；[作者 MuJoCo 模型](https://github.com/Rancho-zhao/FOTS/blob/FOTS-mujoco/assets/gel/digit_sensor.xml) 的硬件是 DIGIT，主分支示例加载的是 GelSight 标定。两者不能混为一套硬件模型。
+DIGIT 两条路径分别来自作者的不同模型，不强行共用 CAD、接触参数或相机。光学配置只读取 `configs/optical.json` 与 Panda 控制配置，**不读取 AnySkin 材料／磁场参数**。作者源码、权重与 CAD 分开下载，版本及文件 SHA256 见 `assets/reference/tacto/manifest.json` 和 `assets/reference/fots/manifest.json`。
 
-本项目 `tacto` 与 `digit_fots` 共享 DIGIT CAD／物理参数，`digit_compare` 在同一 MuJoCo 状态下同时运行两者；`gelsight` 使用独立 GelSightMujoco 原模型。旧 `fots` 保留平面代理和作者 GelSight 标定。比较时保留各算法的原投影、背景和深度生成方法，并显式标注差异，不能把原生输出差异当作实物误差。单独替换 RGB 渲染器不会补齐胶体力学。
+**安装与运行适配，以下不是厂家硬件设计：**
+
+- 保留 Panda 手掌、两指滑动关节与行程。TACTO 是完整长指组件，GelSightMujoco 是带长安装尾部的完整外壳，两者替换原短指几何与惯量；FOTS 是独立模块，保留原指并在末端固定连接。源模块质量与惯量计入运动链。名义全开时两侧源接触参考平面相距 80 mm，曲面胶层各处的可视间距不等于这个常数；TCP 移到参考平面之间。没有裁剪支架、缩放壳体、重造胶面或用包围盒估计惯量。此装配尚未制造实物。
+- 安装轴由两份源 CAD 分别确定：TACTO 的圆弧端是源 −Z，FOTS 的圆弧端是源 −X；均映射到 Panda finger 的 +Z（远离手掌）。TACTO 源 +Y、FOTS 源 +Z 的感应面法向均映射到 finger −Y，两指相向。这是本地刚性安装变换，不能称为来源仓库的 Franka 支架设计；相机与胶面内部相对位姿不变。
+- 名称加前缀，碰撞 bit 映射到任务场景；有效接触参数先在隔离模型编译，再明确写入，避免继承 Panda 或 AnySkin 默认值。原相机随完整本体移动。
+- Panda 控制仍为项目的 IK／关节 PD 与任务原夹爪位置伺服（方块／喂食／薯片为 Menagerie，线材／Peg 为 robosuite 配置）。机器人场景保留重力 −9.81 m/s²；不沿用 FOTS 无重力按压装置或 TACTO 按压装置的重力补偿。
+- 运行时间步为 0.5 ms。独立诊断探头为 5 mm 球或相近尺度方体／圆柱、20 g、位置伺服 kp=3000、kv=2√(3000×0.02)−1≈14.492，另有 joint damping=1 N·s/m，合计为临界阻尼；该小惯量六轴装置用 implicitfast 积分，属于测试夹具，不是传感器参数。Panda 的源求解器选择不被该夹具覆盖。临界阻尼用于限制测试伺服超调；球／方体／圆柱按压和卸载由独立测试覆盖，不修改传感器薄层或关闭外壳碰撞。
+- `cable --clip-model elastic_beam` 是明确的任务积分例外：原积分器显式处理高刚度卡扣关节弹簧时在 0.5 ms 步长发散，改用 MuJoCo `discrete` 积分。保持来源 Newton 设置、传感器接触参数、卡扣弹簧与碰撞不变。该选择和原因写入采集配置，不改变其它任务。复杂 Peg 分配 128 MiB 求解 arena，避免源多片碰撞模型溢出；不删除接触。
+- Mac 仅替换 OpenGL 上下文；私有导入处理旧包路径、CPU checkpoint、NumPy 2 的 `mat` 兼容，不修改上游文件。当前引擎与作者旧 `mujoco_py` 的跨版本接触轨迹尚无逐帧等价证明。
 
 ## DIGIT / TACTO 光学选项
 
-`--sensor tacto` 使用固定版 [utn-air/mujoco-tacto](https://github.com/utn-air/mujoco-tacto)，输出内部相机 RGB 与相对空载面的深度。支持独立按压台和 Panda 双指方块预览；安装和启动见 README，源文件摘要见 [manifest](../assets/reference/tacto/manifest.json)。
+使用 [mujoco-tacto](https://github.com/utn-air/mujoco-tacto/tree/4c396eb802dcbd1f9e6647a31a011f37006c4fc1) `touch_playground_rot.xml` 的完整两网格传感器／长支架和四个接触垫。根部质量 15 g 与惯量直接来自 XML，其余 body 采用源编译值；不使用 standalone URDF 的占位惯量。胶面网格摩擦 `1 .005 .0001`，四垫摩擦 `2 .05 .0001`，均保留有效 source defaults。求解采用来源 Newton／100、implicitfast、elliptic cone、impratio=20、noslip=5、multiccd，容差来自示例 1e-8。
 
-**指尖安装。** 使用作者 `meshes/digit.STL` 独立模块（长约 34 mm），不使用 `digit_stub_full` 长柄手指。读取 STL 连通分量，沿原生 +X 最外侧分量识别曲面胶体，其余分量组成外壳；不缩放网格。原生 +X 感应法向转为手指局部 −Y，近端接在原手指网格最远端（Z≈53.9 mm），感应面顶点保持 Y=0。两指对称，保留原金属／黑色指垫、所有原碰撞、惯量及滑动关节行程，张开时两感应面约 80 mm。新增固定模块的质量和惯量计入运动链；TCP 位于两胶面中心之间，手掌坐标 Z≈129.0 mm。这是本地装配，尚未制造或验证实际安装支架。
+Renderer、`config_digit.yml` 默认平面光学胶面、内部相机／灯光、背景差分、平滑、随机 RGB 噪声和力相关光学位移均执行原代码；不再覆盖 `_generate_gel_trimesh`。240×320 背景为原 `bg_digit_240_320.jpg`。原力映射为 0–100 N 对应 0–5 mm 光学位移，不是夹爪限力；原噪声 N(0,7)，`--ideal` 关闭随机噪声。
 
-**质量与接触。** 模块质量 0.1 kg 来自上游 `digit.urdf`；其惯量写成 1 kg·m² 占位值，未照搬。当前按同质量均匀包围盒计算惯量，非实测。外壳／胶面分别采用 MuJoCo 网格凸碰撞；曲面胶体是刚体，没有 FEM。触面摩擦沿用任务配置（默认 0.6）、`solref=.002 1`，不是 DIGIT 材料标定。原 Panda IK＋关节 PD、Menagerie 夹爪位置伺服不变，物体靠接触摩擦抓取。
+必要的注册：由源接触垫前平面与配置中的 22 mm 光学距离建立刚性相机坐标系。源 `Sensor` 的全局 Euler 加角／坐标反号不适用于任意移动的双指，因此使用完整 SE(3) 变换和 `mj_contactForce` 的法向力聚合；相机只做刚性坐标注册，不换光学投影。多个胶面碰撞 geom 汇总到同一 sensor，同一物体多个接触点按力求和。允许任意接触物体，不设任务目标白名单。
 
-**DIGIT 接触求解。** 独立台和 Panda 的 TACTO／FOTS 共用来源 `mujoco-tacto/examples/xml/tacto_common.xml` 的 Newton（默认）、100 次迭代（默认）、`impratio=20`、`noslip_iterations=5`、elliptic cone 和 multiccd。`impratio` 是切向／法向约束阻抗比，`noslip_iterations` 是摩擦约束后处理次数；均属于数值求解设置，不是增大摩擦系数、锁定物体或限定 marker 输出。原 AnySkin CG/30、impratio=1、noslip=1 配置不用于这套刚性 DIGIT 接触。两套算法共享这些设置，时间步仍为 0.5 ms。悬空保持回归验证 60 秒的物体位移与双侧 marker，不只检查刚抬起来的一帧。
+每指 RGB、深度、相机深度、空载深度、有效区、接触区、力与时间戳分别输出。TACTO 原版不提供 FOTS 的 marker motion；界面不假造第三张流图。原函数独立进程对照、噪声统计、整体旋转、多接触、源机械参数、完整替换长指／保留开口、物理夹持和释放均有测试。
 
-**空夹闭合。** 当前光学 Panda 未增加闭合间隙或接触停闭。两指仍可各走完 40 mm 行程，使相对胶面顶点所在平面接近重合。DIGIT 胶面是曲面，外壳前缘在胶面顶点后方约 4.07 mm；两模块外壳之间仍可见约 8.14 mm 间隙，这不等于夹爪没有闭合。到达位置目标时，伺服误差和驱动力会趋近零，因此“到达全闭行程”不证明两胶面已有持续挤压力。TACTO 的光学力近似不负责限制夹爪行程。
+## DIGIT / FOTS 原生 MuJoCo 路径
 
-**光学。** 原 TACTO `Renderer` 的相机、灯光、渲染、背景处理、噪声与力近似沿用；默认与上游示例一样采用 240×320 分辨率和 `bg_digit_240_320.jpg`。背景校正执行作者的 0.5 倍差分及 7×7 高斯平滑，再叠加真实背景，不是本地拟合增益。胶面使用同一 CAD 朝向接触区的曲面，变换到内部相机系并翻面以从内部观察；替代默认平面，也不执行上游可选 mesh 加载器的 1.02 放大。上游力近似将 0–100 N 线性映射到最多 5 mm 的物体光学位姿调整；该上限不限制物理力。默认 RGB 噪声为每帧重新采样的 N(0,7)，`--ideal` 仅关闭随机噪声，不能消除背景固有纹理。深度为当前渲染相对空载曲面之差；显示默认共用两指的自动范围并标明 µm，支持固定范围，均不裁剪数值数组。接触区域为有效胶面内的正光学压深像素；按 M 与深度图切换，不作为独立测力传感器。曲面边缘外的相机射线可能没有空载胶面深度，不能将渲染器的 0 背景值当作位于相机原点的胶面。`valid_mask` 标出有效区域，区域外 `indentation_m` 用 0 占位并显示蓝灰色，不参与接触标记；原始 `camera_depth_m` 和 `baseline_depth_m` 同时保留，可重算有效区的深度差。
+固定 [FOTS-mujoco 分支](https://github.com/Rancho-zhao/FOTS/tree/4bd82cfc75ad8d600b2008df513b28cf04611610)，不使用主分支光学外接本地正交深度。完整导入 `digit_sensor.xml`：外壳、玻璃、胶体、曲面光学表层、摩擦层、30° 透视相机及参考 site；保留源 CAD、质量／编译惯量和接触参数。Panda 使用该来源默认 Newton／100／Euler、noslip=0，不借用 TACTO 或 AnySkin 的求解设置。源 solimp 超范围值由 MuJoCo 自身按引擎规则处理。
 
-**验证和边界。** 已有直接执行原 Renderer 的 RGB／深度／背景对照、噪声统计、原手指／行程保留、刚体旋转一致性、多物体接触、球压入／卸载、方块物理夹起／松开测试。真实 DIGIT 光学／力标定仍需独立数据；论文完整任务实验不是此次 sensor 接入的完成条件。独立台球半径 5 mm、质量 0.02 kg、位置伺服 kp=3000、kv=5，都是诊断设置。Mac CGL 只替换图形上下文初始化，不修改上游文件。原始传感器模型与 TACTO 渲染方法是不同层次；FOTS 也能用于 DIGIT，命令名称表示本项目当前的组合。
+原 `env_test.py` 流程：内部相机 RGB 渲染后读取 legacy OpenGL 深度，左右翻转 `fliplr`；原 `ini_depth_extent.npy` 基线、`ini_bg_mlp.npy`、`digit_bg.npy`、`mlp_n2c_r.pth` 原样使用。内部裁剪面固定为来源 extent=1 对应的 0.001／1000 m，不受外部房间大小影响。`MLPRender.generate` 内部会修改基线数组，因此与作者每帧新建 renderer 的生命周期一致，每帧传基线副本，权重只加载一次。
+
+FOTS 原平滑、法线／坐标 MLP、RGB、阴影与 `MarkerMotion` 全部执行。marker 使用各 sensor 参考 site 到接触物体 body 的相对位置／Rodrigues 旋转，保存初始与当前端点，**不对每帧位移重复积分**。原函数只用两个端点，故无需无限保存中间轨迹。失去接触、接触物体改变或 reset 时重建轨迹；无定时清零、流值限幅或局部锚点重置。保留源整数像素剪切、±50° twist 限制与 k=5 的箭头绘法，原始位移 `9×11×2` 不放大。
+
+多物体的 RGB／深度可以渲染，但所接入 MuJoCo 示例的剪切／扭转计算只接受一条刚体相对位姿轨迹。若同时接触多个 body，`marker_status=multiple_bodies_unsupported`，marker 数组缺省并在 UI 提示，不用本地叠加近似替代。`no_contact` 时保留源基线残差产生的光学／膨胀结果，不自动补零。
+
+输出区分 `render_input_depth`（无量纲非线性 OpenGL 缓冲）、`render_deformation`（原基线减缓冲）、`camera_depth_m` 与 `baseline_depth_m`（按裁剪面反投影的米制深度）、`indentation_m`（米制差）。源光学表层与摩擦层的间距会产生约 2 mm 图像深度，不能解释为已标定弹性压缩。实测本机空载约 4 µm 残差保留，显示比例不改数值。
+
+源函数 RGB／阴影／流图逐像素对照、原场景深度读回对照、相机裁剪独立性、按压／平移／扭转／卸载、保持同状态重复渲染与 Panda 夹持均可重跑。源接触求解仍可能产生微小数值滑移；不能要求有真实相对运动时 marker 不变，也不会通过冻结输出使测试通过。
 
 ## DIGIT 双算法比较
 
-`digit_fots` 使用与 TACTO 完全相同的独立 DIGIT CAD、指尖安装、关节、质量、碰撞与控制器。FOTS 主分支中的 `mlp_n2c_digit.pth`、`digit_bg.npy`、`ini_bg_fots_digit.npy` 和注释中的 DIGIT 标记网格被实际加载；不是将 GelSight 权重改名。原 MLP、平滑、平面阴影、MarkerMotion 都执行。数据为 RGB `320×240×3`、米制光学深度 `320×240`、标记位移 `8×9×2`。原膨胀／剪切／扭转系数和原流图箭头绘法保持不变，数值位移不放大。来源及 SHA256 见 [FOTS manifest](../assets/reference/fots/manifest.json)。
+`python -m wowskin_lab digit-compare --ideal` 对两套独立原模型施加相同探头指令，依次测试空载、按压、平移、扭转、倾斜、释放、再次接触和最终释放。球／方体／圆柱各 80 帧，10 Hz 采样；**物理状态和接触力不强制相等**。
 
-FOTS 的深度由同一 CAD 的曲面作为空载面，按来源 `19.58 px/mm` 正交投影，计算接触物体与曲面的重叠。它不使用 TACTO 的力相关光学位移。为了保持两种方法可核查，没有用 TACTO 的深度替换 FOTS 输入，也没有调整两者倍率。
+每种探头保存 `frames.npz`、`metrics.csv`、`comparison.mp4` 与阶段 PNG。NPZ 的 `tacto/`、`fots/` 分别保存状态、指令、RGB、原始深度／基线、有效区／接触区、法向力、marker 状态和耗时；FOTS 另存 native 深度缓冲与标记流／数值位移。报告记录源码版本与各阶段结果。Panda `--demo` 单独保存真实接触夹起／抬升／释放过程，无 weld 附着。
 
-FOTS 轨迹适配以实际接触像素的物体表面三维点为锚点，包含真实表面 Z 和像素中心位置。锚点随物体变换；若滚动后该材料点离开胶面体积或可见窗口，即使同一 geom 仍接触，也从当前接触区建立新锚点。固定姿态下经过多少时间都不会自动增加位移或定时清零。此接触历史规则属于本地适配，未改作者的标记公式；它不等于完成胶体黏滑本构建模。主视图 L／R 固定对应手掌 +Y／−Y，不是屏幕左右。
-
-`depth_model` 区分 `tacto_force_adjusted_optical`、`geometric_overlap` 和 `legacy_camera_surface_offset`。TACTO 默认在 100 N 对应 5 mm 的光学位移映射下，约 1 N 增加约 50 µm 朝内部相机方向的位移；所以当前方块夹持可能显示 TACTO 约 61 µm、FOTS 约 12 µm。两者投影也不同；这一差值不说明哪种材料模型更准确。只比较光学渲染器时，需要另做统一输入表面的对照，不能把原生双管线比较误称为该对照。
-
-`digit_compare` 只有一个物理环境，每个采样时刻先后调用两种算法，检查时间、接触 geom 和法向力一致。TACTO 原透视相机与 FOTS 的标定正交窗口不同，因此两幅原生图不是逐像素配准的。默认双算法共用显示深度范围，显示不同强弱是保留真实输出差异；不能直接用 RGB RMSE 宣称哪种更准确。
-
-`--compare-data` 在球、长方体、圆柱探头上分别执行：空载、按压、平移、扭转、倾斜、释放、再次接触、最终释放。积分步长 0.5 ms，控制 100 Hz，输出采样 10 Hz，每种探头 80 帧。探头通过关节位置伺服运动，不覆盖 qpos 制造压入，不焊接探头／物体。位置 kp=3000 N/m、kv=5 N·s/m；旋转 kp=1 N·m/rad、kv=.02 N·m·s/rad 是公开的本地诊断装置参数，不是传感器材料标定。主变量为传感器光学后端，物理运动完全共享。
-
-每个形状目录包含：
-
-- `frames.npz`：`time_s`、`stage`、6 维 `qpos/qvel/ctrl`、探头世界位置／旋转；`tacto/` 与 `fots/` 下的原始 RGB、`indentation_m`、`camera_depth_m`、`baseline_depth_m`、`contact_mask`、`valid_mask`、`contact_geom_mask`、`normal_force_n`、渲染耗时；FOTS 另存原始标记位移和流图。
-- `metrics.csv`：逐帧力、最大压深、有效区接触比例、相对各自空载图的 RGB 变化及耗时。RGB 变化衡量响应大小，不是对实物的精度。
-- `comparison.mp4` 与阶段 PNG：左右并排显示原生输出，保留宽高比，共享深度显示范围。
-- 总目录 `report.json`：参数、源码版本、各阶段末三帧统计、geom／joint 名称和力差检查。
-
-数据用于验证和比较传感器接口，独立于 LeRobot 训练数据。`--demo` 另提供 Panda 物理夹取／抬升／释放测试。源码对照测试直接独立运行作者的 DIGIT 模型，逐像素比较 RGB、阴影、标记流；多姿态序列检查接触历史和释放恢复。
-
-**如何判断优劣。** [FOTS 论文 Table I](https://arxiv.org/html/2404.19217v2#S4.T1) 在作者真实 DIGIT 图像上报告：TACTO 的 MSE 为 201.872、SSIM 为 0.798；50 张标定图像训练、带阴影的 FOTS 为 52.451、0.894。作者对实物与仿真图像做了人工配准；这是对应硬件／标定与评价设置下的图像相似度结果，不是本机复测，也不是接触力精度。Table III 的 CPU 速度测试与本机 OpenGL／PyTorch 运行路径不同，不能直接套用。这里的同状态比较可以检查响应、释放恢复、数据接口和耗时；没有配对真实观测或同一策略的任务测试时，不能据此认定哪一种物理更准确、训练成功率更高。
+TACTO 的 `depth_model=tacto_force_adjusted_optical` 与 FOTS 的 `fots_author_perspective_depth` 定义不同。深度或 RGB 的差值不能直接当作精度排名；需要配对真实 DIGIT 数据与相同实验条件才能评价真实性。该比较没有增益对齐、深度替换或同 CAD 假设。
 
 ## GelSight / 原生 MuJoCo 模型
 
 `--sensor gelsight` 使用 [rlamprell/GelSightMujoco](https://github.com/rlamprell/GelSightMujoco) 的 `gelsight_mountable0.xml` 和配套外壳、后盖、玻璃 STL；来源版本、SHA256 和许可证状态见 [manifest](../assets/reference/gelsight_mujoco/manifest.json)。源码／资产通过脚本单独下载，不复制进本仓库。该旧模型不能改称 GelSight Mini，也不与 FOTS 的 GelSight 硬件标定混用。
 
-原 body 内的前后盖、玻璃、半透明胶面、表层、隐形摩擦层和内部相机均保留。模块固定变换到原 Panda 指尖末端，原相机视场角 20°、几何尺寸、质量和每层接触参数保留；只适配名称、固定安装姿态与碰撞 bit。来源光学表层不会与其目标物体直接碰撞，接触反力来自更靠里的摩擦／玻璃层，胶面图像由内部相机生成；这是来源的层结构，不是本地停止闭合或补零。
+原 body 内的前后盖、玻璃、半透明胶面、表层、隐形摩擦层和内部相机均保留。模块采用本地固定变换替换原 Panda 短指几何与惯量，长外壳轴沿手指方向，安装尾部朝手掌；源摩擦面的外边界作为安装参考，保留 80 mm 全开参考间距；这个安装尚未经过实物转接件验证，也不等同下述 Isaac Mini 装配。原相机视场角 20°、几何尺寸、质量和每层接触参数保留；只适配名称、固定安装姿态与碰撞 bit。来源光学表层不会与其目标物体直接碰撞，接触反力来自更靠里的摩擦／玻璃层，胶面图像由内部相机生成；这是来源的层结构，不是本地停止闭合或补零。
 
 Panda 场景使用来源默认 Newton、100 次迭代、关闭额外 noslip；AnySkin 的 CG／30 次配置对这个硬接触模型不稳定，因此不沿用。夹爪仍为原位置伺服，没有新限力、最小开口、接触停闭或物体附着。原 `solimp` 中超出 MuJoCo 范围的值由引擎按照自身规则裁剪，并非有效弹性材料参数。
 
@@ -315,33 +308,28 @@ Panda 场景使用来源默认 Newton、100 次迭代、关闭额外 noslip；An
 
 内部相机的近／远裁剪面固定到来源 PickAndPlace XML 编译出的米制值（约 1.481 mm／1481 m），同时保持原视场角。只改变独立的传感器渲染相机，不改变任务相机或物理参数。原光学算法直接使用非线性深度缓冲，因此继承新房间的 `extent`／裁剪面会错误地改变同一接触的光学响应；回归测试检查改变外部场景尺寸和裁剪设置后，原始深度与 RGB 保持一致。
 
-**单位区分：** `render_input_depth` 是来源使用的无量纲 `[0,1]` 缓冲；`render_deformation` 是原光学函数平滑后的同单位结果；`render_depth_unit=legacy_opengl_buffer`。`camera_depth_m`、`baseline_depth_m` 是根据真实近平面／远平面反投影后的米制深度；`indentation_m` 是两者之差，显示以 µm 标注。来源光学面与接触层相隔约 2 mm，因此图像深度可能接近 2 mm，即使刚性接触重叠很小；不能把它解读为已标定的硅胶弹性压缩。背景误差和浮点残差原样保存，不强行置零。
+**单位区分：** `render_input_depth` 是来源使用的无量纲 `[0,1]` 缓冲；`render_deformation` 是原光学函数平滑后的同单位结果；`render_depth_unit=legacy_opengl_buffer`。`baseline_depth_m` 从隔离空载的完整源模块渲染，不能以录制开始时的受压场景重新归零；`camera_depth_m`、`baseline_depth_m` 是根据真实近平面／远平面反投影后的米制深度；`indentation_m` 是两者之差，显示以 µm 标注。来源光学面与接触层相隔约 2 mm，因此图像深度可能接近 2 mm，即使刚性接触重叠很小；不能把它解读为已标定的硅胶弹性压缩。背景误差和浮点残差原样保存，不强行置零。
 
 `--ideal` 只关闭原纹理随机噪声，保留原背景。该方法没有 FOTS 的标记剪切／扭转模型，所以不虚构标记流输出。测试覆盖原光学函数逐像素一致、噪声所在环节、透明胶面按压／释放、Panda 夹取／抬升／释放；抬升同时检查双侧接触和有限位移，避免把弹飞误判为抓取成功。
 
 **复现证据范围。** 原 CAD 与原光学处理功能已经接入；源码对照证明相同输入下光学函数输出一致。还没有在作者旧 `mujoco_py` 引擎与当前原生 MuJoCo 上重放同一组接触并逐帧核对整条链路，因此不能把函数一致性称为跨版本传感器完全等价。安装姿态、碰撞位映射与引擎接口属于本地适配；实物力－压深／光学精度尚未验证。
+
+## Isaac 项目的 GelSight 安装来源
+
+核对了 TacEx 的 `adceed41afb7cb48f9ec1f66a662fb8e5a06627f` 和 UniVTAC 的 `0dafa10262e22f486f160a55d6f11aeab12d8e7b`：两者 Panda 装配引用的 `panda_arm_hand/instanceable_meshes.usd` 内容相同。保留 Panda 手掌及两根手指的开合关节，但 `panda_leftfinger/panda_rightfinger` 已使用**专用转接手指几何**，并非原装短手指保持不变。独立 GelSight Mini 外壳通过固定关节接到这些手指，胶面朝向夹持区。仅看 link 名没有变化，不能得出原 finger 未替换的结论。
+
+- [TacEx 手指 URDF](https://github.com/DH-Ng/TacEx/blob/adceed41afb7cb48f9ec1f66a662fb8e5a06627f/source/tacex_assets/tacex_assets/data/Robots/Franka/GelSight_Mini/Gripper/panda_arm_hand/panda_arm_hand.urdf) 引用 `franka_double_gsmini_adapter` 几何；[装配 USD](https://github.com/DH-Ng/TacEx/blob/adceed41afb7cb48f9ec1f66a662fb8e5a06627f/source/tacex_assets/tacex_assets/data/Robots/Franka/GelSight_Mini/Gripper/physx_rigid_gelpads.usd) 用 `gsmini_left_joint/gsmini_right_joint` 固定传感器。下载并解析了 USD 和实际手指 STL；手指几何约 30×31.15×92.25 mm，与原 Panda 短手指不同。
+- [UniVTAC 高分辨率腕部相机装配](https://github.com/univtac/UniVTAC/blob/0dafa10262e22f486f160a55d6f11aeab12d8e7b/third_party/TacEx/source/tacex_assets/tacex_assets/data/Robots/Franka/GelSight_Mini/Gripper/uipc_gelpads_high_res_wrist.usd) 使用同一套基础手指、固定关节和 Mini 外壳；柔性胶体单独挂接。这不表示其胶体求解与刚性版本相同。
+- [Mini 模型说明](https://github.com/DH-Ng/TacEx/blob/adceed41afb7cb48f9ec1f66a662fb8e5a06627f/source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/docs/README.md) 指明 CAD 来自 `gelsightinc/gsrobotics`，外壳 32×28×24 mm，胶面 25.25×20.75×4 mm。当前本项目旧 GelSightMujoco 外壳网格约 68×36×34 mm，是不同硬件，不能仅旋转或缩放成 Mini。
+- [SoftVTBench 的机器人配置](https://github.com/TuojingAI/SoftVTBench/blob/58056111f01e05bf1a4ae1dee75db4e3d9e7c5be/SoftVTBench/source/tac_manip/tac_manip/assets/robots/franka.py) 指向 `Franka_gsmini/physx_rigid_gelpads.usd`；其外部资产、NeoSim 的实际资产安装尚未逐一核对，不据项目关系推断所有版本相同。
+
+当前按用户允许的“独立模块装在 tip，或完整组件替换 finger”处理不同源模型；尚未移植 Mini 装配。上述旧 GelSightMujoco 是独立硬件选项，不能只换 Mini 外壳而沿用不对应的旧光学标定。
 
 ## MuJoCo 软体求解与光学传感器
 
 MuJoCo [可变形物体文档](https://mujoco.readthedocs.io/en/stable/modeling.html#deformable-objects)提供 `flex/flexcomp`：网格接触、有限元材料模型以及三线性／二次降阶表示。本项目 AnySkin 的降阶指腹使用这条物理路线。`solref/solimp` 的软接触约束与胶体网格 FEM 是不同层次；刚体可有数值穿入，并不代表模拟了胶体内部应力。
 
 TACTO、FOTS 和这里旧 GelSightMujoco 的光学变形／平滑不自动产生 FEM 材料反力。若要接软胶求解，应明确胶体网格、固定边界、材料参数，再把求解后的表面送给光学后端。当前保持各来源公开方法，不加入一套未经确认的材料模型来冒充作者实现。
-
-## GelSight / FOTS 光学选项
-
-`--sensor fots` 使用 [FOTS 主分支](https://github.com/Rancho-zhao/FOTS) 的 **GelSight** 标定，版本和 SHA256 见 [manifest](../assets/reference/fots/manifest.json)。作者 `FOTS-mujoco` 演示分支是 DIGIT 配置，这里没有将它改名当作 GelSight。使用同一 `.venv`、MuJoCo 3.15 和 Mac CGL。
-
-**光学与标记。** 原作者 `FOTSRender`、MLP 权重、背景、像素比例、平滑和 `MarkerMotion` 均实际执行。米制深度乘 `1000 × 19.58` 转像素高度，再经平滑、法线／位置编码和 MLP 得到 320×240 RGB。本项目默认启用原平面阴影（作者演示默认关闭），`--no-fots-shadow` 可对照。CPU 权重迁移不改数值；单物体 RGB、阴影和标记流图与独立进程运行原文件逐像素比较。
-
-标记运动沿用作者的膨胀／剪切／扭转公式和演示系数 `[0.00125, 0.00021, 0.00038]`，保留其整数像素剪切、±50° 扭转截断。论文将这组系数介绍为 DIGIT 实验结果，作者主分支 GelSight 示例也使用它们；本地没有重新标定。绿箭头执行原 `_generate`：`k=3`，终点为“当前点＋3×取整后位移”，所以相对初始点约为 4 倍，并非测量值本身。数值输出 `marker_displacement_px` 是未放大的 9×11×2 像素位移，不是力。每指、每个接触 geom 独立保存首次接触位置与相对姿态，跟踪接触锚点随物体的平移／转动；失去接触清除该历史，R/reset 清除全部历史。同一帧重复渲染不累加位移。多物体以各自深度驱动作者模型，再在同一初始标记网格上相加位移；这是公开的本地叠加近似，不是作者验证的多体弹性／滑移解。FOTS 本身没有额外随机噪声，固定纹理来自作者背景。
-
-**深度来源。** 所有与胶面接触的刚体几何变换到各传感器局部系，以作者像素比例做正交投影。相机距面 20 mm，近／远平面 0.01／100 mm；读取线性深度 `near + buffer × (far-near)`。取物体与平面的几何重叠，多物体 RGB 用最靠近内部相机的表面。没有物体名称白名单或人为压深倍率。这个重叠来自 MuJoCo 刚性软约束，依赖接触参数，**不是实物胶面形变标定**。FOTS 渲染和标记近似不反过来产生材料反力，也不求解 FEM。
-
-几微米不能直接解释为真实 GelSight 的压深：它可能只是刚性接触的数值重叠。作者 [论文 Fig.6](https://arxiv.org/html/2404.19217v2) 展示 0.2、0.4、0.6 mm 压入；这是指定压深试验，不是任意夹持力都应产生这个范围。作者 MuJoCo 示例另设 `digit:friction` 碰撞层，光学胶面本身关闭碰撞，且对深度缓冲作数值变换；它也不是材料 FEM，不能把其缓冲值当作米制标定。此处保留明确的米制几何深度，显示自动对比度不能代替压深标定。
-
-**安装代理。** 作者 `gelsight_pad.npy` 为平面，活动窗口为 `240×320 / 19.58`，约 12.26×16.34 mm。模块胶面厚 2 mm，壳体厚 8 mm，四边扩 2 mm，是本地矩形代理。附加在原指尖末端，保留全部原手指与行程；TCP 手掌坐标 Z≈122.47 mm。新增模块由 MuJoCo 默认密度 1000 kg/m³ 推算约 3.05 g 和惯量，这不是厂家参数。摩擦默认 0.6、`solref=.002 1`，未实物标定。厂家已提供 [GelSight Mini CAD 和 Panda 适配件](https://github.com/gelsightinc/gsrobotics#cad-models)，尚需确认它与 FOTS 作者所用硬件的对应关系，不能直接宣称本代理就是 Mini。
-
-**接口与未完成项。** 每指 RGB／米制深度／接触区域／标记流图／数值位移及时间戳、法向力在诊断 NPZ 中独立保存；不伪装成磁场通道。LeRobot／策略录制、其它任务／夹爪、Pico 与实物标定是另列的应用工作，论文任务／Sim2Real 实验不是本次 sensor 功能验收的完成条件。`tests.physics.test_fots` 覆盖源码一致性、已知深度、多接触、旋转、剪切／扭转历史、释放／reset 和 Panda 夹起／释放。原文件未修改；私有导入隔离 `torch.seed = 42`、未使用的随机数调用及 NumPy 2 `mat` 兼容。FEATS 的图像到力场估计是另一项算法，未在本选项中接入。
 
 ## 玻璃与连续裂纹：后续研究方向
 

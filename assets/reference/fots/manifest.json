@@ -1,27 +1,28 @@
 {
   "source": "https://github.com/Rancho-zhao/FOTS",
-  "revision": "6c930af58f57b22fdec4f442d9c615c311c5ee75",
-  "branch": "main",
-  "sensor_calibration": [
-    "GelSight",
-    "DIGIT"
-  ],
-  "license_note": "Upstream README declares MIT and links LICENSE; that file is absent at the pinned revision. Source/calibration/weights are fetched separately, not redistributed here.",
+  "revision": "4bd82cfc75ad8d600b2008df513b28cf04611610",
+  "branch": "FOTS-mujoco",
+  "sensor_calibration": "DIGIT",
   "files": {
-    "params.py": "b588033d74710443591ba2a78723120e4f9fb53b5be6008cf26a6810f5895658",
-    "utils/fots_render.py": "480ecf5a74c57b7371efa0f5300ab9271af71fe41fd7b8fda0a959b9ad1cceb7",
+    "tactile_render.py": "7213600772835b17d44fd10392d2695541591de574aa99047975535d25ccf569",
+    "env_test.py": "f85dbf5d7632d3c84e60d6b3c661dfdb4f58eb7ccdf1fc657bceaa51813baa07",
+    "mujoco_rendering.py": "91072c700121a3cbe3e656881a4f0c4452026f19ffdc710f18822f2e84b67db5",
+    "utils/mlp_render.py": "7edde15e21067ce81e808fd86a20b908cbefe3b5deddd595e378d762c3d1a205",
     "utils/prepost_mlp.py": "4c63f2035b7aadbe078d5433fb883dd0afc4c6c0740f685862bdac7247f7d7ad",
-    "shadow_calib/planar_shadow.py": "5feb342deb5a3f6e513c08c875d062a999342143aa04cc890e00999c66ecfbd3",
-    "mlp_calib/src/train/mlp_model.py": "c296436ff3a05396ede3f0d3156ca44c0845d0f1f2d06141afe15a4c3082c84a",
-    "mlp_calib/models/mlp_n2c_gelsight.pth": "78696b0d4ef88a72ebc8d99ba188f76da75743b493a273297df4484312e2d2f9",
-    "assets/gel/gelsight_bg.npy": "fe4c4aaf4633cba0a39488497589481c01431b4f8484c9cd37899eb2f44f82b8",
-    "utils/utils_data/ini_bg_fots_gelsight.npy": "19a73073d881a718b7c99487936e85e048a270389abdd31e4ee0696831f9a9f7",
-    "utils/utils_data/gelsight_pad.npy": "33cda23854b224dcae5b2d02c92aa145c6584a985b17c1f52dd368ecc28bd748",
-    "utils/marker_motion.py": "b218ec3c735bd8ca74213c4cb11c4a354ab0c38a5b0e2c0e4a764e9eafb33407",
-    "mlp_calib/models/mlp_n2c_digit.pth": "fc9532040a937e96992a0249492874fd95483ba41208d2e4820d63b09017aecf",
+    "planar_shadow.py": "5feb342deb5a3f6e513c08c875d062a999342143aa04cc890e00999c66ecfbd3",
+    "marker_motion.py": "e361b40c5163de75cba968f9d8cae14f8d51d71e3d2d8409d5dc620ac0d7a4de",
+    "src/train/mlp_model.py": "c296436ff3a05396ede3f0d3156ca44c0845d0f1f2d06141afe15a4c3082c84a",
+    "models/mlp_n2c_r.pth": "fc9532040a937e96992a0249492874fd95483ba41208d2e4820d63b09017aecf",
     "assets/gel/digit_bg.npy": "2f9bf48632f83973394f910c192d49ac055ff3aab4ff8974bea65f569a61a74f",
-    "utils/utils_data/ini_bg_fots_digit.npy": "099404a5cd016bbf6b13c80dcd713122bb151e04506b75f0f02145666e98eef8",
-    "utils/utils_data/digit_pad.npy": "758915595513117cec633188ed2d2ba91711843d27db954590844503f92ce12d"
+    "utils/utils_data/ini_depth_extent.npy": "66cadb11dfe257649595b7618de13c21c24e535bb8b19fa411dd39fc42a4e817",
+    "utils/utils_data/ini_bg_mlp.npy": "099404a5cd016bbf6b13c80dcd713122bb151e04506b75f0f02145666e98eef8",
+    "assets/gel/fots_mujoco.xml": "935459b214d2dde0dbece45d4af37832e63378c8a6a318af273fc28f50df437c",
+    "assets/gel/shared.xml": "b3844d51b6d2ce3adf0e3a87fcbb7e3e07f338ceddd06509e1590e0ab1c3b314",
+    "assets/gel/digit_sensor.xml": "56d189472592ea64787d4f0f22ef1d75551b3f8f390520ef82fb054f2e3969b7",
+    "assets/stls/gel/digit_back.STL": "d8395a2b65e0da3d35bb839306ef9cf5ba74d59c0d85fa1717a5b609e1033243",
+    "assets/stls/gel/digit_glass.STL": "c128926d44991f1b2ee0dddc0a596d56972bb87fa595344addeaf6b8f071fd76",
+    "assets/stls/gel/digit_curve_0_5.STL": "1301c06b7908c0877e6f642004230045617b0331be8670fa4405932109ea7d11"
   },
-  "local_adapter": "Unchanged FOTS MLP, smoothing, shadow and MarkerMotion with hardware-specific source weights/background/grid. CPU/private import compatibility. DIGIT shares TACTO CAD contact physics; FOTS uses calibrated orthographic geometric overlap, not TACTO force shift. Legacy --sensor fots retains flat GelSight proxy. Per-geom trajectory history and additive multi-object marker composition are local; not FEM. No upstream edits. Material-point anchors use the rendered object surface including depth and pixel centres, and renew when that point leaves the gel or sensing window; no time/flow cap. Not a stick-slip constitutive model."
+  "local_adapter": "Source mechanical body/assets/contact parameters/mass/inertia/internal camera; rigid distal Panda mount with stock fingers retained. Original legacy depth with fliplr, immutable source baseline, MLP weights, smoothing/shadow and MarkerMotion. CPU/private imports/NumPy mat compatibility only. Per-sensor rigid-object relative pose endpoints, reset on loss/change of contact. No multi-object flow superposition: multiple bodies explicitly report unsupported flow while RGB/depth continue. Source physics options except task gravity and 0.5 ms runner step; diagnostic probe uses implicitfast for its own servo. No local depth gain, reanchoring, flow cap, unloading zeros or AnySkin profile.",
+  "task_integration": "Selectable alone in all Panda tasks; shared keyboard/SpaceMouse/Pico software and LeRobot recording. Elastic clip tasks explicitly use MuJoCo discrete spring integration; source sensor contact settings/optical functions unchanged. Other tasks retain source integration. Diagnostic six-axis probe uses critical translational damping for its 20 g/3000 N/m servo, not a changed sensor material."
 }

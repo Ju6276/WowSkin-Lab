@@ -132,4 +132,14 @@ class TaskGuides:
         # receive it, even when their camera is moved to the same viewpoint.
         with handle.lock():
             handle.user_scn.ngeom = 0
+            if getattr(self.env, 'is_optical', False):
+                from wowskin_lab.envs.optical import sensor_geometry, sensor_prefix
+                geometry = sensor_geometry(self.env.cfg['sensor'])
+                prefix = sensor_prefix(self.env.cfg['sensor'])
+                for side in ('left', 'right'):
+                    b = model.body(f'{prefix}_{side}_module').id
+                    local = geometry['source_surface']
+                    point = data.xpos[b]+data.xmat[b].reshape(3,3)@local
+                    color = (.39,.86,1.,1.) if side == 'left' else (1.,.74,.39,1.)
+                    self._geom(handle.user_scn, mujoco.mjtGeom.mjGEOM_LABEL, np.zeros(3), point, np.eye(3), color, 'L' if side=='left' else 'R')
             self.append(handle.user_scn, model, data, row)

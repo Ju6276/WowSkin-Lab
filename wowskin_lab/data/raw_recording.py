@@ -14,7 +14,7 @@ import h5py
 import mujoco
 import numpy as np
 
-from wowskin_lab.data.cameras import CAMERAS, active_cameras, capture_options, camera_configuration
+from wowskin_lab.data.cameras import active_cameras, capture_options, camera_configuration
 from wowskin_lab.data.depth import DepthWriter
 from wowskin_lab.data.instructions import episode_instruction
 from wowskin_lab.data.recording import magnetic_baseline, magnetic_metadata, require_training_tactile
@@ -41,6 +41,11 @@ class RawRobotRecorder:
         self.renderer = mujoco.Renderer(env.model, width=640, height=480)
         self.writer, self.h5, self.videos = None, None, {}
         self.progress = ('IDLE', 'B starts recording')
+        self.optics, self.optical_writer = None, None
+        if getattr(env, 'is_optical', False):
+            from wowskin_lab.core.optical_backends import make_optics
+            self.optics = make_optics(env, env.cfg['sensor'], ideal=env.cfg.get('optical_ideal', False),
+                                      shadow=env.cfg.get('optical_shadow', True))
 
     def set_progress(self, stage, detail):
         # Assign one immutable value; the UI can read it while disk work runs.
@@ -94,7 +99,7 @@ class RawRobotRecorder:
             control='base dxyz metres + local TCP drotvec radians + closure target 0..1',
             control_world='command_7d_world retains the controller world dxyz + local TCP drotvec + closure',
             tactile='simulated raw magnetic field in uT; measured delta plus saved baseline',
-            sensor_baseline_subtracted=False, magnetic_baseline_ut=magnetic_baseline(self.env).tolist(),
+            sensor_baseline_subtracted=False, magnetic_baseline_ut=(magnetic_baseline(self.env).tolist() if not self.optics else None),
             uncalibrated=True, object_points_recorded=False,
             collection_method=f'{self.source}; no extra directional-noise injection',
             task_is_paper_benchmark=False, training_validated=False)
@@ -106,12 +111,20 @@ class RawRobotRecorder:
             synchronized_with='camera_timestamp and corresponding RGB frame',
             compression='lossless LZF; original float values and validity masks',
             source='MuJoCo renderer, no real depth-camera noise model')
-        self.metadata.update(magnetic_metadata(self.env))
+        if not self.optics:
+            self.metadata.update(magnetic_metadata(self.env))
         self.metadata['mesh_quality'] = dict(
             keys=['skin_min_volume_ratio', 'passive_min_volume_ratio', 'mesh_quality_warning'],
             clock='100 Hz timestamp', warning_ratio=.15,
             policy='Positive volume: continue recording fresh computed fields; warning does not drop frames or end episodes. Nonpositive/nonfinite: physics fault.',
             meaning='Local numerical diagnostic, not a calibrated material limit or magnetometer saturation')
+        if self.optics:
+            from .optical_recording import optical_metadata
+            for key in ('paper', 'mesh_quality', 'magnetic_baseline_ut', 'sensor_baseline_subtracted', 'tactile_channels'):
+                self.metadata.pop(key, None)
+            self.metadata.update(tactile_modality='optical', tactile_sensors=2, tactile_hz=30,
+                                 tactile='Dual source optical RGB/depth/markers; no magnetic channels')
+            self.metadata['optical'] = dict(optical_metadata(self.env), path=os.path.relpath(media/'optical.h5', path))
         self.metadata.update(robot_metadata(self.env))
         if hasattr(self.env, 'gripper_feedback_sample'):
             self.metadata['gripper_force_feedback'] = dict(
@@ -123,6 +136,11 @@ class RawRobotRecorder:
         self._metadata()
         try:
             self.h5 = h5py.File(path/'measurements.h5', 'w')
+            if self.optics:
+                from .optical_recording import OpticalWriter
+                if hasattr(self.optics, 'reset'):
+                    self.optics.reset()
+                self.optical_writer = OpticalWriter(media/'optical.h5', self.env, self.optics)
             if self.record_depth:
                 self.depth = DepthWriter(media/'depth.h5', self.env.model)
             for i in self.camera_ids:
@@ -166,11 +184,14 @@ class RawRobotRecorder:
         self._append('command_7d_world', action_world)
         self._append('command_timestamp', t if row is None else row['action_time_s'])
         self._append('command_valid', row is not None)
-        self._append('sensor_states', np.asarray(e.observation()['magnetic_ut'])+magnetic_baseline(e))
-        quality = e.last_row or e.tactile_quality()
-        self._append('skin_min_volume_ratio', quality['min_volume_ratio'])
-        self._append('passive_min_volume_ratio', quality['passive_min_volume_ratio'])
-        self._append('mesh_quality_warning', min(quality['min_volume_ratio'], quality['passive_min_volume_ratio']) <= .15)
+        if self.optics:
+            self._append('optical_contact_force_n', e.pad_forces())
+        else:
+            self._append('sensor_states', np.asarray(e.observation()['magnetic_ut'])+magnetic_baseline(e))
+            quality = e.last_row or e.tactile_quality()
+            self._append('skin_min_volume_ratio', quality['min_volume_ratio'])
+            self._append('passive_min_volume_ratio', quality['passive_min_volume_ratio'])
+            self._append('mesh_quality_warning', min(quality['min_volume_ratio'], quality['passive_min_volume_ratio']) <= .15)
         if hasattr(e, 'evaluation_metrics'):
             for key, value in e.evaluation_metrics(row).items():
                 self._append('evaluation/'+key, value)
@@ -184,6 +205,8 @@ class RawRobotRecorder:
             while self.next_camera_time <= t+1e-9:
                 self.next_camera_time += 1/30
             self._append('camera_timestamp', t)
+            if self.optical_writer:
+                self.optical_writer.capture()
             extrinsics = []
             for i in self.camera_ids:
                 name = self.cameras[f'pixels{i}']
@@ -232,6 +255,9 @@ class RawRobotRecorder:
         if self.depth:
             self.depth.close()
             self.depth = None
+        if self.optical_writer:
+            self.optical_writer.close()
+            self.optical_writer = None
         self.metadata.update(status=status, state_samples=samples, camera_frames=self.writer.count)
         if hasattr(self.env, 'task_evaluation'):
             self.metadata['task_evaluation'] = self.env.task_evaluation()
@@ -246,6 +272,8 @@ class RawRobotRecorder:
             self.finish('interrupted')
         finally:
             self.renderer.close()
+            if self.optics:
+                self.optics.close()
 
     def abort(self, reason):
         if self.active:

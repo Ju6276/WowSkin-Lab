@@ -144,6 +144,33 @@ H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机
 
 原始附件 schema 为 `wowskin_robot_dataset_v1`；它与 LeRobot v2.1 容器版本是不同概念。旧文件仍保留原坐标约定，不原地改写；世界系与基座系记录不能混入同一个导出。完整采集流程测试可用默认拟合偶极子；显式切换到网络后，缺失的卸载观测会使录制被拒绝。
 
+## 光学触觉数据
+
+选择与安装命令见 [README](../README.md#可选视触觉传感器)。任务窗口沿用本手册的 B／Enter 录制流程；**逗号 `,`** 切换深度／接触区，M/Y 保留点云功能。深度自动标注 µm，可用 `--depth-display-max-mm 5` 固定显示范围，保存值不缩放。
+
+独立按压台支持 `--probe-shape sphere|box|cylinder`（这是三种可选测试压头，不是每指三个传感器）。**Q/E** 下压／抬起，**W/S、A/D** 平移，**I/K、L/J、U/O** 倾斜／扭转，**R** 复位，**P** 退出，**M** 切深度／接触区。`--no-fots-shadow` 仅关闭 FOTS 源阴影；TACTO 没有 FOTS 的 marker 算法，界面不生成虚假流图。
+
+```bash
+# 真实接触夹起、保持、释放的脚本诊断；切换 --optics 分别运行
+.venv/bin/python -m wowskin_lab teleop --sensor digit --optics fots --demo --ideal
+# 源机械参数、原函数输出、按压卸载、跨任务录制及官方读回检查
+.venv/bin/python -m unittest tests.physics.test_digit_sources tests.physics.test_optical_tactile tests.physics.test_fots tests.physics.test_optical_backends tests.physics.test_optical_tasks tests.official.test_optical_recording
+```
+
+`--demo` 保存 NPZ／PNG；`digit-compare` 对球、方体、圆柱分别保存两算法各自状态、指令、RGB、深度、力、标记、CSV 与 MP4 到本地 `outputs/diagnostics/`。两套机械模型独立运行，同指令不等于同接触力；真实性排名需要配对实物数据。
+
+`--sensor digit --optics tacto|fots` 或 `--sensor gelsight` 每次选择一种，两指同型号。左右固定对应机器人 `left_finger`／`right_finger`，不随相机改变。五类 Panda 任务共用上述 B／Enter／R 流程、机器人基座坐标与连续夹爪指令。
+
+光学录制与 AnySkin 磁场协议分开：raw 仍记录 100 Hz 机器人、关节、动作与双指法向接触力 `optical_contact_force_n`；没有 `sensor_states`、磁场基线或 FEM 网格字段。真实光学帧与三路 RGB-D 在相同的相机时刻采样，约 30 Hz，不重复帧伪造 100 Hz。LeRobot schema 为 `wowskin_lerobot_optical_v1`。
+
+- `observation.images.tactile_left/right`：双指 RGB 视频。DIGIT 每指 320×240×3，GelSight 120×160×3；shape 顺序为高、宽、通道。
+- `lerobot/optical/chunk-000/episode_000000.h5`：`timestamp` 与 `frames/000000/left|right/`。保存无损原生 RGB、`indentation_m`、原始相机／空载深度、接触／有效掩码、原算法缓冲及其单位、力、传感器相机位姿和源版本。无损 RGB 与视频并存是用于源算法比较的明确保留；raw 不再另存图像。
+- FOTS 在来源支持时另存 `marker_displacement_px`（9×11×2）与流图；`marker_status` 明确区分无接触、接触和多 body 不支持。TACTO／GelSight 不伪造 marker，多物体 FOTS 不用零填充冒充有效数据。
+- `observation.tactile_contact_force`：双指 MuJoCo 接触法向力诊断，单位 N，不是真机传感器直接读出的力。不自动作为策略输入。
+- 100 Hz state/action、关节、速度、相机基座系变换、instruction 与磁场录制沿用同一契约。成功段编码后通过官方 LeRobot 读取和无损光学时间戳校验，随后可开始下一段；中断保留 raw 与暂存媒体。
+
+光学数据不能直接送入现有 ViSk／FTF 15 路磁场转换器；入口会明确拒绝，后续需独立图像编码器适配。`dataset-check` 检查五路视频和光学扩展。切换传感器／算法、装配、光学参数后使用新目录；默认分别为 `data/episodes_tacto`、`data/episodes_digit_fots`、`data/episodes_gelsight`。
+
 ## Instruction、RGB-D 与多次采集
 
 - `--instruction "Pick up the cube and place it on the table."` 逐字保存；未指定时使用任务模板，并记录来源。一个 episode 使用一条指令，换指令后可继续追加到同一物理配置的数据集。`meta/tasks.jsonl` 保存文字，Parquet 中的 `task_index` 和 `annotation.human.action.task_description` 保存索引；后者沿用 GR00T 命名，不表示示范一定由人操作。
@@ -165,7 +192,7 @@ H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机
 
 ## 诊断与边界
 
-共享遥操作入口默认使用 MuJoCo 3.15 降阶指腹、CG 与拟合偶极子。材料、触觉和夹持仍未做真机标定。完整参数来源及开关影响统一见 [模型与标定](MODEL_CALIBRATION_ZH.md)，不要把脚本测试通过理解为任意接触稳定。
+默认 AnySkin 遥操作使用 MuJoCo 3.15 降阶指腹、CG 与拟合偶极子；显式光学选项使用各自来源的刚性接触／光学算法和求解设置。材料、触觉和夹持仍未做真机标定。完整参数来源及开关影响统一见 [模型与标定](MODEL_CALIBRATION_ZH.md)，不要把脚本测试通过理解为任意接触稳定。
 
 正常遥操作只在按 B 后保存正式采集。完整 NPZ/CSV 诊断需显式 `--diagnostic-log`；故障自动保留最后最多 200 条样本，位于 `outputs/diagnostics/<task>/teleop_…/`。
 

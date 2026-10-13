@@ -2,14 +2,15 @@
   "url": "https://github.com/utn-air/mujoco-tacto",
   "revision": "4c396eb802dcbd1f9e6647a31a011f37006c4fc1",
   "license": "MIT",
-  "use": "Unmodified standalone meshes/digit.STL, split into housing and curved gel connected components at load time; module appended to stock fingertips. TACTO lighting/rendering/force adjustment reused; actual CAD front surface replaces the default flat optical gel, without scaling. CGL initialization and MuJoCo contact/pose integration are local. Default 240x320 resolution and empty-contact background match the source example; original calibration and random RGB noise execute without local gains. DIGIT bench and Panda contact solver reuse tacto_common.xml Newton/100 defaults, impratio=20, noslip_iterations=5, elliptic cone and multiccd; local friction coefficients remain documented separately.",
+  "use": "Native touch_playground_rot.xml complete mechanical sensor/stub and four contact pads, source mass/inertia and effective collision defaults. Original stock finger geometry/inertia replaced by the full source finger/stub; original Panda hand and finger slides retained. Rigid proximal mount, no double-finger stack. Original Renderer and config_digit.yml flat gel/camera/lights/background/force/noise retained. Optical camera frame registers source-configured gel plane to mechanical pad front. MuJoCo per-geom SE(3)/normal-force plumbing replaces erroneous source Euler/global-coordinate handling; no optical function substitution. CGL context only on Mac. Source common + example solver settings, with task gravity and 0.5 ms integration. No local curved optical gel or box inertia.",
   "source_sha256": {
     "tacto/renderer.py": "8850ce432a008b601a4a03082c6b3297ac5ab8d8a2a53137a267da0678471724",
     "tacto/cfg/config_digit.yml": "22b4010036f0c00bd4500a774ace66b246f7fefe405b52086265f57ab787556a",
-    "meshes/digit.STL": "7ea789c949a371d68b2e8b33cc1c999bc495680b15c5f84a3765aec5f96c9f06",
-    "meshes/digit.urdf": "8d65f20dbd4b29fedad006b297e0e593184ab30bd41cf6fa97f0e50f06744510",
-    "tacto/cfg/digit.yaml": "4db552dd368ff30212da6c4038de7c1e800e6aca8e8ed74fbf48ad9167d8701f",
     "tacto/assets/bg_digit_240_320.jpg": "b386c851500f063369b2c2e43d8308da0a35736c3d922e1b3c6d8b0f33b91631",
-    "examples/xml/tacto_common.xml": "d7d13fe72638395f2c77311c0428ca48498dc0722c75e6efc073e454dd3e38bc"
-  }
+    "examples/xml/tacto_common.xml": "d7d13fe72638395f2c77311c0428ca48498dc0722c75e6efc073e454dd3e38bc",
+    "examples/xml/touch_playground_rot.xml": "1537587e9dc3103e3e2855d02481cc6b039fb0aeb0fd35177adcd23f005b16c1",
+    "examples/xml/assets/digit_gripper/digit_stub_full_0.obj": "5ffe3f24e6a25a1d3336ee1da91cfffeabaf41630e9990efc6a51e8feb242410",
+    "examples/xml/assets/digit_gripper/digit_stub_full_1.obj": "c64bdf2a748555b89325925af47dbad3a70820e67ede0fc0b48e3605e1a481d1"
+  },
+  "task_integration": "Selectable alone in all Panda tasks; shared keyboard/SpaceMouse/Pico software and LeRobot recording. Elastic clip tasks explicitly use MuJoCo discrete spring integration; source sensor contact settings/optical functions unchanged. Other tasks retain source integration. Diagnostic six-axis probe uses critical translational damping for its 20 g/3000 N/m servo, not a changed sensor material."
 }

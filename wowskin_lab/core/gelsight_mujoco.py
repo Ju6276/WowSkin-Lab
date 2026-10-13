@@ -69,10 +69,47 @@ class GelSightRenderer:
         return rgb[..., ::-1].copy(), deformed
 
 
+def _depth(renderer, data, camera, near, far):
+    renderer.update_scene(data, camera=camera)
+    for gl_camera in renderer.scene.camera:
+        if gl_camera.orthographic:
+            raise ValueError('The source GelSight camera must be perspective')
+        scale = near/gl_camera.frustum_near
+        for field in ('frustum_bottom', 'frustum_top', 'frustum_center', 'frustum_width'):
+            setattr(gl_camera, field, getattr(gl_camera, field)*scale)
+        gl_camera.frustum_near, gl_camera.frustum_far = near, far
+    renderer.render()
+    raw = np.empty((renderer.height, renderer.width), dtype=np.float32)
+    mujoco.mjr_readPixels(None, raw, renderer._rect, renderer._mjr_context)
+    return near*far/(far-raw.astype(np.float64)*(far-near)), raw
+
+
+@lru_cache(maxsize=4)
+def unloaded_depth(width, height):
+    """Render the isolated original module, not the current loaded task state.
+
+    This is a fixed geometric diagnostic reference; the author's optical
+    renderer still consumes the original absolute OpenGL buffer directly.
+    Starting recording while holding a spoon must not zero its indentation.
+    """
+    import xml.etree.ElementTree as ET
+    from wowskin_lab.envs.optical import add_source_gelsight
+    root = ET.Element('mujoco')
+    ET.SubElement(root, 'compiler', angle='radian')
+    asset, world = ET.SubElement(root, 'asset'), ET.SubElement(root, 'worldbody')
+    add_source_gelsight(asset, world, 'unloaded')
+    model = mujoco.MjModel.from_xml_string(ET.tostring(root, encoding='unicode'))
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    with mujoco.Renderer(model, height=height, width=width) as renderer:
+        renderer._mjr_context.readDepthMap = mujoco.mjtDepthMap.mjDEPTH_ZERONEAR
+        return _depth(renderer, data, 'optical_unloaded_camera', *source_depth_planes())[0]
+
+
 class GelSightMujocoOptical:
     label = 'GelSight / upstream MuJoCo + Phong'
 
-    def __init__(self, model, sensors, *, reference_data, ideal=False, width=160, height=120):
+    def __init__(self, model, sensors, *, ideal=False, width=160, height=120):
         self.model, self.sensors = model, sensors
         self.optics = GelSightRenderer(width, height, ideal=ideal)
         self.near, self.far = source_depth_planes()
@@ -82,27 +119,14 @@ class GelSightMujocoOptical:
         # rendering instead; preserve that visibility and the legacy map.
         self.renderer._mjr_context.readDepthMap = mujoco.mjtDepthMap.mjDEPTH_ZERONEAR
         self.baselines = {}
-        for name, (camera, _) in sensors.items():
-            self.baselines[name] = self.depth(reference_data, camera)[0]
+        for name in sensors:
+            self.baselines[name] = unloaded_depth(width, height).copy()
 
     def depth(self, data, camera):
-        self.renderer.update_scene(data, camera=camera)
         # Change only this offscreen sensor camera. Preserve its field of view
         # while fixing the source metric near/far planes; task cameras and the
         # global model remain untouched.
-        for gl_camera in self.renderer.scene.camera:
-            if gl_camera.orthographic:
-                raise ValueError('The source GelSight camera must be perspective')
-            scale = self.near/gl_camera.frustum_near
-            for field in ('frustum_bottom', 'frustum_top', 'frustum_center', 'frustum_width'):
-                setattr(gl_camera, field, getattr(gl_camera, field)*scale)
-            gl_camera.frustum_near, gl_camera.frustum_far = self.near, self.far
-        self.renderer.render()
-        raw = np.empty((self.renderer.height, self.renderer.width), dtype=np.float32)
-        mujoco.mjr_readPixels(None, raw, self.renderer._rect, self.renderer._mjr_context)
-        near, far = self.near, self.far
-        depth = near*far/(far-raw.astype(np.float64)*(far-near))
-        return depth, raw
+        return _depth(self.renderer, data, camera, self.near, self.far)
 
     def render(self, data):
         frames = {}

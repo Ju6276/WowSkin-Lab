@@ -63,18 +63,18 @@ def build_scene(cfg, layout):
     ET.SubElement(visual, "global", offwidth="1000", offheight="750")
     ET.SubElement(visual, "headlight", ambient=".4 .4 .4", diffuse=".65 .65 .65")
     ET.SubElement(visual, "map", znear=".005")
-    # Override the inherited panda joint defaults for elastic nodes.
-    tactile_default = ET.SubElement(root.find("default"), "default", {"class": "tactile"})
-    ET.SubElement(tactile_default, "joint", armature="0",
-                  damping="0" if cfg.get('skin_dof') == 'trilinear' else ".002", limited="false")
     world = root.find("worldbody")
     ET.SubElement(world, "light", pos="0 -1 2", dir="0 0 -1", diffuse=".7 .7 .7")
     ET.SubElement(world, "geom", name="floor", type="plane", size="2 2 .01",
                   rgba=".32 .36 .4 1")
-    if cfg.get('sensor') in ('tacto', 'digit_fots', 'digit_compare', 'fots', 'gelsight'):
+    if cfg.get('sensor') in ('tacto', 'digit_fots', 'gelsight'):
         from .optical import mount_optical
         mount_optical(root, cfg['sensor'], friction=cfg['friction'])
         return ET.tostring(root, encoding="unicode")
+    # Override the inherited panda joint defaults for elastic nodes.
+    tactile_default = ET.SubElement(root.find("default"), "default", {"class": "tactile"})
+    ET.SubElement(tactile_default, "joint", armature="0",
+                  damping="0" if cfg.get('skin_dof') == 'trilinear' else ".002", limited="false")
     finger = root.find(".//body[@name='left_finger']")
     for name in ("left_finger", "right_finger"):
         body = root.find(f".//body[@name='{name}']")
@@ -144,14 +144,15 @@ class FrankaTactileSim(TactileSim):
         self.data.time = 0.
 
     def initialize_mounts_and_arm(self):
-        self.passive_mount = self.model.body("silicone_mount").id
-        self.passive_flex = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_FLEX, "silicone")
-        self.passive_vertices = flex_vertex_slice(self.model, self.passive_flex)
-        self.passive_tets = flex_tetrahedra(self.model, self.passive_flex)
-        self.passive_rest = self.passive_vertices_local()
-        vertices = self.passive_rest[self.passive_tets]
-        self.passive_dm_inverse = np.linalg.inv(np.stack(
-            [vertices[:, k]-vertices[:, 0] for k in (1, 2, 3)], axis=-1))
+        if not getattr(self, 'is_optical', False):
+            self.passive_mount = self.model.body("silicone_mount").id
+            self.passive_flex = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_FLEX, "silicone")
+            self.passive_vertices = flex_vertex_slice(self.model, self.passive_flex)
+            self.passive_tets = flex_tetrahedra(self.model, self.passive_flex)
+            self.passive_rest = self.passive_vertices_local()
+            vertices = self.passive_rest[self.passive_tets]
+            self.passive_dm_inverse = np.linalg.inv(np.stack(
+                [vertices[:, k]-vertices[:, 0] for k in (1, 2, 3)], axis=-1))
         self.probe_side = "left"
         self.probe_mount = self.mount_body
         self.arm_joints = [self.model.joint(f"joint{i}").id for i in range(1, 8)]
@@ -229,6 +230,8 @@ class FrankaTactileSim(TactileSim):
 
     def reading(self):
         row = self.sample(lambda _: self.control())
+        if getattr(self, "is_optical", False):
+            return row
         passive = self.passive_vertices_local()
         row["passive_max_displacement_m"] = float(np.linalg.norm(passive-self.passive_rest, axis=1).max())
         right_contact = self.contact_state(self.passive_flex)

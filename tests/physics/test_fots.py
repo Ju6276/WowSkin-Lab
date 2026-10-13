@@ -1,225 +1,102 @@
-"""Optional FOTS checks: source parity, metric depth and physical grasp/release."""
+"""Native FOTS MuJoCo source parity and moving-sensor regressions."""
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
-
 import mujoco
 import numpy as np
 import torch
-
-from wowskin_lab.core.fots import FOTS_ROOT, FOTSOptical, FOTSRenderer
-from wowskin_lab.envs.optical import OpticalBench, OpticalPandaEnv
-from wowskin_lab.tools.optical_sensor import demo
-from tests.physics.test_optical_tactile import contact_scene
+from wowskin_lab.core.fots_mujoco import SOURCE, NativeFOTSRenderer, NativeFOTSOptical
+from wowskin_lab.envs.optical import OpticalBench
 
 
 class FOTSChecks(unittest.TestCase):
-    def test_matches_original_optical_pipeline(self):
-        self.check_original_optical_pipeline('gelsight')
-
-    def test_digit_matches_original_optical_pipeline(self):
-        self.check_original_optical_pipeline('digit')
-
-    def check_original_optical_pipeline(self, hardware):
+    def test_original_rgb_shadow_markers_and_repeatability(self):
         seed_function = torch.seed
-        renderer = FOTSRenderer(hardware)
+        renderer = NativeFOTSRenderer()
         self.assertIs(torch.seed, seed_function)
-        rows, cols = np.mgrid[:320, :240]
-        depth = np.maximum(0., .0006-((rows-160)**2+(cols-120)**2)*1e-7)
-        actual = renderer.render(depth)
-        shadow_actual = renderer.render(depth, shadow=True)
-        trajectory = [[0., 0., 0.], [.8, -.6, .2]]
-        marker_actual, displacement = renderer.markers(actual, [(depth, trajectory)])
-        self.assertGreater(np.abs(displacement).max(), 1.)
-        self.assertFalse(np.array_equal(shadow_actual, actual))
-        # Independently execute the original entry point in its own process;
-        # its cwd, bare imports and torch.seed mutation never affect this app.
-        with tempfile.TemporaryDirectory() as directory:
-            np.save(Path(directory)/'depth.npy', depth)
-            source = '''import os, sys, importlib.util, functools, numpy as np, torch
-# Import the real MLP file directly: its parent package eagerly imports the
-# unrelated physical DIGIT USB driver. No optical code is replaced.
-spec = importlib.util.spec_from_file_location('mlp_calib.src.train.mlp_model', 'mlp_calib/src/train/mlp_model.py')
-module = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = module
-spec.loader.exec_module(module)
-# Checkpoint was saved on CUDA; device relocation leaves weights unchanged.
+        rows, cols = np.mgrid[:320,:240]
+        raw = renderer.baseline-np.maximum(0, .002-((rows-160)**2+(cols-120)**2)*.0000005)
+        trajectory = [[0.,0.,0.],[.002,-.001,.2]]
+        rgb = renderer.render(raw)
+        flow, displacement = renderer.markers(rgb, renderer.baseline-raw, trajectory)
+        # Independent source entrypoint, source cwd and its original imports.
+        script = '''import os, functools, numpy as np, torch
+np.mat = np.asmatrix
 torch.load = functools.partial(torch.load, map_location='cpu', weights_only=True)
 from tactile_render import get_simapproach
-import params as pr
-if os.environ['FOTS_HARDWARE'] == 'digit':
-    pr.sensor_type = 'digit'
-    pr.N, pr.M, pr.x0, pr.y0, pr.dx, pr.dy = 9, 8, 40, 27, 27, 27
-from utils.marker_motion import MarkerMotion
-np.mat = np.asmatrix  # NumPy 2 compatibility for the untouched shadow module.
-p = os.environ['FOTS_TEST_DIR']
-d = np.load(p+'/depth.npy')
+from marker_motion import MarkerMotion
+p=os.environ['FOTS_PARITY_DIR']
+d=np.load(p+'/raw.npy')
 with torch.inference_mode():
-    renderer = get_simapproach()
-    if pr.sensor_type == 'digit':
-        from utils.fots_render import FOTSRender
-        model = module.MLP().cpu().eval()
-        model.load_state_dict(torch.load('mlp_calib/models/mlp_n2c_digit.pth'))
-        renderer = FOTSRender(background_img=np.load('assets/gel/digit_bg.npy'),
-            bg_render=np.load('utils/utils_data/ini_bg_fots_digit.npy'), model=model)
-    image = renderer.generate(d*1000*pr.mm_to_pixel, d>0, shadow=False)
-    shadow = renderer.generate(d*1000*pr.mm_to_pixel, d>0, shadow=True)
-marker = MarkerMotion(frame0_blur=image, depth=d*1000, mask=d>0,
-                      traj=[[0.,0.,0.],[.8,-.6,.2]], lamb=[.00125,.00021,.00038])
-np.save(p+'/rgb.npy', image[..., ::-1])
-np.save(p+'/shadow.npy', shadow[..., ::-1])
-np.save(p+'/marker.npy', marker._marker_motion()[..., ::-1])
+    image=get_simapproach().generate(d.copy(), shadow=True)
+    no_shadow=get_simapproach().generate(d.copy(), shadow=False)
+difference=np.load('utils/utils_data/ini_depth_extent.npy')-d
+m=MarkerMotion(image,difference,difference>0,[[0.,0.,0.],[.002,-.001,.2]],[.00125,.00021,.00038])
+flow=m._marker_motion()
+np.savez(p+'/expected.npz',rgb=image[...,::-1],no_shadow=no_shadow[...,::-1],flow=flow[...,::-1])
 '''
-            subprocess.run([sys.executable, '-c', source], cwd=FOTS_ROOT,
-                           env=dict(os.environ, FOTS_TEST_DIR=directory, FOTS_HARDWARE=hardware,
-                                    PYTHONDONTWRITEBYTECODE='1'), check=True)
-            np.testing.assert_array_equal(actual, np.load(Path(directory)/'rgb.npy'))
-            np.testing.assert_array_equal(shadow_actual, np.load(Path(directory)/'shadow.npy'))
-            np.testing.assert_array_equal(marker_actual, np.load(Path(directory)/'marker.npy'))
-        np.testing.assert_array_equal(actual, renderer.render(depth))
+        with tempfile.TemporaryDirectory() as directory:
+            np.save(Path(directory)/'raw.npy', raw)
+            subprocess.run([sys.executable,'-B','-c',script], cwd=SOURCE,
+                           env=dict(os.environ,FOTS_PARITY_DIR=directory),check=True)
+            with np.load(Path(directory)/'expected.npz') as expected:
+                np.testing.assert_array_equal(rgb, expected['rgb'])
+                np.testing.assert_array_equal(renderer.render(raw,shadow=False), expected['no_shadow'])
+                np.testing.assert_array_equal(flow,expected['flow'])
+        self.assertEqual(displacement.shape,(9,11,2))
+        self.assertGreater(abs(displacement).max(),1)
+        for _ in range(3):
+            np.testing.assert_array_equal(renderer.render(raw),rgb)
+        np.testing.assert_array_equal(renderer.baseline,np.load(SOURCE/'utils/utils_data/ini_depth_extent.npy'))
 
-    def test_metric_depth_multi_contact_and_rotated_sensor(self):
-        frames = []
-        for rotation in ('0 0 0', '.4 -.7 1.1'):
-            model, data = contact_scene(rotation)
-            # FOTS sites are at the gel surface, unlike TACTO's camera sites.
-            model.site_pos[:, 2] = 0
-            mujoco.mj_forward(model, data)
-            optics = FOTSOptical(model, {'left': ('left_cam', 'left'), 'right': ('right_cam', 'right')})
-            try:
-                frame = optics.render(data)
-                self.assertEqual(set(frame['left'].contacting_geoms), {model.geom('ball1').id, model.geom('ball2').id})
-                self.assertEqual(frame['right'].normal_force_n, 0.)
-                self.assertEqual(float(frame['right'].indentation_m.max()), 0.)
-                # Sphere radius 4 mm; centre 3.5 mm above plane: overlap .5 mm.
-                self.assertAlmostEqual(float(frame['left'].indentation_m.max()), .0005, delta=.00002)
-                self.assertEqual(frame['left'].rgb.shape, (320, 240, 3))
-                frames.append(frame['left'])
-            finally:
-                optics.close()
-        np.testing.assert_allclose(frames[0].indentation_m, frames[1].indentation_m, atol=2e-8)
-        np.testing.assert_allclose(frames[0].rgb, frames[1].rgb, atol=1)
-        np.testing.assert_allclose(frames[0].marker_displacement_px, frames[1].marker_displacement_px, atol=1e-3)
-
-    def test_shear_twist_history_release_and_reset(self):
-        # A broad box ensures several markers contact it. Move/rotate the
-        # object tangentially, then unload: histories cannot leak to next touch.
-        xml = '''<mujoco><option gravity="0 0 0"/>
-          <worldbody><geom name="gel" type="box" pos="0 0 -.002" size=".01 .015 .002"/>
-            <site name="cam"/>
-            <body pos="0 0 .0045"><freejoint/>
-              <geom name="probe" type="box" size=".004 .004 .005" mass=".02"/>
-            </body></worldbody></mujoco>'''
-        model = mujoco.MjModel.from_xml_string(xml)
-        data = mujoco.MjData(model)
-        optics = FOTSOptical(model, {'sensor': ('cam', 'gel')})
-        def frame():
-            mujoco.mj_forward(model, data)
-            return optics.render(data)['sensor']
+    def test_native_depth_press_slide_release_and_scene_invariance(self):
+        env=OpticalBench(sensor='digit_fots',probe_shape='box')
+        optics=NativeFOTSOptical(env.model,env.sensors)
+        def capture(target):
+            env.data.ctrl[:]=target
+            for _ in range(100):
+                env.step(np.zeros(6))
+            return optics.render(env.data)['DIGIT']
         try:
-            first = frame()
-            data.qpos[0] += .001
-            data.qpos[3:7] = [np.cos(.15), 0., 0., np.sin(.15)]
-            data.time = .1
-            moved = frame()
-            self.assertGreater(np.abs(moved.marker_displacement_px-first.marker_displacement_px).max(), 1.)
-            repeat = frame()
-            np.testing.assert_array_equal(moved.marker_displacement_px, repeat.marker_displacement_px)
-            # No visible movement on the same simulation frame may accumulate.
-            data.qpos[2] = .02
-            data.time = .2
-            released = frame()
-            np.testing.assert_array_equal(released.marker_displacement_px, 0.)
-            self.assertEqual(optics.history['sensor'], {})
-            data.qpos[2] = .0045
-            data.time = .3
-            recontact = frame()
-            optics.reset()
-            fresh = frame()
-            np.testing.assert_array_equal(recontact.marker_displacement_px, fresh.marker_displacement_px)
+            unloaded=optics.render(env.data)['DIGIT']
+            pressed=capture([0,0,-.012,0,0,0])
+            moved=capture([.002,0,-.012,0,0,.35])
+            self.assertGreater(pressed.normal_force_n,.1)
+            self.assertGreater(pressed.indentation_m.max(),.0001)
+            self.assertGreater(abs(pressed.marker_displacement_px-moved.marker_displacement_px).max(),1)
+            stationary=optics.render(env.data)['DIGIT']
+            np.testing.assert_array_equal(stationary.marker_displacement_px,moved.marker_displacement_px)
+            # Room size must not change calibrated depth-buffer input.
+            env.model.stat.extent*=10
+            env.model.vis.map.znear=.02
+            after=optics.render(env.data)['DIGIT']
+            np.testing.assert_allclose(after.render_input_depth,moved.render_input_depth,atol=2e-7)
+            released=capture([0,0,0,0,0,0])
+            self.assertEqual(released.normal_force_n,0)
+            self.assertEqual(optics.history,{})
+            np.testing.assert_allclose(released.indentation_m,unloaded.indentation_m,atol=2e-7)
+            # Do not invent unloaded zeros: retain the author's saved baseline.
+            np.testing.assert_array_equal(released.baseline_depth_m,unloaded.baseline_depth_m)
         finally:
             optics.close()
 
-    def test_press_and_unload(self):
-        env = OpticalBench(sensor='fots')
-        optics = FOTSOptical(env.model, env.sensors)
+    def test_raw_camera_matches_author_depth_readback(self):
+        # Compare against the original MuJoCo scene, not a local proxy scene.
+        model=mujoco.MjModel.from_xml_path(str(SOURCE/'assets/gel/fots_mujoco.xml'))
+        data=mujoco.MjData(model)
+        mujoco.mj_forward(model,data)
+        optics=NativeFOTSOptical(model,{'DIGIT':('digit:camera','digit:friction')})
+        reference=mujoco.Renderer(model,height=320,width=240)
         try:
-            baseline = optics.render(env.data)['GELSIGHT']
-            env.data.ctrl[2] = -.012
-            for _ in range(150):
-                env.step(np.zeros(3))
-            pressed = optics.render(env.data)['GELSIGHT']
-            centre_z = env.data.geom_xpos[env.model.geom('probe').id, 2]
-            expected_depth = .05-(centre_z-.005)
-            self.assertGreater(pressed.normal_force_n, 1.)
-            self.assertGreater(expected_depth, .0001)
-            self.assertAlmostEqual(float(pressed.indentation_m.max()), expected_depth, delta=.00002)
-            self.assertGreater(np.abs(pressed.rgb.astype(float)-baseline.rgb).mean(), .1)
-            env.data.ctrl[2] = 0.
-            for _ in range(150):
-                env.step(np.zeros(3))
-            released = optics.render(env.data)['GELSIGHT']
-            self.assertEqual(released.normal_force_n, 0.)
-            np.testing.assert_array_equal(released.rgb, baseline.rgb)
-            np.testing.assert_array_equal(released.indentation_m, baseline.indentation_m)
+            reference._mjr_context.readDepthMap=mujoco.mjtDepthMap.mjDEPTH_ZERONEAR
+            reference.update_scene(data,camera='digit:camera')
+            reference.render()
+            raw=np.empty((320,240),np.float32)
+            mujoco.mjr_readPixels(None,raw,reference._rect,reference._mjr_context)
+            np.testing.assert_allclose(optics.depth(data,'digit:camera'),np.fliplr(raw),atol=1e-7)
         finally:
             optics.close()
-
-    def test_rolling_renews_detached_material_anchor(self):
-        xml = '''<mujoco><option gravity="0 0 0"/>
-          <worldbody><geom name="gel" type="box" pos="0 0 -.002" size=".01 .015 .002"/>
-            <site name="cam"/><body pos="0 0 .0045"><freejoint/>
-              <geom name="probe" type="box" size=".004 .004 .005" mass=".02"/>
-            </body></worldbody></mujoco>'''
-        model = mujoco.MjModel.from_xml_string(xml)
-        data = mujoco.MjData(model)
-        optics = FOTSOptical(model, {'sensor': ('cam', 'gel')})
-        try:
-            mujoco.mj_forward(model, data)
-            optics.render(data)
-            geom = model.geom('probe').id
-            old = optics.history['sensor'][geom]
-            # Rotate the block while maintaining the new lower edge's .5 mm
-            # indentation. The centre of the old face has left the gel.
-            angle = .3
-            data.qpos[2] = .004*np.sin(angle)+.005*np.cos(angle)-.0005
-            data.qpos[3:7] = [np.cos(angle/2), np.sin(angle/2), 0, 0]
-            data.time = .1
-            mujoco.mj_forward(model, data)
-            old_point = data.geom_xmat[geom].reshape(3, 3) @ old['local']+data.geom_xpos[geom]
-            self.assertGreater(old_point[2], 0)
-            rolled = optics.render(data)['sensor']
-            self.assertGreater(rolled.normal_force_n, 0)
-            self.assertIsNot(optics.history['sensor'][geom], old)
-            self.assertLess(optics.history['sensor'][geom]['anchor'][2], 0)
-            # Elapsed time alone never adds flow or periodically resets it.
-            fresh = optics.history['sensor'][geom]
-            data.time += 100
-            held = optics.render(data)['sensor']
-            self.assertIs(optics.history['sensor'][geom], fresh)
-            np.testing.assert_array_equal(rolled.marker_displacement_px, held.marker_displacement_px)
-        finally:
-            optics.close()
-
-    def test_panda_grasp_lift_release(self):
-        env = OpticalPandaEnv(sensor='fots')
-        optics = FOTSOptical(env.model, env.sensors)
-        try:
-            with tempfile.TemporaryDirectory() as directory:
-                report = demo(env, optics, Path(directory))
-            self.assertGreater(report['lift_m'], .09)
-            self.assertLess(report['released_cube_z_m'], .121)
-            for side in ('left', 'right'):
-                self.assertGreater(report['lifted'][side]['normal_force_n'], .1)
-                self.assertGreater(report['lifted'][side]['max_indentation_mm'], 0.)
-                self.assertLess(report['lifted'][side]['max_indentation_mm'], 1.)
-                self.assertEqual(report['released'][side]['max_indentation_mm'], 0.)
-        finally:
-            optics.close()
-
-
-if __name__ == '__main__':
-    unittest.main()
+            reference.close()

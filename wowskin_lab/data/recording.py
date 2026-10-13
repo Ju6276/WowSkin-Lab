@@ -29,6 +29,10 @@ class MissingTactileError(ValueError):
 
 def require_training_tactile(env):
     """Reject missing observations, while allowing explicitly labelled previews."""
+    if getattr(env, 'is_optical', False):
+        if not np.isfinite(env.data.qpos).all() or np.any(env.data.warning.number):
+            raise MissingTactileError('Invalid optical physics state')
+        return  # Images validated on their actual camera clock by OpticalWriter.
     values = np.asarray(env.observation()['magnetic_ut'])
     response = getattr(env, 'reskin_response', None)
     row = getattr(env, 'last_row', None) or {}

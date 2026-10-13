@@ -29,6 +29,18 @@ class TactileDefaultsTests(unittest.TestCase):
         args = self.command(['teleop', '--magnetic-fit', 'configs/magnetic_fit_pollen_nonslip.json'])
         self.assertNotIn('--reskin-model', args)
 
+    def test_each_optical_selection_reaches_all_tasks_without_magnetic_options(self):
+        for sensor, optics, backend in (('digit','tacto','tacto'), ('digit','fots','digit_fots'), ('gelsight',None,'gelsight')):
+            for task in ('pick_cube','cable','feeding','peg_insert','chip_tray'):
+                selection = ['--sensor', sensor]+(['--optics',optics] if optics else [])
+                args = self.command(['teleop','--task',task,*selection])
+                self.assertEqual(args[args.index('--sensor-backend')+1],backend)
+                self.assertEqual(args[args.index('--task')+1],task)
+                self.assertNotIn('--skin-dof',args)
+                self.assertNotIn('--magnetic-fit',args)
+                self.assertEqual(args[args.index('--record-format')+1],'lerobot')
+                self.assertTrue(args[args.index('--record-dir')+1].endswith('data/episodes_'+backend))
+
     def test_explicit_network_does_not_get_gain_profile(self):
         args = self.command(['teleop', '--reskin-model=outputs/reskin_forward_mapped'])
         self.assertNotIn('--magnetic-fit', args)
