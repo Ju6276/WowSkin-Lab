@@ -326,6 +326,7 @@
     }
   },
   "notes": [
+    "image_size_wh, fps and intrinsic_640x480 document the current fixed acquisition contract; changing them here does not reconfigure the recorders.",
     "Cube and cable use the base coordinates; feeding uses the recorded world-coordinate overrides.",
     "Profiles preserve prior camera geometry; selecting previous_four_view here does not change the FTF recorder or training pipeline."
   ]

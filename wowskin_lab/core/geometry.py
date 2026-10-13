@@ -105,52 +105,39 @@ def cap_mesh(cfg):
 def standard_xml(cfg):
     top = cfg["total_height_m"]
     bottom = top-cfg["skin_thickness_m"]
-    outline, points, elements, pinned, area = standard_mesh(
+    outline, points, elements, _, area = standard_mesh(
         cfg["width_m"], cfg["length_m"], bottom, top, cfg.get("mesh_outline_samples", 48))
     mass = area*cfg['skin_thickness_m']*1000
-    pin = f'<pin range="0 {pinned-1}"/>'
     shell_top = bottom-.00015
     if 'base_height_m' in cfg:
         if not np.isclose(cfg['base_height_m'], bottom, atol=1e-10, rtol=0):
             raise ValueError('Base height + top skin thickness must equal total height')
         shell_top = cfg['base_height_m']
     if cfg.get('sleeve_overlap_m', 0):
-        outline, points, elements, pins, volume = cap_mesh(cfg)
-        pin = '<pin id="'+' '.join(map(str,pins))+'"/>'
+        outline, points, elements, _, volume = cap_mesh(cfg)
         mass = volume*1000
     shell = np.vstack([np.c_[outline, np.zeros(len(outline))],
                        np.c_[outline, np.full(len(outline), shell_top)]])
     asset = f'<mesh name="standard_shell" vertex="{numbers(shell)}"/>'
     housing = '''<geom name="standard_shell" type="mesh" mesh="standard_shell"
                      rgba=".055 .057 .062 1" contype="0" conaffinity="0"/>'''
-    # MuJoCo's internal vertex/opposite-face contacts prevent tetrahedra from
-    # folding through themselves. They are numerical constraints, not a new
-    # material law; retain the deformation validity check in magnetic_field.
-    internal = 'true' if cfg.get('fem_internal_contact', False) else 'false'
-    dof = cfg.get('skin_dof', 'full')
-    if dof not in ('full', 'trilinear'):
-        raise ValueError('skin_dof must be full or trilinear')
-    if dof == 'trilinear':
-        if tuple(map(int, mujoco.__version__.split('.')[:2])) < (3, 15):
-            raise ValueError('Mounted trilinear skin requires MuJoCo 3.15 in the project environment; use .venv/bin/mjpython')
-        # MuJoCo's official gripper_trilinear pins interpolation nodes, NOT
-        # mesh vertices. With local Z normal, these are the four lower nodes.
-        # This approximates attachment by the cap bounding-box bottom plane;
-        # the full mesh retains its original underside and inner-skirt pins.
-        pin = '<pin id="0 2 4 6"/>'
-        internal = 'false'  # MuJoCo 3.5 disallows reduced-flex self-collision.
+    if cfg.get('skin_dof', 'trilinear') != 'trilinear':
+        raise ValueError('Only trilinear skin is supported; full-node recordings cannot be replayed')
+    if tuple(map(int, mujoco.__version__.split('.')[:2])) < (3, 15):
+        raise ValueError('Trilinear skin requires MuJoCo >= 3.15; use the project environment')
+    # Pin interpolation nodes at the bottom of the cap bounding box.
+    pin = '<pin id="0 2 4 6"/>'
     radius = cfg.get('fem_contact_radius_m', .00005)
     timeconst = cfg.get('fem_contact_timeconst_s', .002)
     impedance = (f' solimp="{numbers(cfg["fem_contact_solimp"])}"'
                  if 'fem_contact_solimp' in cfg else '')
-    internal_attr = '' if dof == 'trilinear' else f' internal="{internal}"'
-    flex = f'''<flexcomp name="skin" type="direct" dim="3" dof="{dof}"
+    flex = f'''<flexcomp name="skin" type="direct" dim="3" dof="trilinear"
                 point="{numbers(points)}" element="{' '.join(map(str, elements.reshape(-1)))}"
                 mass="{mass}" radius="{radius}"
                 flatskin="true" rgba="{cfg.get('skin_rgba', '.32 .27 .25 1')}">
       {pin}
       <elasticity young="{cfg['young_pa']}" poisson="{cfg['poisson']}" damping=".00001"/>
-      <contact selfcollide="none"{internal_attr} condim="3"
+      <contact selfcollide="none" condim="3"
                friction="{cfg['friction']} .005 .0001" solref="{timeconst} 1"{impedance}/>
     </flexcomp>'''
     return asset, housing, flex

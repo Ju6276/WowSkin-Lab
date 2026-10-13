@@ -171,6 +171,8 @@ H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机
 
 光学数据不能直接送入现有 ViSk／FTF 15 路磁场转换器；入口会明确拒绝，后续需独立图像编码器适配。`dataset-check` 检查五路视频和光学扩展。切换传感器／算法、装配、光学参数后使用新目录；默认采集根目录分别为 `data/episodes_tacto`、`data/episodes_digit_fots`、`data/episodes_gelsight`，其下再追加任务名；例如方块成功数据为 `data/episodes_tacto/pick_cube/lerobot/`。
 
+`dataset-export --format lerobot` 支持成功光学 episode 的选集，保留五路视频及无损光学附件；它不需要磁场适配器。`dataset-review` 提供离线回放；独立的 `optical-act train|eval` 使用 LeRobot ACT 接入光学图像，见[光学学习说明](OPTICAL_LEARNING_ZH.md)。实际 Isaac 对照与验证范围见[检查记录](OPTICAL_DATA_AUDIT_ZH.md)。
+
 ## Instruction、RGB-D 与多次采集
 
 - `--instruction "Pick up the cube and place it on the table."` 逐字保存；未指定时使用任务模板，并记录来源。一个 episode 使用一条指令，换指令后可继续追加到同一物理配置的数据集。`meta/tasks.jsonl` 保存文字，Parquet 中的 `task_index` 和 `annotation.human.action.task_description` 保存索引；后者沿用 GR00T 命名，不表示示范一定由人操作。
@@ -188,7 +190,21 @@ H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机
 .venv/bin/python -m wowskin_lab record-auto --output data/automated/my_run --episodes 2 --randomize --magnetic-fit configs/magnetic_fit_pollen_nonslip.json --ideal
 ```
 
-使用新目录，并显式选择观察模型；不再自动选择网络并开启外推。网络缺失空载响应时，此入口会在创建数据目录前报错。该命令是方块脚本示教，不能用作线材/喂食自动成功验证，也不代表磁场已标定。
+使用新目录，并显式选择观察模型；不再自动选择网络并开启外推。网络缺失空载响应时，此入口会在创建数据目录前报错。上面的命令是 AnySkin 方块脚本示教，不代表磁场已标定。
+
+三种光学后端另支持喂食与单卡扣脚本（将 `tacto` 换成 `digit_fots` 或 `gelsight`）：
+
+```bash
+.venv/bin/python -m wowskin_lab record-auto --task feeding --sensor-backend tacto \
+  --episodes 1 --output data/automated/tacto_feeding
+.venv/bin/python -m wowskin_lab record-auto --task cable --cable-layout single_clip \
+  --clip-model elastic_beam --sensor-backend tacto --episodes 1 \
+  --output data/automated/tacto_single_clip_elastic
+```
+
+数据分别落在输出目录的 `feeding/lerobot/` 和 `cable_insert/lerobot/`，保留对应 `raw/`；默认保存三路场景 RGB／深度、双指光学数据、实测状态和实际控制指令。脚本用仿真物体位置生成动作，通过正常 `env.step` 执行，不是 agent 推理或人工示范。`--randomize` 当前仅支持方块任务。
+
+喂食沿用场景初始化的已夹持、装豆勺子，完成条件是送入嘴前区域并保持，不包含取勺、装豆或吞咽。single clip 可用 `--clip-model elastic_beam` 选择上下唇被动弹性、固定底座的平面梁模型；省略或选择 `rigid` 使用刚性卡扣。材料和插拔力尚未标定。两种模式都检查线的中心线跨过槽内三个截面并保持，不包含松手后保持或弹性锁紧。自动评分会保留已达到的成功状态，检查记录时还应核对末帧状态；脚本在成功后继续保持／调整姿态，再录制收尾。三种光学后端的弹性版抓取／推进参数分别记录在采集报告和 raw 元数据中，卡扣材料参数与评分未因后端更改。每种配置只录一条用于流程检查，不能据此判断训练效果。
 
 ## 诊断与边界
 

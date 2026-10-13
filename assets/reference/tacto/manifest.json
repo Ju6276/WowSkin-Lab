@@ -2,6 +2,7 @@
   "url": "https://github.com/utn-air/mujoco-tacto",
   "revision": "4c396eb802dcbd1f9e6647a31a011f37006c4fc1",
   "license": "MIT",
+  "scene_appearance": "The local adapter makes both visual finger/stub meshes opaque (alpha 1 instead of the example's 0.2) for scene cameras and the viewer. The long finger mesh finger_0 uses black RGB [0.02, 0.02, 0.02] instead of source green; the inner mesh keeps its source color. Geometry and contact parameters are retained. The upstream checkout and TACTO optical renderer are unchanged.",
   "use": "Native touch_playground_rot.xml complete mechanical sensor/stub and four contact pads, source mass/inertia and effective collision defaults. Original stock finger geometry/inertia replaced by the full source finger/stub; original Panda hand and finger slides retained. Rigid proximal mount, no double-finger stack. Original Renderer and config_digit.yml flat gel/camera/lights/background/force/noise retained. Optical camera frame registers source-configured gel plane to mechanical pad front. MuJoCo per-geom SE(3)/normal-force plumbing replaces erroneous source Euler/global-coordinate handling; no optical function substitution. CGL context only on Mac. Source common + example solver settings, with task gravity and 0.5 ms integration. No local curved optical gel or box inertia.",
   "source_sha256": {
     "tacto/renderer.py": "8850ce432a008b601a4a03082c6b3297ac5ab8d8a2a53137a267da0678471724",

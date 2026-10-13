@@ -7,6 +7,12 @@ from wowskin_lab.__main__ import main
 
 
 class TactileDefaultsTests(unittest.TestCase):
+    def test_old_full_config_cannot_be_reinterpreted_as_reduced(self):
+        from wowskin_lab.core.geometry import standard_xml
+        from wowskin_lab.core.physics import configuration
+        with self.assertRaisesRegex(ValueError, 'Only trilinear'):
+            standard_xml(dict(configuration(), skin_dof='full'))
+
     def command(self, args):
         captured = []
         module = SimpleNamespace(main=lambda: captured.extend(sys.argv[1:]))
@@ -22,7 +28,7 @@ class TactileDefaultsTests(unittest.TestCase):
             self.assertNotIn('--reskin-model', args)
             self.assertTrue(args[args.index('--magnetic-fit')+1].endswith('magnetic_fit_pollen_nonslip.json'))
             self.assertTrue(args[args.index('--record-dir')+1].endswith('data/episodes'))
-            self.assertEqual(args[args.index('--skin-dof')+1], 'trilinear')
+            self.assertNotIn('--skin-dof', args)
             self.assertEqual(args[args.index('--record-format')+1], 'lerobot')
 
     def test_explicit_fitted_dipole_is_preserved(self):
@@ -54,10 +60,8 @@ class TactileDefaultsTests(unittest.TestCase):
             self.assertTrue(cfg['disable_workspace_limits'])
             self.assertEqual(cfg['teleop_frame'], 'base')
             self.assertEqual(cfg['teleop_base_lateral_sign'], 1.)
-        # Explicit historical full-node configurations retain their old step.
-        for task, step in (('pick_cube', .0001), ('cable', .0001), ('feeding', .00005)):
-            cfg = response_configuration(SimpleNamespace(task=task, skin_dof='full'))
-            self.assertAlmostEqual(cfg['timestep_s'], step)
+        with self.assertRaisesRegex(ValueError, 'Only trilinear'):
+            response_configuration(SimpleNamespace(task='pick_cube', skin_dof='full'))
         cfg = response_configuration(SimpleNamespace(task='pick_cube', physics_step_us=20))
         self.assertAlmostEqual(cfg['timestep_s'], .00002)
         self.assertEqual(cfg['constraint_jacobian'], 'sparse')
@@ -65,5 +69,5 @@ class TactileDefaultsTests(unittest.TestCase):
         self.assertFalse(cfg['disable_workspace_limits'])
 
     def test_shared_dataset_records_model_choice_in_episode_metadata(self):
-        args = self.command(['teleop', '--skin-dof', 'trilinear'])
+        args = self.command(['teleop'])
         self.assertTrue(args[args.index('--record-dir')+1].endswith('data/episodes'))

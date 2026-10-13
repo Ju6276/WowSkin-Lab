@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WowSkin · 录制回放</title>
+<style>
+:root{color-scheme:light;--paper:#f4f3eb;--ink:#243b31;--muted:#55665c;--line:#c8cec2;--accent:#29654b;--command:#ac6230}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 "Avenir Next","PingFang SC",sans-serif}
+main{max-width:1460px;margin:auto;padding:32px clamp(16px,4vw,56px) 56px}header{display:flex;align-items:baseline;gap:24px;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:24px}
+h1{font-size:clamp(24px,3vw,36px);font-weight:600;letter-spacing:-.035em;margin:0}header span{margin-left:auto;color:var(--muted)}p{margin:10px 0}.intro{max-width:950px;margin-bottom:20px}.subtle{font-size:13px;color:var(--muted)}
+canvas{display:block;width:100%;background:#e8ebe3;aspect-ratio:1280/804}button,select{font:inherit;border:1px solid var(--line);background:transparent;color:var(--ink);padding:7px 13px;border-radius:3px;cursor:pointer}button:hover,select:hover{background:#e1e6da}button:disabled{opacity:.4;cursor:default}button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:3px}button.primary{background:var(--accent);color:#f4f3eb;border-color:var(--accent)}
+.transport{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 0 12px}.transport output{margin-left:auto;font-variant-numeric:tabular-nums}input[type=range]{accent-color:var(--accent);width:100%;margin:0}.time{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin:5px 0 24px}
+.readouts{display:grid;grid-template-columns:1fr 1fr;gap:28px;border-top:1px solid var(--line);padding-top:16px}.readouts h2{font-size:17px;font-weight:600;margin:0 0 6px}.readouts p{font-variant-numeric:tabular-nums;margin:4px 0;font-size:14px}.trace{border-top:1px solid var(--line);margin-top:24px;padding-top:20px}.trace-head{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.legend{font-size:13px}.measured{color:var(--accent)}.target{color:var(--command)}svg{width:100%;height:210px;display:block;margin-top:12px}details{border-top:1px solid var(--line);margin-top:24px;padding-top:14px}summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}a{color:var(--accent)}.error{color:#a13f24;font-weight:600}
+@media(max-width:640px){main{padding-top:20px}header{display:block}header span{display:block;margin:6px 0 0}.readouts{grid-template-columns:1fr;gap:12px}.transport output{width:100%;margin:0}.transport{gap:7px}button,select{min-height:44px}}
+</style>
+<main>
+<header><h1>录制回放</h1><span id="identity"></span></header>
+<div class="intro"><p id="instruction"></p><p class="subtle" id="outcome"></p></div>
+<video id="movie" playsinline muted preload="auto" hidden></video>
+<canvas id="frame-view" width="1280" height="804" role="img" aria-label="同步场景与双指光学触觉回放"></canvas>
+<p id="error" class="error" role="alert" hidden></p>
+<div class="transport"><button id="play" class="primary" disabled>播放</button><button id="previous" disabled aria-label="上一帧">← 上一帧</button><button id="next" disabled aria-label="下一帧">下一帧 →</button><label>速度 <select id="speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label><output id="frame"></output></div>
+<input id="seek" type="range" min="0" step="1" value="0" aria-label="按采集帧跳转" disabled>
+<div class="time"><span id="clock"></span><span id="phase"></span></div>
+<div class="readouts"><section><h2>左指</h2><p id="left"></p><p class="subtle" id="leftMarker"></p></section><section><h2>右指</h2><p id="right"></p><p class="subtle" id="rightMarker"></p></section></div>
+<p class="subtle">触觉 RGB 保留原亮度，仅为排版缩放并编码预览；无接触区不会自动增强。压入深度使用整段双指共同色标，灰色表示无效区域。精确数组保存在源 H5。</p>
+<section class="trace"><div class="trace-head"><label>100 Hz 机器人记录 <select id="channel"><option value="0">TCP X / m</option><option value="1">TCP Y / m</option><option value="2" selected>TCP Z / m</option><option value="3">旋转向量 X / rad</option><option value="4">旋转向量 Y / rad</option><option value="5">旋转向量 Z / rad</option><option value="6">夹爪闭合比例 / 0–1</option></select></label><span class="legend"><span class="measured">━━ 实测</span>　<span class="target">┄┄ 已下发目标</span></span><output id="values"></output></div>
+<svg id="plot" viewBox="0 0 1200 210" role="img" aria-label="按实际仿真秒绘制的实测与指令时间序列"><g id="axes"></g><path id="measured" fill="none" stroke="var(--accent)" stroke-width="2"/><path id="command" fill="none" stroke="var(--command)" stroke-width="2" stroke-dasharray="6 4"/><line id="cursor" y1="15" y2="178" stroke="var(--ink)" stroke-width="1"/></svg>
+<p class="subtle">图中时间为实际采样秒；视频按名义 30 Hz 播放。机器人值取该图像对应的真实 100 Hz 样本。已下发目标与实测状态分开显示；训练使用的下一条指令标签不在此处替代当前目标。</p></section>
+<section class="trace" id="clip-trace" hidden><h2>弹性卡扣形变 · mm</h2><p class="subtle">绿色：上下唇尖距离　橙色：上唇尖位移　蓝色：下唇尖位移。位移相对本条记录首帧；数据来自 100 Hz 物理状态。</p><p id="clip-values"></p><svg viewBox="0 0 1200 210" role="img" aria-label="弹性卡扣开口和上下唇尖位移"><g id="clip-axes"></g><path id="clip-opening_mm" fill="none" stroke="#29654b" stroke-width="2"/><path id="clip-upper_displacement_mm" fill="none" stroke="#ac6230" stroke-width="2"/><path id="clip-lower_displacement_mm" fill="none" stroke="#376f99" stroke-width="2"/><line id="clip-cursor" y1="15" y2="178" stroke="var(--ink)"/></svg><p class="subtle">这是未标定的被动平面梁近似；形变和入槽评分不等于真实材料验证或松手后锁紧。</p></section>
+<details><summary>来源、时钟与任务评分</summary><pre id="metadata"></pre><a href="review.json" download>下载检查数据 JSON</a> · <a href="review.mp4" download>下载预览 MP4</a></details>
+</main>
+<script id="data" type="application/json">__REVIEW_DATA__</script>
+<script id="video-data" type="application/octet-stream">__REVIEW_VIDEO__</script>
+<script>
+'use strict';
+const data=JSON.parse(document.getElementById('data').textContent), $=id=>document.getElementById(id), video=$('movie');
+const context=$('frame-view').getContext('2d');
+function paint(){if(video.readyState>=2)context.drawImage(video,0,0,1280,804);}
+const binary=atob($('video-data').textContent.trim()), bytes=new Uint8Array(binary.length);
+for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+video.src=URL.createObjectURL(new Blob([bytes],{type:'video/mp4'}));
+$('video-data').remove();
+let current=0;
+const clipLabel=data.clip_model==='elastic_beam'?' · 弹性卡扣':data.clip_model==='rigid'?' · 刚性卡扣':'';
+$('identity').textContent=`${data.task} / ${data.backend}${clipLabel} · ${data.frames} 帧`;
+$('instruction').textContent=data.instruction;
+$('outcome').textContent=`录制标签：${data.status} · 自动任务评分：${typeof data.task_evaluation?.success==='boolean' ? (data.task_evaluation.success?'成功':'未成功') : '未提供'}`;
+$('metadata').textContent=JSON.stringify({source:data.source,clip_model:data.clip_model,clip_model_schema:data.clip_model_schema,task_evaluation:data.task_evaluation,clock:data.clock,robot:data.robot,display:data.display},null,2);
+$('seek').max=data.frames-1;
+const x=t=>58+1124*(t-data.time_s[0])/(data.time_s.at(-1)-data.time_s[0]||1);
+function textNode(text,xpos,ypos){const node=document.createElementNS('http://www.w3.org/2000/svg','text');node.textContent=text;node.setAttribute('x',xpos);node.setAttribute('y',ypos);node.setAttribute('font-size',12);node.setAttribute('fill','#55665c');return node;}
+function draw(){const c=Number($('channel').value), values=data.state.map(v=>v[c]).concat(data.command.map(v=>v[c]));let lo=values.reduce((a,b)=>Math.min(a,b),Infinity),hi=values.reduce((a,b)=>Math.max(a,b),-Infinity);const pad=Math.max((hi-lo)*.12,.001);lo-=pad;hi+=pad;const y=v=>178-160*(v-lo)/(hi-lo);
+for(const [key,id] of [['state','measured'],['command','command']])$(''+id).setAttribute('d',data[key].map((v,i)=>`${i?'L':'M'}${x(data.time_s[i]).toFixed(2)},${y(v[c]).toFixed(2)}`).join(' '));
+$('axes').replaceChildren(textNode(hi.toFixed(3),0,24),textNode(lo.toFixed(3),0,178),textNode(data.time_s[0].toFixed(2)+' s',58,204),textNode(data.time_s.at(-1).toFixed(2)+' s',1120,204));show(current);}
+function show(index){current=Math.max(0,Math.min(data.frames-1,index));const k=data.camera_sample_index[current],t=data.camera_time_s[current],c=Number($('channel').value);$('seek').value=current;$('frame').textContent=`帧 ${current+1} / ${data.frames}`;$('clock').textContent=`采集时刻 ${t.toFixed(4)} s · 100 Hz 样本 ${k}`;$('phase').textContent=data.phase ? ['预录','示范','后录'][data.phase[k]]||'未知阶段':'未提供阶段';
+for(const side of ['left','right']){const d=data.optical[current][side];$(side).textContent=`法向力 ${d.normal_force_n.toFixed(3)} N · 最大压入 ${d.max_indentation_mm.toFixed(3)} mm`;$(side+'Marker').textContent=`marker_status: ${d.marker_status}`;}
+$('values').textContent=`实测 ${data.state[k][c].toFixed(4)} / 目标 ${data.command[k][c].toFixed(4)}`;$('cursor').setAttribute('x1',x(t));$('cursor').setAttribute('x2',x(t));$('previous').disabled=current===0;$('next').disabled=current===data.frames-1;
+if(data.clip_signals){const s=data.clip_signals;$('clip-values').textContent=`唇尖距离 ${s.opening_mm[k].toFixed(3)} mm · 上唇尖位移 ${s.upper_displacement_mm[k].toFixed(3)} mm · 下唇尖位移 ${s.lower_displacement_mm[k].toFixed(3)} mm`;$('clip-cursor').setAttribute('x1',x(t));$('clip-cursor').setAttribute('x2',x(t));}}
+function drawClip(){if(!data.clip_signals)return;$('clip-trace').hidden=false;const high=Math.max(.1,...Object.values(data.clip_signals).map(values=>values.reduce((a,b)=>Math.max(a,b),0)))*1.1,y=v=>178-160*v/high;
+for(const [key,values] of Object.entries(data.clip_signals))$('clip-'+key).setAttribute('d',values.map((v,i)=>`${i?'L':'M'}${x(data.time_s[i]).toFixed(2)},${y(v).toFixed(2)}`).join(' '));
+$('clip-axes').replaceChildren(textNode(high.toFixed(2),0,24),textNode('0 mm',0,178),textNode(data.time_s[0].toFixed(2)+' s',58,204),textNode(data.time_s.at(-1).toFixed(2)+' s',1120,204));}
+function seek(i){video.pause();show(i);video.currentTime=(current+.1)/data.fps;}
+$('seek').addEventListener('input',e=>seek(Number(e.target.value)));$('previous').onclick=()=>seek(current-1);$('next').onclick=()=>seek(current+1);$('channel').onchange=draw;$('speed').onchange=()=>{video.playbackRate=Number($('speed').value);};
+$('play').onclick=()=>{if(video.paused){if(video.ended)video.currentTime=0;video.play().catch(e=>{ $('error').hidden=false;$('error').textContent=e.message;});}else video.pause();};video.onplay=()=>{$('play').textContent='暂停';};video.onpause=()=>{$('play').textContent='播放';};
+video.onloadeddata=()=>{for(const id of ['play','seek','previous','next'])$(id).disabled=false;show(0);paint();};
+video.onseeked=paint;
+video.onerror=()=>{$('error').hidden=false;$('error').textContent='浏览器无法解码内嵌视频。请使用支持 H.264 的浏览器，或单独打开 review.mp4。';};
+if(video.requestVideoFrameCallback){const tick=(now,meta)=>{show(Math.round(meta.mediaTime*data.fps));paint();video.requestVideoFrameCallback(tick);};video.requestVideoFrameCallback(tick);}else video.ontimeupdate=()=>{show(Math.floor(video.currentTime*data.fps+1e-5));paint();};
+document.addEventListener('keydown',event=>{if(['INPUT','SELECT','BUTTON'].includes(event.target.tagName))return;if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();seek(current+(event.key==='ArrowRight'?1:-1));}});draw();drawClip();
+</script>
+</html>

@@ -7,9 +7,11 @@ from .paths import ROOT
 
 COMMANDS = {
     'teleop': 'Franka in MuJoCo: keyboard/Pico/SpaceMouse teleoperation and episode recording',
-    'record-auto': 'Automatically pick/lower/release into the shared raw dataset',
+    'record-auto': 'Record scripted cube, optical feeding or single-clip demonstrations',
     'dataset-export': 'Select shared episodes for LeRobot v2.1, ViSk or official FTF preprocessing',
     'dataset-check': 'Validate LeRobot v2.1 using its original loader and video decoder',
+    'dataset-review': 'Build an offline synchronized optical episode replay',
+    'optical-act': 'Train/evaluate a local optical baseline using upstream LeRobot ACT',
     'official': 'Pinned ViSk / FTF human / FTF robot source, configuration and readiness',
     'pick-demo': 'Run the existing physical grasp/tug regression demo',
     'cable': 'Single Franka cable scene using pinned EBiM fixtures (local variant)',
@@ -67,6 +69,12 @@ def main(argv=None):
     if command == 'dataset-check':
         from .data.lerobot_recording import main as check_data
         return check_data(rest)
+    if command == 'dataset-review':
+        from .data.episode_review import main as review_data
+        return review_data(rest)
+    if command == 'optical-act':
+        from .learning.optical_act import main as optical_act
+        return optical_act(rest)
     if command == 'record-auto':
         from .data.auto_collect import main as collect_auto
         return collect_auto(rest)
@@ -74,8 +82,6 @@ def main(argv=None):
         from .learning.official import main as official
         return official(rest)
     if command in ('teleop', 'pick-demo'):
-        if not optical_backend and not any(a.split('=')[0] == '--skin-dof' for a in rest):
-            rest = ['--skin-dof', 'trilinear', *rest]
         if not optical_backend and not any(a.split('=')[0] in ('--magnetic-fit', '--reskin-model') for a in rest):
             rest = ['--magnetic-fit', str(ROOT/'configs/magnetic_fit_pollen_nonslip.json'), *rest]
         task = 'pick_cube'

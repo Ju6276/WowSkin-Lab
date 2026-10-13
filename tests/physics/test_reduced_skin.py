@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import unittest
 import mujoco
 import numpy as np
+from wowskin_lab.paths import ROOT
 from wowskin_lab.core.geometry import cap_mesh
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration, scripted_action
 
@@ -34,6 +35,36 @@ class ReducedSkinChecks(unittest.TestCase):
         mujoco.mj_forward(m, d)
         np.testing.assert_allclose(e.magnetic_field(), field, atol=1e-7)
 
+    def test_matching_pad_geometry_and_passive_magnetic_isolation(self):
+        e = self.make_env()
+        m, d = e.model, e.data
+        self.assertEqual(m.nflex, 2)
+        np.testing.assert_allclose(e.rest, e.passive_rest, atol=1e-12)
+        left, right = (d.xmat[bid].reshape(3, 3) for bid in (e.mount_body, e.passive_mount))
+        self.assertAlmostEqual(float(left[:, 2] @ right[:, 2]), -1.)
+        # The mount displacement is along the pad normal, with matching height.
+        offset = (d.xpos[e.passive_mount]-d.xpos[e.mount_body]) @ left
+        np.testing.assert_allclose(offset[:2], 0., atol=1e-8)
+        self.assertGreater(offset[2], 2*e.cfg['total_height_m'])
+        self.assertEqual(int((m.site_bodyid == e.mount_body).sum()), 5)
+        self.assertEqual(int((m.site_bodyid == e.passive_mount).sum()), 0)
+
+        def moved(flex):
+            adr = m.flex_nodeadr[flex]
+            node = m.flex_nodebodyid[adr+1]  # Top node; bottom nodes are welded to the mount.
+            q = m.jnt_qposadr[m.body_jntadr[node]]
+            before = e.magnetic_field().copy()
+            saved = d.qpos.copy()
+            d.qpos[q:q+3] += [.00001, -.00002, -.00003]
+            mujoco.mj_forward(m, d)
+            change = np.linalg.norm(e.magnetic_field()-before)
+            d.qpos[:] = saved
+            mujoco.mj_forward(m, d)
+            return change
+        # Deforming only the passive pad adds no magnetic sources or chips.
+        self.assertLess(moved(e.passive_flex), 1e-12)
+        self.assertGreater(moved(e.skin_flex), 1e-6)
+
     def test_pick_hold_tug_release(self):
         e = self.make_env()
         rows = [e.step(scripted_action(e))[-1] for _ in range(850)]
@@ -50,9 +81,8 @@ class ReducedSkinChecks(unittest.TestCase):
 
 class ReducedTaskChecks(unittest.TestCase):
     def config(self, task):
-        from wowskin_lab.paths import ROOT
         return response_configuration(SimpleNamespace(task=task, skin_dof='trilinear', ideal=True,
-            reskin_model=ROOT/'outputs/reskin_forward_mapped', reskin_extrapolate=True))
+            magnetic_fit=ROOT/'configs/magnetic_fit_pollen_nonslip.json'))
 
     def test_legacy_short_cable_layouts_grasp_lift_release(self):
         from wowskin_lab.envs.cable import PandaCableEnv
@@ -64,6 +94,7 @@ class ReducedTaskChecks(unittest.TestCase):
                 if layout == 'routing':
                     cfg['scene_design'] = 'ebim_task1_single_arm'  # Recorded one-ended 0.38 m benchmark.
                 e = PandaCableEnv(cfg, pollen=False)
+                self.assertIsNone(e.reskin_response)
                 initial = e.data.xpos[e.cable_bodies, 2].copy()
                 rows = []
                 # Single clip occupies x=.45: approach the free cable end,
@@ -81,7 +112,7 @@ class ReducedTaskChecks(unittest.TestCase):
                         if t >= 5.4: e.command_gripper(False)
                     e.target_xyz[:] = target
                     rows.append(e.step(e.hold_action())[-1])
-                CableStabilityChecks().check_rows(e, rows, network_preview=True)
+                CableStabilityChecks().check_rows(e, rows)
                 lift = max(float(np.max(r['cable_centerline_m'][:, 2]-initial)) for r in rows)
                 self.assertGreater(lift, .03)
                 self.assertGreater(sum(r['grasped'] for r in rows), 50)
@@ -92,6 +123,7 @@ class ReducedTaskChecks(unittest.TestCase):
         import time
         from wowskin_lab.envs.feeding import PandaFeedingEnv
         e = PandaFeedingEnv(self.config('feeding'), pollen=False)
+        self.assertIsNone(e.reskin_response)
         rows, elapsed = [], []
         for i in range(350):
             a = e.hold_action()
@@ -108,18 +140,9 @@ class ReducedTaskChecks(unittest.TestCase):
         self.assertGreater(sum(r['grasped'] for r in rows[:200]), 150)
         self.assertLess(rows[-1]['normal_force_n'], .001)
         self.assertGreater(min(min(r['min_volume_ratio'], r['passive_min_volume_ratio']) for r in rows), .15)
-        self.check_network_rows(rows)
+        self.assertTrue(np.isfinite([r['magnetic_ut'] for r in rows]).all())
         np.testing.assert_array_equal(e.data.warning.number, 0)
-        print(f'Feeding network: median {np.median(elapsed)*1000:.1f} ms/sample', flush=True)
-
-    def check_network_rows(self, rows):
-        for r in rows:
-            self.assertTrue(np.isfinite(r['fitted_dipole_ideal_delta_ut']).all())
-            if r['reskin_prediction_emitted']:
-                self.assertTrue(np.isfinite(r['magnetic_ut']).all())
-            else:
-                self.assertTrue(np.isnan(r['magnetic_ut']).all())
-                self.assertTrue(r['reskin_status'].startswith(('UNAVAILABLE:', 'BLOCKED:')))
+        print(f'Feeding fitted dipole: median {np.median(elapsed)*1000:.1f} ms/sample', flush=True)
 
 if __name__ == '__main__':
     unittest.main()

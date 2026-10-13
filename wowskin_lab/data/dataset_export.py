@@ -186,7 +186,7 @@ def export_dataset(directory, output, algorithm, episodes=None):
     if not candidates:
         raise ValueError('No reviewed successful episodes selected')
     metadata = [_validate(p) for p in candidates]
-    if any(m.get('tactile_modality') == 'optical' for m in metadata):
+    if algorithm in ('visk', 'ftf') and any(m.get('tactile_modality') == 'optical' for m in metadata):
         raise ValueError('ViSk/FTF magnetic adapters need 15 magnetic channels; optical datasets require an image-tactile policy adapter')
     if len({m['task'] for m in metadata}) != 1:
         raise ValueError('Select one task per algorithm export')

@@ -22,6 +22,7 @@ def configuration(seed=0, randomize=False):
     cfg = json.loads((ROOT / "configs/sensor.json").read_text())
     # One physical profile for the standalone bench and mounted Franka skins.
     cfg.update(json.loads((ROOT / "configs/sensor_hardware.json").read_text()))
+    cfg.update(skin_dof="trilinear", integrator="discrete")
     cfg["seed"] = int(seed)
     cfg["randomized"] = bool(randomize)
     if randomize:
@@ -70,7 +71,7 @@ def scene_xml(cfg, layout):
         'size=".0007" rgba=".2 .9 .8 1"/>' for s in layout
     )
     return f'''<mujoco model="Uncalibrated magnetic tactile prototype">
-  <option timestep="{cfg['timestep_s']}" integrator="{cfg.get('integrator', 'implicitfast')}"
+  <option timestep="{cfg['timestep_s']}" integrator="{cfg.get('integrator', 'discrete')}"
           gravity="0 0 0" cone="elliptic" iterations="50" tolerance="1e-10"/>
   <statistic center="0 0 .006" extent=".06"/>
   <visual><global offwidth="960" offheight="720"/><map znear=".01"/>
@@ -274,7 +275,6 @@ class TactileSim:
         """World velocities, including reduced-node interpolation and arm motion."""
         m, d = self.model, self.data
         selected = flex_vertex_slice(m, flex_id)
-        positions = d.flexvert_xpos[selected]
         if int(m.flex_interp[flex_id]) == 1:
             start = int(m.flex_nodeadr[flex_id])
             if int(m.flex_nodenum[flex_id]) != 8:
@@ -294,12 +294,7 @@ class TactileSim:
             # BLAS matmul raises floating-point warnings even for finite,
             # bounded weights/velocities; do not silence those warnings globally.
             return np.einsum('vi,ij->vj', weights, velocities)
-        velocities = np.zeros_like(positions)
-        for i, bid in enumerate(m.flex_vertbodyid[selected]):
-            jac = np.zeros((3, m.nv))
-            mujoco.mj_jac(m, d, jac, None, positions[i], int(bid))
-            velocities[i] = jac @ d.qvel
-        return velocities
+        raise ValueError('Only trilinear flex velocities are supported')
 
     def contact_state(self, flex_id=None):
         """Force-weighted tangential relative speed at actual flex contacts.

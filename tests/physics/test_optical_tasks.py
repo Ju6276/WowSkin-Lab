@@ -22,17 +22,27 @@ class OpticalTaskChecks(unittest.TestCase):
         for backend in ('tacto', 'digit_fots', 'gelsight'):
             if backend != 'gelsight':
                 _, original, _ = source(backend)
-            for cls in (PandaPickCubeTactileEnv, PandaCableEnv, PandaFeedingEnv, PandaPegInsertEnv, PandaChipEnv):
-                with self.subTest(backend=backend, task=cls.task_name):
+            tasks = [(cls, 'single_clip') for cls in
+                     (PandaPickCubeTactileEnv, PandaCableEnv, PandaFeedingEnv, PandaPegInsertEnv, PandaChipEnv)]
+            tasks.append((PandaCableEnv, 'routing'))
+            for cls, cable_layout in tasks:
+                with self.subTest(backend=backend, task=cls.task_name, cable_layout=cable_layout):
                     cfg = response_configuration(SimpleNamespace(task=cls.task_name, sensor_backend=backend,
-                        cable_layout='single_clip', clip_model='elastic_beam', ideal=True))
+                        cable_layout=cable_layout, clip_model='elastic_beam', ideal=True))
                     env = cls(cfg, pollen=False)
+                    if cls is PandaCableEnv and cable_layout == 'routing':
+                        self.assertNotEqual(env.cfg['scene_design'], 'ebim_task1_single_arm')
                     if backend != 'gelsight':
                         for side in ('left','right'):
                             for g in range(original.ngeom):
                                 target = env.model.geom(f'digit_{side}_g{g}').id
                                 for attr in (*CONTACT_FIELDS, 'type', 'size'):
                                     np.testing.assert_allclose(getattr(env.model, 'geom_'+attr)[target], getattr(original,'geom_'+attr)[g], atol=1e-8)
+                            if backend == 'tacto':
+                                for g in (0, 2):
+                                    self.assertEqual(env.model.geom(f'digit_{side}_g{g}').rgba[3], 1.)
+                                np.testing.assert_allclose(env.model.geom(f'digit_{side}_g0').rgba[:3], [.02]*3)
+                                np.testing.assert_array_equal(env.model.geom(f'digit_{side}_g2').rgba[:3], [0, 0, 1])
                     self.assertFalse(any(k.startswith(('fem_', 'magnetization', 'noise_ut')) for k in env.cfg))
                     self.assertNotIn('magnetic_ut', env.observation())
                     solver = env.model.opt.solver

@@ -204,7 +204,7 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         # long, thin skirt tetrahedra: a recorded cable motion gives V/V0=.148
         # on that mesh, versus .763/.761 with 48/96 samples under the SAME
         # trilinear deformation. Keep the material and volume check unchanged.
-        cfg.setdefault("mesh_outline_samples", 48 if cfg.get('skin_dof') == 'trilinear' else 12)
+        cfg.setdefault("mesh_outline_samples", 48)
         cfg.setdefault("scene_design", "industrial_workcell_v1")
         cfg.setdefault("camera_profile", "three_view")
         if cfg.get('gripper') == 'robotiq_2f85':
@@ -700,7 +700,9 @@ def response_configuration(args):
     cfg['gripper'] = getattr(args, 'gripper', 'panda')
     if cfg['gripper'] == 'robotiq_2f85' and getattr(args, 'grip_force', None) is not None:
         raise ValueError('Robotiq uses the sourced hinge servo; --grip-force is a Panda legacy option')
-    cfg['skin_dof'] = None if optical else getattr(args, 'skin_dof', 'trilinear')
+    if not optical and getattr(args, 'skin_dof', 'trilinear') != 'trilinear':
+        raise ValueError('Only trilinear skin is supported')
+    cfg['skin_dof'] = None if optical else 'trilinear'
     if cfg['skin_dof'] == 'trilinear':
         cfg.update(skin_model_status='Experimental trilinear interpolation; bounding-box bottom attachment; no internal contact',
                    skin_model_source='https://github.com/google-deepmind/mujoco/blob/3.5.0/model/flex/gripper_trilinear.xml',
@@ -719,14 +721,11 @@ def response_configuration(args):
     if task == 'feeding':
         cfg['feeding_setting'] = getattr(args, 'feeding_setting', 'care_room')
     if not optical and physics_step_us is None and task in ('pick_cube', 'cable', 'feeding', 'peg_insert', 'chip_tray'):
-        # Feeding's recorded 6D spoon motion becomes unstable at 100 us and
-        # passes at 50 us with this thin-silicone/contact configuration.
-        # This costs throughput; the sensor/control clock remains 100 Hz.
-        physics_step_us = 500 if cfg['skin_dof'] == 'trilinear' else (50 if task == 'feeding' else 100)
-    if not optical and physics_step_us is not None and physics_step_us > 100 and cfg['skin_dof'] != 'trilinear':
-        raise ValueError('Steps above 100 us are tested only with the reduced skin')
+        # The current reduced model uses a 500 us integration step.
+        # The sensor/control clock remains 100 Hz.
+        physics_step_us = 500
     if not optical and task in ('pick_cube', 'peg_insert'):
-        # Same full FEM/contact model; sparse CG avoids dense Jacobian work.
+        # Sparse CG avoids dense Jacobian work for the reduced contact model.
         # Keep the selected integration step in acquisition metadata.
         cfg['constraint_jacobian'] = 'sparse'
     if physics_step_us is not None:
@@ -1283,7 +1282,6 @@ def main():
                         help='Hold closure target at measured pad-to-pad contact; open to release. Local controller option, recorded in metadata; not a width or magnetic-signal cap.')
     parser.add_argument('--pad-backing-contact', action=argparse.BooleanOptionalAction, default=False,
                         help='Experimental silicone-to-rigid-backing collision correction; slower, does not yet resolve strong thin-cable grasps. Recorded separately from the legacy model.')
-    parser.add_argument('--skin-dof', choices=['full', 'trilinear'], default='trilinear', help='Reduced skin for all tasks (MuJoCo 3.15); full keeps the reference FEM')
     parser.add_argument('--keyboard-speed', type=float, help='Translation speed in m/s of simulation time; cable .12, cube .04; maximum .25')
     parser.add_argument('--spacemouse-speed', type=float, default=.12, help='Maximum translation m/s of simulation time')
     parser.add_argument('--spacemouse-angular-speed', type=float, default=.5, help='Maximum rotation rad/s of simulation time')

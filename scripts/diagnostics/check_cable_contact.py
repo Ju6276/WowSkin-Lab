@@ -1,19 +1,21 @@
-"""Physical cable grasp/lift/tug diagnostic; no scripted routing-success claim."""
+"""Legacy one-ended short-cable grasp diagnostic, not the current routing task."""
 import json
 import time
+from types import SimpleNamespace
 import mujoco
 import imageio.v3 as iio
 from wowskin_lab.paths import ROOT
 from wowskin_lab.envs.cable import PandaCableEnv, camera, save_run
-from wowskin_lab.core.physics import configuration
+from wowskin_lab.envs.pick_cube import response_configuration
 from wowskin_lab.baselines.reskin_forward import MAPPED_OUTPUT
 
 
 def main():
     output=ROOT/'outputs/diagnostics/cable_contact'
     output.mkdir(parents=True,exist_ok=True)
-    cfg=configuration()
-    cfg.update(reskin_model=str(MAPPED_OUTPUT),reskin_extrapolate=True,noise_ut=0.,drift_ut_per_s=0.)
+    cfg=response_configuration(SimpleNamespace(task='cable', ideal=True,
+        reskin_model=MAPPED_OUTPUT, reskin_extrapolate=True))
+    cfg['scene_design']='ebim_task1_single_arm'  # These scripted targets use the old short cable.
     env=PandaCableEnv(cfg,pollen=False)
     rows=[]; start=time.monotonic(); error=None
     renderer=mujoco.Renderer(env.model,width=1000,height=750)

@@ -85,6 +85,8 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 每次只选一种传感器，左右各装一个同类型模块。默认 AnySkin；DIGIT 可选 TACTO 或 FOTS，GelSight 使用独立的 GelSightMujoco 原模型（不是 Mini）。三种光学配置均接入 Panda 五类任务、三路场景 RGB-D、双指光学显示和手动录制；Robotiq 光学安装尚未接入。
 
+TACTO 的场景长指部现在使用不透明黑色；旧录像保留采集时的颜色。黑色版本请使用新录制目录重新采集。
+
 ```bash
 # 可选依赖装到同一个 .venv，固定源代码／CAD／权重版本
 .venv/bin/python scripts/setup_upstream.py --only tacto fots_mujoco gelsight_mujoco
@@ -108,6 +110,34 @@ TACTO／GelSight 完整长组件替换原短指几何；FOTS 独立模块装在�
 光学数据使用独立 schema：100 Hz 机器人／接触力，约 30 Hz 场景 RGB-D 和双指光学帧；不填充 AnySkin 15 路字段。三个默认采集根目录分别为 `data/episodes_tacto/`、`data/episodes_digit_fots/`、`data/episodes_gelsight/`，录制器会再追加任务名。例如方块成功数据位于 `data/episodes_tacto/pick_cube/lerobot/`；自定义 `--record-dir` 也遵循此规则。数据字段、独立台按键与验证命令见[光学采集说明](docs/COLLECTION_ZH.md#光学触觉数据)。
 
 **使用边界：** FOTS 多刚体接触的 marker 不受所接入源代码支持；GelSight 大平面覆盖整个视野时 RGB 响应可能很弱。原始深度定义不同，不可直接比较为真实压缩或精度。现有 ViSk／FTF 磁场网络不能直接训练光学图像；各任务完整操作成功率与实物标定仍待验证，见 [TODO](TODO.md#独立视触觉传感器与后续应用)。
+
+已新增 `dataset-review` 离线多模态回放和 `optical-act train|eval` 本地光学基线，调用 Hugging Face LeRobot 0.3.3 ACT；命令、输入与验收边界见[光学学习说明](docs/OPTICAL_LEARNING_ZH.md)。源代码与实际 UniVTAC 数据／图像对照见[光学数据检查记录](docs/OPTICAL_DATA_AUDIT_ZH.md)。当前三个光学来源并非 Isaac GelSight Mini 的等价实现。
+
+## 脚本自动采集
+
+统一入口是 `python -m wowskin_lab record-auto`；参数解析和方块脚本在 [auto_collect.py](wowskin_lab/data/auto_collect.py)，喂食／single clip 控制器在 [scripted_tasks.py](wowskin_lab/data/scripted_tasks.py)。脚本读取仿真物体姿态，通过正常控制接口执行，不是 agent 推理或人工遥操作。
+
+```bash
+# 喂食：从初始化已夹持、装豆的勺子开始，送至嘴前区域
+.venv/bin/python -m wowskin_lab record-auto --task feeding --sensor-backend tacto \
+  --episodes 1 --output data/automated/tacto_feeding
+# 单卡扣：显式启用上下唇弹性，夹持线材并送入槽内
+.venv/bin/python -m wowskin_lab record-auto --task cable --cable-layout single_clip \
+  --clip-model elastic_beam --sensor-backend tacto --episodes 1 \
+  --output data/automated/tacto_single_clip_elastic
+```
+
+将 `--sensor-backend tacto` 换成 `digit_fots` 或 `gelsight` 可选择另外两种光学后端，同时换用新的输出目录。此入口用 `--output` 指定**尚不存在**的目录；成功数据分别保存在其下的 `feeding/lerobot/` 和 `cable_insert/lerobot/`，对应 `raw/` 保留原始数值与元数据，根目录保存 `collection_report.json`。默认录制三路场景 RGB／深度、双指光学图像与数值、机器人状态及实际控制指令。方块使用 `--task pick_cube`（默认）；`--randomize` 当前仅支持方块。
+
+`--clip-model elastic_beam` 使用已有的上下唇被动弹性模型，安装底座固定；参数是未标定的平面梁近似。省略该参数或选择 `rigid` 则使用刚性卡扣，必须另用输出目录。三种光学后端使用各自的脚本抓取／推进参数，记录在 `collection_report.json` 和 raw 元数据中。两种卡扣都按中心线入槽并保持评分，不能据此推定松手后锁紧；喂食评分不包含吞咽。此前十五条回放中的 single clip 为刚性版，新弹性记录与之分开。
+
+```bash
+.venv/bin/python -m wowskin_lab dataset-check data/automated/tacto_feeding/feeding/lerobot
+.venv/bin/python -m wowskin_lab dataset-review data/automated/tacto_feeding/feeding/lerobot \
+  --episode 0 --output outputs/review_tacto_feeding
+```
+
+三种光学后端各一条喂食、刚性 single clip 和上下唇弹性 single clip 已完成采集、导出、读取和回放检查；单条示范不足以划分独立训练／验证集，这两项任务尚未训练和闭环验收。本机回放入口为 `outputs/optical_replays_20261014/index.html`，这些实验数据与回放被 Git 忽略，不随仓库分发。具体结果及字段限制见[光学学习说明](docs/OPTICAL_LEARNING_ZH.md)。
 
 ## 脆性薯片试验
 
@@ -166,7 +196,7 @@ data/         本机示范与算法导出，不进 Git
 outputs/      本机权重、标定与诊断输出，不进 Git
 ```
 
-默认 AnySkin 采用 MuJoCo 3.15 降阶指腹＋拟合偶极子；光学选项使用各自源模型。`--ideal` 关闭合成触觉噪声、滤波和延迟，不关闭接触力学。控制限制、参数来源与物理失效规则见 [模型说明](docs/MODEL_CALIBRATION_ZH.md)。完整网格对照针对 MuJoCo 3.5，与当前默认环境不同。
+默认 AnySkin 采用 MuJoCo 3.15 降阶指腹＋拟合偶极子；光学选项使用各自源模型。`--ideal` 关闭合成触觉噪声、滤波和延迟，不关闭接触力学。控制限制、参数来源与物理失效规则见 [模型说明](docs/MODEL_CALIBRATION_ZH.md)。AnySkin 只支持当前 trilinear 降阶模型；旧完整节点模式及其选择参数已移除，不再需要 MuJoCo 3.5。旧 full 模型记录不能按降阶模型重放。
 
 ```bash
 # 以下检查包含学习接口，先按学习文档获取固定版 ViSk
@@ -175,6 +205,6 @@ outputs/      本机权重、标定与诊断输出，不进 Git
 .venv/bin/python -m tests all --list
 ```
 
-`unit` 检查坐标、输入和动作契约；`physics` 运行接触场景；`official` 检查官方数据与学习接口；`artifacts` 依赖可选数据／权重；`manual` 需要人工操作窗口。Robotiq 强夹持的已知失败保留在物理测试中，不跳过。物理／artifact 检查可能需要特定 MuJoCo 版本或可选模型，不能把跳过项算作通过。普通遥操作不保存整场诊断，需要时加 `--diagnostic-log`；可选对照入口见[模型说明](docs/MODEL_CALIBRATION_ZH.md)。
+`unit` 检查坐标、输入和动作契约；`physics` 运行接触场景，AnySkin 物理测试不依赖 ReSkin 网络权重；`official` 检查官方数据与学习接口；`artifacts` 依赖可选数据／权重；`manual` 需要人工操作窗口。Robotiq 强夹持的已知失败保留在物理测试中，不跳过。部分物理检查限定已验证的 MuJoCo 版本，可选模型检查缺少资源时跳过，不能把跳过项算作通过。普通遥操作不保存整场诊断，需要时加 `--diagnostic-log`；可选对照入口见[模型说明](docs/MODEL_CALIBRATION_ZH.md)。
 
 [采集手册](docs/COLLECTION_ZH.md) · [ViSk / FTF](docs/LEARNING_WORKFLOWS_ZH.md) · [模型与参数](docs/MODEL_CALIBRATION_ZH.md) · [论文与算法](docs/PAPERS_ZH.md) · [TODO](TODO.md) · [第三方来源与发布事项](THIRD_PARTY.md)

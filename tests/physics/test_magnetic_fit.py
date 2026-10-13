@@ -17,8 +17,6 @@ class MagneticFitChecks(unittest.TestCase):
             gains = np.array([2., 3., 4., 5., 6.])
             path.write_text(json.dumps(dict(schema='wowskin_sim_magnetic_gain_v1', gains=gains.tolist(), fit_magnetization_a_per_m=4000.)))
             cfg = configuration(); cfg.update(noise_ut=0., drift_ut_per_s=0.)
-            if tuple(map(int, mujoco.__version__.split('.')[:2])) >= (3, 15):
-                cfg.update(skin_dof='trilinear', integrator='discrete', noslip_iterations=0)
             plain = TactileSim(cfg)
             fitted = TactileSim(dict(cfg, magnetic_fit=str(path)))
             # Impose the same small deformation, without changing any material.

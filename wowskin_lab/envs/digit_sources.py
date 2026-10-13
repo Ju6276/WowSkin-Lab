@@ -1,6 +1,7 @@
 """Import the two authors' distinct DIGIT mechanical models without remeshing.
 
-Only instance names, collision bit routing and the rigid Panda mount change.
+Instance names, collision bit routing and the rigid Panda mount are adapted.
+TACTO's visual finger/stub meshes are opaque for scene-camera observations.
 Effective defaults are materialized from an isolated source compilation so
 Panda/AnySkin XML defaults cannot alter the sensor. The TACTO example includes
 its long stub; it is deliberately retained, not replaced with a local housing.
@@ -136,6 +137,17 @@ def add(asset, parent, name, *, sensor, friction=None):
                 if geom.get(field):
                     geom.set(field, prefix+geom.get(field))
             active = bool(model.geom_contype[gid] or model.geom_conaffinity[gid])
+            if sensor == 'tacto' and not active:
+                # The source example uses alpha=0.2 for its two visual meshes.
+                # Robot observations need solid fingers and their occlusion.
+                # TACTO renders tactile images separately from contact geoms.
+                rgba = model.geom_rgba[gid].copy()
+                rgba[3] = 1.
+                # Use black for the source's green long finger. Keep the
+                # inner mesh color and all mechanical properties unchanged.
+                if geom.get('mesh') == prefix+'finger_0':
+                    rgba[:3] = .02
+                geom.set('rgba', numbers(rgba))
             geom.set('contype', '2' if active else '0')
             geom.set('conaffinity', '7' if active else '0')
         for site in b.findall('site'):

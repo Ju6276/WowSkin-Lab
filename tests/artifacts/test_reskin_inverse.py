@@ -1,4 +1,4 @@
-"""Cable scene isolation and cross-model channel contract regression checks."""
+"""Saved inverse models, channel mapping and optional pseudo-label experiments."""
 import json
 import hashlib
 import unittest
@@ -6,12 +6,10 @@ import numpy as np
 from wowskin_lab.paths import ROOT
 
 
-@unittest.skipUnless((ROOT/'outputs/reskin_inverse_mapped/model.json').exists() and
-                     (ROOT/'outputs/reskin_forward/model.json').exists() and
-                     (ROOT/'outputs/reskin_forward_mapped/model.json').exists(),
-                     'Optional inverse/forward checkpoints not present')
 class InverseChecks(unittest.TestCase):
-    @unittest.skipUnless((ROOT/'outputs/reskin_inverse_mapped/model.json').exists(), 'Optional inverse model not trained')
+    @unittest.skipUnless((ROOT/'outputs/reskin_inverse_mapped/model.json').is_file() and
+                         (ROOT/'outputs/reskin_forward_mapped/model.json').is_file(),
+                         'Optional mapped inverse model or forward mapping not present')
     def test_saved_prediction_and_original_checkpoint_permutation(self):
         from wowskin_lab.baselines.reskin_inverse import InverseModel, predict_batches
         from wowskin_lab.baselines.reskin_forward import read_data
@@ -25,6 +23,9 @@ class InverseChecks(unittest.TestCase):
         actual = official.predict(source[:10,official.indices])
         np.testing.assert_allclose(actual, expected, atol=1e-6)
 
+    @unittest.skipUnless((ROOT/'outputs/reskin_forward/model.json').is_file() and
+                         (ROOT/'outputs/reskin_forward_mapped/model.json').is_file(),
+                         'Optional original/mapped forward model metadata not present')
     def test_forward_original_and_mapped_archives_are_preserved(self):
         from wowskin_lab.baselines.reskin_forward import OUTPUT,MAPPED_OUTPUT
         self.assertNotEqual(OUTPUT,MAPPED_OUTPUT)

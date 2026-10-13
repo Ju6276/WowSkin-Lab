@@ -16,10 +16,8 @@ from wowskin_lab.ui.channel_alignment import OFFICIAL_TO_REFERENCE, POSITIONS, o
 
 def bench_configuration(args):
     cfg = configuration(args.seed)
-    if tuple(map(int, mujoco.__version__.split('.')[:2])) >= (3, 15):
-        cfg.update(skin_dof='trilinear', integrator='discrete',
-                   skin_model_status='Trilinear interpolation with bounding-box bottom attachment; standalone bench, not the old full-node calibration model',
-                   engine_version=mujoco.__version__)
+    cfg.update(skin_model_status='Trilinear interpolation with bounding-box bottom attachment; standalone bench',
+               engine_version=mujoco.__version__)
     cfg.update(duration_s=3.5, offset_x_m=args.x_mm/1000,
                offset_y_m=args.y_mm/1000, normal_load_n=args.load_n)
     # This initial bench stays in a small, numerically checked region.
@@ -152,10 +150,6 @@ def demo(args):
 
 def viewer(args):
     import mujoco.viewer
-    # 3.3.7/3.4.0 set_texts can wait with the GIL held while OnKey waits to
-    # acquire it, deadlocking both UI and Python. 3.5.0 fixes that native wait.
-    if tuple(map(int, mujoco.__version__.split('.')[:3])) < (3, 5, 0):
-        raise RuntimeError("Interactive viewer requires MuJoCo >= 3.5.0 to avoid the keyboard/overlay deadlock; install requirements.txt with Python >= 3.10.")
     cfg = bench_configuration(args)
     sim = TactileSim(cfg)
     keyboard = ViewerKeyboard(set(map(ord, "PLVZ12345,.QBMT")),

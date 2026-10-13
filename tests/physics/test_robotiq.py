@@ -13,8 +13,9 @@ class RobotiqChecks(unittest.TestCase):
     def test_source_servo_and_contact_release(self):
         cfg=response_configuration(SimpleNamespace(task='cable',skin_dof='trilinear',
             gripper='robotiq_2f85',cable_layout='single_clip',ideal=True,
-            reskin_model=ROOT/'outputs/reskin_forward_mapped',reskin_extrapolate=True))
+            magnetic_fit=ROOT/'configs/magnetic_fit_pollen_nonslip.json'))
         e=PandaCableEnv(cfg,pollen=False)
+        self.assertIsNone(e.reskin_response)
         aid=e.gripper_control
         self.assertAlmostEqual(e.model.actuator_gainprm[aid,0],300)
         self.assertAlmostEqual(e.model.actuator_biasprm[aid,2],-20)
@@ -31,8 +32,7 @@ class RobotiqChecks(unittest.TestCase):
         self.assertGreater(max(r['passive_normal_force_n'] for r in rows),.1)
         self.assertLess(rows[-1]['normal_force_n'],.001)
         self.assertGreater(min(r['min_volume_ratio'] for r in rows),.15)
-        from tests.physics.test_reduced_skin import ReducedTaskChecks
-        ReducedTaskChecks().check_network_rows(rows)
+        self.assertTrue(np.isfinite([r['magnetic_ut'] for r in rows]).all())
         self.assertTrue(all(np.isnan(r['finger_actuator_force_n']).all() for r in rows))
         self.assertIn('gripper_hinge_torque_nm', rows[-1])
         np.testing.assert_array_equal(e.data.warning.number,0)

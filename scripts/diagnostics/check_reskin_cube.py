@@ -3,10 +3,10 @@ import argparse
 import json
 import time
 from pathlib import Path
+from types import SimpleNamespace
 import mujoco
 import numpy as np
-from wowskin_lab.core.physics import configuration
-from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, scripted_action, task_camera, save_records
+from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration, scripted_action, task_camera, save_records
 from wowskin_lab.baselines.reskin_forward import MAPPED_OUTPUT
 from wowskin_lab.ui.tactile import TactileHUD
 from wowskin_lab.paths import ROOT
@@ -18,8 +18,8 @@ def main():
     parser.add_argument('--samples', type=int, default=850)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    cfg = configuration()
-    cfg.update(reskin_model=str(MAPPED_OUTPUT), reskin_extrapolate=True, noise_ut=0., drift_ut_per_s=0.)
+    cfg = response_configuration(SimpleNamespace(task='pick_cube', ideal=True,
+        reskin_model=MAPPED_OUTPUT, reskin_extrapolate=True))
     env = PandaPickCubeTactileEnv(cfg, pollen=False)
     hud = TactileHUD(env)
     renderer = mujoco.Renderer(env.model, height=600, width=800)

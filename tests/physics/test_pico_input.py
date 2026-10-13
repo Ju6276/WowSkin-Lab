@@ -11,7 +11,6 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import numpy as np
-import mujoco
 
 from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configuration, rotation_matrix, rotation_vector
 from wowskin_lab.teleop.pico import PicoBridge, PicoController, PicoMailbox, validate_frame
@@ -28,7 +27,7 @@ class PicoChecks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.env = PandaPickCubeTactileEnv(response_configuration(SimpleNamespace(
-            task='pick_cube', skin_dof='trilinear' if mujoco.__version__ == '3.15.0' else 'full')), pollen=False)
+            task='pick_cube', skin_dof='trilinear')), pollen=False)
 
     def setUp(self):
         self.env.reset()
@@ -182,7 +181,7 @@ class PicoChecks(unittest.TestCase):
 
     def test_responsive_profile_tracks_ramp_and_stops_on_release(self):
         cfg = response_configuration(SimpleNamespace(task='pick_cube',
-            skin_dof='trilinear' if mujoco.__version__ == '3.15.0' else 'full'))
+            skin_dof='trilinear'))
         cfg.update(tcp_speed_m_s=.25, tcp_angular_speed_rad_s=1.5)
         env = PandaPickCubeTactileEnv(cfg, pollen=False)
         control = PicoController(scale=1., camera_azimuth=0.)

@@ -1,6 +1,7 @@
 """Check saved forward response and refusal of unsupported contact queries."""
 import json
 import unittest
+import mujoco
 import numpy as np
 from wowskin_lab.baselines.reskin_forward import ResponseModel, OUTPUT
 
@@ -46,7 +47,6 @@ class MappedResponseChecks(unittest.TestCase):
 
     def test_cube_proxy_is_blocked_unless_preview_is_explicit(self):
         from types import SimpleNamespace
-        import mujoco
         from wowskin_lab.baselines.reskin_contact import ReskinContactResponse
         backend = ReskinContactResponse(self.path)
         backend.query = lambda sim: (np.array([8.,8.,.02]), 20., 5)
@@ -77,16 +77,14 @@ class MappedResponseChecks(unittest.TestCase):
         self.assertTrue(np.isnan(row['magnetic_ut']).all())
 
     def test_auto_collection_rejects_unloaded_network_before_creating_files(self):
-        import mujoco
         from pathlib import Path
         from tempfile import TemporaryDirectory
         from wowskin_lab.data.auto_collect import collect
         from wowskin_lab.data.recording import MissingTactileError
-        dof = 'trilinear' if mujoco.__version__ == '3.15.0' else 'full'
         with TemporaryDirectory() as temporary:
             output = Path(temporary)/'episode'
             with self.assertRaises(MissingTactileError):
-                collect(output, reskin_model=self.path, reskin_extrapolate=True, skin_dof=dof)
+                collect(output, reskin_model=self.path, reskin_extrapolate=True)
             self.assertFalse(output.exists())
 
     def test_recording_does_not_mix_dipole_raw_with_empirical_delta(self):

@@ -42,9 +42,17 @@ class DigitSourceChecks(unittest.TestCase):
                 for side in ('left','right'):
                     for g in range(original.ngeom):
                         new=model.geom(f'digit_{side}_g{g}').id
-                        for attr in (*CONTACT_FIELDS,'size','rgba','type'):
+                        for attr in (*CONTACT_FIELDS,'size','type'):
                             np.testing.assert_allclose(getattr(model,'geom_'+attr)[new],
                                 getattr(original,'geom_'+attr)[g],atol=1e-8,err_msg=f'{sensor} {g} {attr}')
+                        expected_rgba = original.geom_rgba[g].copy()
+                        if sensor == 'tacto' and not (original.geom_contype[g] or original.geom_conaffinity[g]):
+                            # Source demonstration transparency is overridden
+                            # for robot observations, with a black long finger.
+                            expected_rgba[3] = 1.
+                            if original.mesh(original.geom_dataid[g]).name == 'finger_0':
+                                expected_rgba[:3] = .02
+                        np.testing.assert_allclose(model.geom_rgba[new], expected_rgba, atol=1e-8)
                         if original.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH:
                             oldmesh,newmesh=original.geom_dataid[g],model.geom_dataid[new]
                             self.assertEqual(original.mesh_vertnum[oldmesh],model.mesh_vertnum[newmesh])

@@ -158,23 +158,21 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
             self.cable_count, self.cable_length = CABLE_COUNT, CABLE_LENGTH
         cfg.update(cable_length_m=self.cable_length, cable_capsules=self.cable_count-1)
         # Cable edges produce large local compression/shear. Improve top
-        # tetrahedron aspect ratios and enable MuJoCo internal contacts in the
-        # full-node model. V/V0=0.15 is only a warning, not a stop. Radius is a NUMERICAL
+        # tetrahedron aspect ratios. V/V0=0.15 is only a warning, not a stop.
+        # Radius is a NUMERICAL
         # collision thickness (also affects the external contact surface), not
         # a measured silicone thickness or a change to EBiM cable parameters.
         if not cfg.get('sensor'):
-            for key, value in dict(cap_top_inner_fraction=.85, fem_internal_contact=True,
+            for key, value in dict(cap_top_inner_fraction=.85,
                                    fem_contact_radius_m=.0002, fem_contact_timeconst_s=.0002,
                                    fem_contact_solimp=[.98, .98, .001, .5, 2.]).items():
                 cfg.setdefault(key, value)
         # The default 0.9/0.95 contact impedance lets thin rim tetrahedra
         # compress into the warning range during one-sided cable shear.
-        # This is a numerical contact constraint (internal AND external),
+        # This is a numerical external contact constraint,
         # not measured silicone stiffness. Nonpositive volumes remain invalid.
         if not cfg.get('sensor'):
-            cfg['silicone_numerics'] = 'cable edge-contact mesh + internal constraints; material uncalibrated'
-            if cfg.get('skin_dof') == 'trilinear':
-                cfg['silicone_numerics'] = 'Trilinear reduced skin, bottom nodes pinned; material uncalibrated'
+            cfg['silicone_numerics'] = 'Trilinear reduced skin, bottom nodes pinned; material uncalibrated'
         super().__init__(cfg, pollen=pollen, xml_factory=cable_scene,
                          contact_body='wire_B_last', contact_geom=f'wire_G{self.cable_count-2}', object_joint=None)
         self.contact_geoms = {self.model.geom(f'wire_G{i}').id for i in range(self.cable_count-1)}
@@ -366,6 +364,8 @@ def main():
     p.add_argument('mode', choices=['viewer', 'check'], nargs='?', default='viewer')
     p.add_argument('--reskin-model', type=Path)
     p.add_argument('--reskin-extrapolate', action='store_true')
+    p.add_argument('--magnetic-fit', type=Path, help='Default: the teleoperation fitted-dipole configuration')
+    p.add_argument('--ideal', action='store_true', help='Disable synthetic tactile noise, filtering and delay')
     p.add_argument('--pollen', action='store_true')
     p.add_argument('--cable-layout', choices=CABLE_LAYOUTS, default='routing')
     p.add_argument('--seconds', type=float, default=0.)
@@ -376,11 +376,13 @@ def main():
         p.error('--reskin-extrapolate requires --reskin-model')
     if args.samples < 1 or args.seconds < 0:
         p.error('samples must be positive; seconds must be nonnegative')
+    if args.magnetic_fit and args.reskin_model:
+        p.error('Choose --magnetic-fit or --reskin-model, not both')
+    if not args.reskin_model and not args.magnetic_fit:
+        args.magnetic_fit = ROOT/'configs/magnetic_fit_pollen_nonslip.json'
     cfg = response_configuration(args)
     if args.cable_layout == 'single_clip' and args.output == ROOT/'outputs/diagnostics/cable_scene':
         args.output = ROOT/'outputs/diagnostics/cable_insert_scene'
-    if args.reskin_model:
-        cfg.update(reskin_model=str(args.reskin_model.resolve()), reskin_extrapolate=args.reskin_extrapolate)
     env = PandaCableEnv(cfg, pollen=args.pollen)
     if args.mode == 'viewer':
         return viewer(env, args)

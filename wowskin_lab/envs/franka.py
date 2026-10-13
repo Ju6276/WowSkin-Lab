@@ -56,7 +56,7 @@ def build_scene(cfg, layout):
                 asset.remove(element)
             else:
                 element.set("file", str((directory/element.get("file")).resolve()))
-    ET.SubElement(root, "option", timestep=str(cfg["timestep_s"]), integrator="implicitfast",
+    ET.SubElement(root, "option", timestep=str(cfg["timestep_s"]), integrator=cfg.get("integrator", "discrete"), solver="CG",
                   gravity="0 0 -9.81", cone="elliptic", iterations="50", tolerance="1e-10")
     ET.SubElement(root, "statistic", center=".3 0 .35", extent=".8")
     visual = ET.SubElement(root, "visual")
@@ -74,7 +74,7 @@ def build_scene(cfg, layout):
     # Override the inherited panda joint defaults for elastic nodes.
     tactile_default = ET.SubElement(root.find("default"), "default", {"class": "tactile"})
     ET.SubElement(tactile_default, "joint", armature="0",
-                  damping="0" if cfg.get('skin_dof') == 'trilinear' else ".002", limited="false")
+                  damping="0", limited="false")
     finger = root.find(".//body[@name='left_finger']")
     for name in ("left_finger", "right_finger"):
         body = root.find(f".//body[@name='{name}']")
@@ -93,8 +93,7 @@ def build_scene(cfg, layout):
     mount.append(shell)
     skin = ET.fromstring(flex)
     skin.find("contact").set("contype", "2")
-    # Internal vertex/face contacts are skipped by MuJoCo unless the flex's
-    # own contype intersects conaffinity. selfcollide remains none.
+    # Retain pad/object collision bits; reduced-flex selfcollide stays none.
     skin.find("contact").set("conaffinity", "6")
     mount.append(skin)
     for sensor in layout:

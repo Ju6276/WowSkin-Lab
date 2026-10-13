@@ -23,7 +23,7 @@ class FeedingChecks(unittest.TestCase):
         for name, entry in manifest['files'].items():
             self.assertEqual(hashlib.sha256((ASSETS/name).read_bytes()).hexdigest(), entry['sha256'])
         cfg = response_configuration(SimpleNamespace(task='feeding', ideal=True,
-            skin_dof='trilinear' if mujoco.__version__ == '3.15.0' else 'full'))
+            skin_dof='trilinear'))
         env = PandaFeedingEnv(cfg)
         source = ET.parse(ASSETS/'scene_100.xml').getroot()
         built = ET.fromstring(env.xml)

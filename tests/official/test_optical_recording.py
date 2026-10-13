@@ -10,6 +10,8 @@ from wowskin_lab.envs.optical import OpticalPandaEnv
 from wowskin_lab.data.lerobot_recording import LeRobotSimRecorder, validate_dataset, upstream
 from wowskin_lab.data.optical_recording import optical_path, validate_optical
 from wowskin_lab.data.dataset_export import export_dataset
+from wowskin_lab.data.episode_review import review
+from wowskin_lab.learning.optical_act_data import OpticalEpisodes
 
 
 class OpticalRecordingChecks(unittest.TestCase):
@@ -45,8 +47,46 @@ class OpticalRecordingChecks(unittest.TestCase):
                             row=data[i];k=int(np.asarray(row['aux.raw_sample_index']).item())
                             np.testing.assert_allclose(row['action'],np.r_[f['commanded_pose'][k+1],f['commanded_gripper'][k+1]],atol=1e-6)
                             np.testing.assert_allclose(row['observation.state'],np.r_[f['cartesian_states'][k],f['gripper_states'][k]],atol=1e-6)
-                with self.assertRaisesRegex(ValueError,'optical datasets'):
-                    export_dataset(root,root/'invalid_magnetic_export','visk')
+                for algorithm in ('visk', 'ftf'):
+                    with self.assertRaisesRegex(ValueError,'optical datasets'):
+                        export_dataset(root,root/('invalid_'+algorithm+'_export'),algorithm)
+                # Image-tactile data remain valid LeRobot data: selecting a
+                # subset must not go through the magnetic-policy rejection.
+                selected = root/'optical_subset'
+                original_metadata = (paths[1]/'metadata.json').read_bytes()
+                report = export_dataset(root, selected, 'lerobot', episodes=[paths[1].name])
+                self.assertEqual(report['validation']['episodes'], 1)
+                self.assertEqual(len(report['validation']['cameras']), 5)
+                meta = json.loads(original_metadata)
+                with h5py.File(optical_path(paths[1], meta)) as original, h5py.File(
+                        selected/'optical/chunk-000/episode_000000.h5') as subset:
+                    np.testing.assert_array_equal(original['timestamp'][:], subset['timestamp'][:])
+                    for side in ('left', 'right'):
+                        for key in ('rgb', 'indentation_m'):
+                            np.testing.assert_array_equal(original[f'frames/000000/{side}/{key}'][:],
+                                                          subset[f'frames/000000/{side}/{key}'][:])
+                self.assertEqual((paths[1]/'metadata.json').read_bytes(), original_metadata)
+                # Offline review follows the recorded clock, including raw
+                # pre/post-roll; ACT trains only on the demonstration phase.
+                replay = review(selected, root/'review')
+                self.assertEqual(replay['backend'], backend)
+                reviewed = json.loads((root/'review/review.json').read_text())
+                with h5py.File(paths[1]/'measurements.h5') as raw:
+                    np.testing.assert_array_equal(reviewed['camera_time_s'], raw['camera_timestamp'][:])
+                    self.assertEqual(len(reviewed['state']), len(raw['timestamp']))
+                self.assertIn('marker_status', reviewed['optical'][0]['left'])
+                learning = OpticalEpisodes(root/'lerobot', image_size=32, chunk_size=5,
+                                           cache_dir=root/'test_image_cache')
+                train, valid, stats = learning.split(1)
+                self.assertTrue(train and valid)
+                self.assertTrue(all(learning.rows[i][0] == 0 for i in train))
+                self.assertTrue(all(learning.rows[i][0] == 1 for i in valid))
+                self.assertEqual(set(learning[train[0]]), set(learning.image_keys) |
+                                 {'observation.state', 'action', 'action_is_pad'})
+                self.assertEqual(learning[train[-1]]['action_is_pad'].tolist(), [False, True, True, True, True])
+                old_mean = stats['observation.state']['mean'].clone()
+                learning.episodes[1]['observation.state'] += 1000
+                np.testing.assert_array_equal(learning.split(1)[2]['observation.state']['mean'], old_mean)
                 # Abort is retained as raw and never silently added to LeRobot.
                 with LeRobotSimRecorder(env,directory,source='format_test_not_task_evaluation') as recorder:
                     recorder.start(); aborted=recorder.abort('intentional format test')

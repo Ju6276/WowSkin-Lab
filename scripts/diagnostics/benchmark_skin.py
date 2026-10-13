@@ -12,13 +12,12 @@ from wowskin_lab.paths import ROOT
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--skin-dof', choices=['full', 'trilinear'], required=True)
     p.add_argument('--physics-step-us', type=int)
     p.add_argument('--response', choices=['fitted', 'network'], default='fitted')
     p.add_argument('--reskin-extrapolate', action='store_true',
                    help='Explicitly allow experimental single-probe contact predictions')
     p.add_argument('--output', type=Path, required=True)
-    p.add_argument('--reference', type=Path, help='NPZ from the full benchmark')
+    p.add_argument('--reference', type=Path, help='NPZ from a previous benchmark')
     args = p.parse_args()
     args.task, args.ideal, args.seed = 'pick_cube', True, 0
     if args.response == 'network':
@@ -42,7 +41,7 @@ def main():
     finite_held = held & np.isfinite(arrays['ideal_delta_ut']).all(axis=1)
     def rms(values):
         return float(np.sqrt(np.mean(values**2))) if values.size else None
-    report = dict(engine=mujoco.__version__, skin_dof=args.skin_dof, timestep_s=env.model.opt.timestep,
+    report = dict(engine=mujoco.__version__, skin_dof=env.cfg['skin_dof'], timestep_s=env.model.opt.timestep,
                   nv=env.model.nv, held_sample_ms=float(np.median(np.array(elapsed)[held])*1000),
                   max_lift_m=float(arrays['lift_m'].max()), held_grasp=bool(arrays['grasped'][held].all()),
                   held_slip_fraction=float(arrays['slip'][held].mean()), final_lift_m=float(arrays['lift_m'][-1]),
@@ -51,7 +50,7 @@ def main():
                   held_field_rms_ut=rms(arrays['ideal_delta_ut'][finite_held]),
                   held_field_samples=int(finite_held.sum()), held_total_samples=int(held.sum()),
                   warnings=env.data.warning.number.tolist(), calibrated=False,
-                  comparison_note='Combined engine/integrator/DOF/boundary change; not an isolated DOF ablation')
+                  comparison_note='Current trilinear skin. Verify reference engine, timestep, mesh, mounting and controller before interpreting differences.')
     if args.reference:
         with np.load(args.reference) as reference:
             np.testing.assert_allclose(arrays['time_s'], reference['time_s'], atol=1e-8)

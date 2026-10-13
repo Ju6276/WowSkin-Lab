@@ -224,7 +224,7 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
             cfg = response_configuration(SimpleNamespace(task='feeding'))
         cfg = dict(cfg)
         if not cfg.get('sensor'):
-            for key, value in dict(cap_top_inner_fraction=.85, fem_internal_contact=True,
+            for key, value in dict(cap_top_inner_fraction=.85,
                                    fem_contact_radius_m=.0002, fem_contact_timeconst_s=.0002).items():
                 cfg.setdefault(key, value)
         cfg.setdefault('feeding_setting', 'care_room')
@@ -245,9 +245,7 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
             self.workspace[1, 0] = -1.0  # Allow approaching the seated person's face.
         cfg.setdefault('gripper_control_mode', 'panda_menagerie_position')
         if not cfg.get('sensor'):
-            cfg['silicone_numerics'] = 'edge-contact mesh + internal constraints; material uncalibrated'
-            if cfg.get('skin_dof') == 'trilinear':
-                cfg['silicone_numerics'] = 'Trilinear reduced skin, bottom nodes pinned; material uncalibrated'
+            cfg['silicone_numerics'] = 'Trilinear reduced skin, bottom nodes pinned; material uncalibrated'
         super().__init__(cfg, pollen=pollen, xml_factory=feeding_scene,
                          contact_body='dynamic_spoon2', contact_geom='spoon_collision_original_stem_mesh_00',
                          object_joint=None)
@@ -256,7 +254,7 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
                     ET.fromstring(self.xml).find(".//body[@name='dynamic_spoon2']").iter('body')}
         self.contact_geoms = {i for i in range(self.model.ngeom) if self.model.geom_bodyid[i] in body_ids}
         self.cfg.update(task='single_arm_feeding_scene',
-                        constraint_solver='CG', reset_constraint_solver=('CG' if cfg.get('skin_dof') == 'trilinear' else 'Newton'), constraint_jacobian='sparse',
+                        constraint_solver='CG', reset_constraint_solver='CG', constraint_jacobian='sparse',
                         constraint_solver_source='Local user-requested override of EBiM Newton; source iteration limit retained',
                         ebim_revision=json.loads((ASSETS/'manifest.json').read_text())['revision'],
                         bean_count=BEAN_COUNT, robot_base_world_m=ROBOT_POSITION, head_world_m=head_position,
@@ -278,18 +276,9 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
 
     @joint_pd_reset
     def reset(self, seed=None):
-        if self.is_optical:
-            self.cg_fallbacks = 0
-            return self._reset_loaded_spoon(seed)
-        # Cold-start closure diverges with CG even at 50 us. Establish the
-        # original physical grasp with Newton, then use CG for teleoperation.
-        self.model.opt.solver = (mujoco.mjtSolver.mjSOL_CG if self.cfg.get('skin_dof') == 'trilinear'
-                                 else mujoco.mjtSolver.mjSOL_NEWTON)
-        self.cg_fallbacks = 0
-        try:
-            return self._reset_loaded_spoon(seed)
-        finally:
+        if not self.is_optical:
             self.model.opt.solver = mujoco.mjtSolver.mjSOL_CG
+        return self._reset_loaded_spoon(seed)
 
     def _reset_loaded_spoon(self, seed=None):
         super().reset(seed=seed)  # Unloaded magnetic baseline before closure.
@@ -441,21 +430,14 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         except RuntimeError as error:
             if not any(message in str(error) for message in ('MuJoCo instability/warning', 'FEM invalid', 'Silicone mesh inverted/nonfinite')):
                 raise
-            # Restore the full integration/solver state before retrying. The
-            # Cartesian action was already applied by step(): do NOT apply it
-            # twice. Discard failed force peaks, filtering and random draws.
+            # Restore the sample boundary before propagating the failure.
+            # Discard failed force peaks, filtering and random draws;
+            # never retry with another solver or apply the action twice.
             mujoco.mj_copyData(self.data, self.model, self._sample_backup)
             for name, value in saved.items():
                 setattr(self, name, value)
             self.rng.bit_generator.state = rng
-            if self.cfg.get('skin_dof') == 'trilinear':
-                # Newton does not support these interpolated flex nodes.
-                raise
-            self.model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
-            self.cg_fallbacks += 1
-            print('CG unstable: restored last sample boundary; retrying with Newton. '
-                  'Newton stays active until reset.', flush=True)
-            return super().sample(controller)
+            raise
 
     def after_physics_step(self):
         """Sum contact force magnitudes on head, peak over every physics step.
@@ -520,8 +502,7 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         row['ik_weighted_condition'] = float(singular[0]/max(singular[-1], 1e-15))
         row['ik_min_singular_value'] = float(singular[-1])
         row['joint_limit_margin_deg'] = float(np.rad2deg(np.minimum(q-bounds[:, 0], bounds[:, 1]-q)).min())
-        row['constraint_solver'] = ('source optical' if self.is_optical else 'CG' if self.model.opt.solver == mujoco.mjtSolver.mjSOL_CG else 'Newton fallback')
-        row['cg_fallbacks'] = self.cg_fallbacks
+        row['constraint_solver'] = ('source optical' if self.is_optical else mujoco.mjtSolver(self.model.opt.solver).name.removeprefix('mjSOL_'))
         row['task_status'] = 'delivered to mouth approach region' if self.success else 'delivery in progress'
         self.last_row = row
         return self.observation(), float(self.success), False, False, row

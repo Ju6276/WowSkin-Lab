@@ -1,5 +1,7 @@
 # ViSk 与 FTF：从当前采集开始
 
+光学图像走独立的 [LeRobot ACT 本地基线与离线回放](OPTICAL_LEARNING_ZH.md)，不使用本页的 15 路磁场转换器。
+
 采集入口见 [README](../README.md)。各任务共享 LeRobot v2.1＋100 Hz raw 数值附件的录制协议，按任务分目录，不需要同时开两套录制器。默认 cube 数据位于 `data/episodes/pick_cube/`。以下命令在项目根目录执行，训练与部署需要分别手动启动；薯片仍是待调整的独立物理试验，不作为已验证的策略任务。
 
 ## 安装学习依赖
@@ -14,7 +16,7 @@ ViSk 同时获取固定版本 Open-Teach：原版 XArm 环境即使在离线训�
 
 ## 当前采集内容
 
-- 相机：固定 `1/2`＋腕部 `52`，三路 640×480、30 Hz RGB-D。深度无损保存，腕部外参逐帧保存；配置见 [cameras.json](../configs/cameras.json)。
+- 相机：固定 `1/2`＋腕部 `52`，三路 640×480、名义 30 Hz RGB-D。深度无损保存，腕部外参逐帧保存；安装位置与朝向见 [cameras.json](../configs/cameras.json)。分辨率与帧率目前由录制器固定，该 JSON 中的同名字段仅记录约定，修改它们不会改变采集。
 - 机器人：基座系 TCP 位姿、实际下发目标、七关节位置／速度、TCP 线／角速度。
 - 夹爪：连续实测闭合比例与连续目标分开保存，0 开、1 闭；另外保留物理驱动关节及单位。Panda、Robotiq 使用相同语义。
 - 触觉：单块五芯片 XYZ，共 15 路磁场；raw 保存基线和质量字段。拟合偶极子没有完成真机标定。
@@ -115,7 +117,7 @@ FTF 从同一份记录中选择固定相机 1、2，腕部数据仍留在公共�
 3. 检查轨迹、点数配置及官方机器人参考点与本地 TCP 配准。
 4. 机器人分支运行 `train.py agent=p3po suite=p3po dataloader=p3po`，之后对接官方触觉反馈控制。
 
-Mac 可做导出、视频预处理、初始 PKL 与标注。固定版本 DIFT/CoTracker 路径直接依赖 CUDA/xformers，需要在 CUDA 环境继续处理；FTF MuJoCo 策略闭环尚未接入。自建任务需准备点数一致的 YAML，使用以下完整命令生成工作目录；`--task` 应与 YAML 配置文件名（不含扩展名）一致，后续命令见生成目录中的 `COMMANDS.md`。
+Mac 可做导出、视频预处理、初始 PKL 与标注。固定版本 DIFT/CoTracker 路径直接依赖 CUDA/xformers，需要在 CUDA 环境继续处理；FTF MuJoCo 策略闭环尚未接入。自建任务需准备点数一致的 YAML，使用以下完整命令生成工作目录。`--task` 是写入工作目录的配置名，YAML 会被复制为 `franka_env/<task>.yaml`，原文件名不影响结果；YAML 内的 `task_name` 决定数据集文件名，必须与导出、`process-ftf-robot` 等步骤使用的 `--task` 一致。后续命令见生成目录中的 `COMMANDS.md`。
 
 ```bash
 .venv/bin/python -m wowskin_lab official prepare ftf-robot \
