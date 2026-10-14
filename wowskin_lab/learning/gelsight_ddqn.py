@@ -30,7 +30,10 @@ def digest(path):
 
 
 def write_json(path, value):
-    Path(path).write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+    path = Path(path)
+    temporary = path.with_name(path.name+'.pending')
+    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+    os.replace(temporary, path)
 
 
 def fingerprint():
@@ -125,6 +128,14 @@ def load_sources(workspace, runtime, seed):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         modules[path.stem] = module
+    # The upstream module assumes a 10 GB GPU. Reserve space for MuJoCo's EGL
+    # renderer and the desktop on smaller GPUs; this does not change learning.
+    if os.environ.get('WOWSKIN_TF_GPU_MEMORY_MB'):
+        limit = int(os.environ['WOWSKIN_TF_GPU_MEMORY_MB'])
+        if limit <= 0:
+            raise ValueError('WOWSKIN_TF_GPU_MEMORY_MB must be positive')
+        for gpu in tf.config.list_physical_devices('GPU'):
+            tf.config.set_logical_device_configuration(gpu, [tf.config.LogicalDeviceConfiguration(memory_limit=limit)])
     np.random.seed(seed)
     tf.compat.v1.set_random_seed(seed)
     return modules, manifest, tf
@@ -321,26 +332,36 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='command', required=True)
     prepare_parser = sub.add_parser('prepare', help='Copy pinned learner into a new workspace and record patches')
     prepare_parser.add_argument('--workspace', type=Path, required=True)
-    for name in ('train', 'eval'):
+    for name in ('train', 'eval', 'experiment'):
         command = sub.add_parser(name)
         command.add_argument('--workspace', type=Path, required=True)
         command.add_argument('--runtime', type=Path, default=RUNTIME)
         command.add_argument('--output', type=Path, required=True)
-        command.add_argument('--seed', type=int, default=0 if name == 'train' else 1000)
-        if name == 'train':
-            command.add_argument('--steps', type=int, default=10000)
+        command.add_argument('--seed', type=int, default=1000 if name == 'eval' else 0)
+        if name in ('train', 'experiment'):
+            command.add_argument('--steps', type=int, default=100000 if name == 'experiment' else 10000)
             command.add_argument('--batch-size', type=int, default=128)
             command.add_argument('--capacity', type=int, default=10000)
             command.add_argument('--lr', type=float, default=1e-4)
             command.add_argument('--image-size', type=int, default=32)
             command.add_argument('--action-ticks', type=int, choices=(1, 2, 4, 5, 10, 20, 25, 50, 100), default=10)
             command.add_argument('--max-steps', type=int, default=300)
+            if name == 'experiment':
+                command.add_argument('--checkpoint-every', type=int, default=5000)
+                command.add_argument('--eval-every', type=int, default=10000)
+                command.add_argument('--eval-episodes', type=int, default=10)
+                command.add_argument('--test-episodes', type=int, default=20)
+                command.add_argument('--resume', action='store_true')
         else:
             command.add_argument('--checkpoint', type=Path, required=True)
             command.add_argument('--episodes', type=int, default=5)
             command.add_argument('--random', action='store_true', help='Uniform random action reference on held-out seeds')
     args = parser.parse_args(argv)
-    result = prepare(args.workspace) if args.command == 'prepare' else train(args) if args.command == 'train' else evaluate(args)
+    if args.command == 'experiment':
+        from .gelsight_ddqn_experiment import experiment
+        result = experiment(args)
+    else:
+        result = prepare(args.workspace) if args.command == 'prepare' else train(args) if args.command == 'train' else evaluate(args)
     print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
 
 

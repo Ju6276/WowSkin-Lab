@@ -1,0 +1,10 @@
+# Dedicated Linux training venv; do not install into the general ACT environment.
+-r gelsight_ddqn.txt
+tensorflow[and-cuda]==2.18.1
+mujoco==3.15.0
+opencv-python-headless==4.10.0.84
+scipy==1.14.1
+trimesh==5.1.1
+av==15.1.0
+matplotlib==3.9.4
+zstandard==0.25.0

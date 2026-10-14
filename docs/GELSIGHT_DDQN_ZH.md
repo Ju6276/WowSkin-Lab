@@ -76,3 +76,27 @@ TensorFlow 2.18.1、tf-keras 2.18.0、image-classifiers 1.0.0 及配套依赖放
 checkpoint 保存前后的 Q 输出校验通过；10 个评估 MP4 全部完整解码，每个恰好 200 帧。91 项单元测试和 3 项上游来源测试通过，无跳过；本次未重跑完整物理测试组。逐种子指标、动作分布、来源版本和报告摘要保存在 [validation.json](../examples/gelsight_ddqn/validation.json)。本机训练及两组评估分别位于 `outputs/gelsight_ddqn_20261014/train_2000/`、`eval_2000/`、`random_2000/`。
 
 当前完成的是可复现的算法接入及小规模流程验证。若继续追求成功率，需要单独开展更长训练和任务学习实验；本次未修改来源距离奖励来制造成功结果。
+
+## 原仓库的训练规模与正式实验入口
+
+固定版本 `Test_bed/main.py` 的默认配置是单个 UR5 环境、`agent="ddqn"`、`env="reach"`、`type_="raw"`、100 万个 episode；`raw` 只输入夹爪位置。视触觉和 PickAndPlace 是可选组合，不能把默认配置描述成视触觉 P&P 的已验证实验。环境在 `skip_step >= 100` 时结束，P&P 的 `frame_skip=120`，因此决策步数与 MuJoCo 积分步数不同。100 万回合对应约一亿决策步的配置规模，并不是仓库提供的实测训练总步数。README 的 Results 段没有完整结果，附带日志也不能证明 P&P 已经收敛。
+
+原 DDQN 每次环境交互后存入经验池，样本数超过 batch 后每步更新一次；在线网络选下一动作，目标网络估计其 Q 值，使用 Huber／Adam 更新在线网络。batch=128、容量=10,000、学习率=1e-4、gamma=0.99，每 1,000 条经验同步目标网络。epsilon 每次更新乘 0.99996，约 57,600 次更新才降到 0.1。
+
+`experiment` 是持续训练入口，沿用前文的算法、观测、动作、奖励与成功标准。默认运行 **100,000 个决策步、一个 Panda＋双 GelSight 环境、每回合最多 300 步**；不是重放示范，也没有脚本控制夹取。每约 5,000 步在回合边界保存完整可恢复状态，每约 10,000 步评估 10 个独立验证种子；最终再使用另外 20 个测试种子评估，并运行相同测试种子的随机参考。实际保存／评估步数取回合边界，可能略晚于间隔。
+
+```bash
+.venv/bin/python -m wowskin_lab gelsight-ddqn experiment \
+  --workspace outputs/gelsight_ddqn_workspace \
+  --output outputs/gelsight_ddqn_train_100k \
+  --steps 100000 --batch-size 128 --capacity 10000 \
+  --max-steps 300 --seed 42 \
+  --checkpoint-every 5000 --eval-every 10000 \
+  --eval-episodes 10 --test-episodes 20
+```
+
+`resume.h5` 保存两个 Q 网络（含 BatchNorm 状态）、Adam 状态、完整经验池、epsilon 和 NumPy 随机流。使用同一命令加 `--resume` 从最近的完整回合边界恢复；恢复时会校验来源、环境代码、依赖和训练参数，删除日志中未保存的尾部，重新执行这些交互。SIGINT／SIGTERM 会请求在当前回合结束后保存退出。策略快照保存在 `evaluations/step_*/policy.h5`；训练进度见 `run.json`、`steps.jsonl` 和 `progress.png`，评估指标与每组首条视频见 `evaluations/`。正式训练是否成功，要以最终独立测试结果为准。
+
+Linux NVIDIA 服务器可用单独虚拟环境安装 `requirements/gelsight_ddqn_cuda.txt`，然后将 `--runtime` 指向该环境的 `lib/python3.12/site-packages`。先执行 `scripts/setup_upstream.py --only franka gelsight_mujoco` 和前文的 `prepare`。无显示器时设置 `MUJOCO_GL=egl`；8 GB GPU 可设置 `WOWSKIN_TF_GPU_MEMORY_MB=6144`，覆盖来源模块的 10 GB 显存上限，为渲染保留空间。此设置不改变网络、优化器或采样算法。
+
+可用 `scripts/check_gelsight_ddqn_resume.py --workspace ... --runtime ... --experiment ... --output ...` 校验真实断点：从同一 checkpoint 两次恢复后，比较下一次实际 Adam 更新的损失、全部网络权重、优化器状态和经验采样随机流。它不会覆盖原 checkpoint。
