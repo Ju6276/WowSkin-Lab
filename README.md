@@ -139,6 +139,8 @@ TACTO／GelSight 完整长组件替换原短指几何；FOTS 独立模块装在�
 
 三种光学后端各一条喂食、刚性 single clip 和上下唇弹性 single clip 已完成采集、导出、读取和回放检查；单条示范不足以划分独立训练／验证集，这两项任务尚未训练和闭环验收。本机回放入口为 `outputs/optical_replays_20261014/index.html`。十八条完整示例数据和生成的回放均保留在本机，不随仓库推送。[examples/optical](examples/optical/README.md) 只保存清单、检查结果、少量截图及本机校验／解包／重建回放说明。具体结果及字段限制见[光学学习说明](docs/OPTICAL_LEARNING_ZH.md)。
 
+GelSight 的强化学习入口为 `python -m wowskin_lab gelsight-ddqn`：将原 GelSightMujoco DDQN 学习器接到 Panda 抓放场景，包含来源补丁、在线训练和独立种子评估。2,000 步小规模试验已跑通，但独立评估完整抓放为 **0/5**，尚未学会任务。安装、完整命令和实际结果见 [DDQN 说明](docs/GELSIGHT_DDQN_ZH.md)。训练权重与评估视频保留本机。
+
 ## 脆性薯片试验
 
 **仍待调整，未验证稳定无损夹取。** 场景为康养房间、Franka／Panda、蓝绿色 EBiM 托盘和马鞍状薯片，无人体或勺子。启动后空夹爪，不自动录制：

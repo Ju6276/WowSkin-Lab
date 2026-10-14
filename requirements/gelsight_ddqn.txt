@@ -1,0 +1,10 @@
+# Install into an isolated --target directory; the main environment keeps its
+# existing protobuf/tensorboard versions. See docs/GELSIGHT_DDQN_ZH.md.
+tensorflow==2.18.1
+tf-keras==2.18.0
+image-classifiers==1.0.0
+numpy==2.0.2
+h5py==3.12.1
+protobuf==5.29.6
+tensorboard==2.18.0
+ml-dtypes==0.4.1

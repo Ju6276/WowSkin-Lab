@@ -1,0 +1,253 @@
+{
+  "schema": "wowskin_gelsight_ddqn_validation_v1",
+  "date": "2026-10-14",
+  "source_revision": "a060b0ec384b189e39d9576df753d381857bcc56",
+  "scope": "Original upstream DDQN with recorded fixes, adapted to Panda pick/place. Pipeline validation only; no successful policy learned.",
+  "training": {
+    "completed_steps": 2000,
+    "updates": 1984,
+    "wall_time_s": 697.0048012919724,
+    "epsilon": 0.9237058637966084,
+    "successes": 0,
+    "network_parameters": 36197731,
+    "learning": {
+      "steps": 2000,
+      "batch_size": 16,
+      "capacity": 1024,
+      "lr": 0.0001,
+      "gamma": 0.99,
+      "epsilon_start": 1.0,
+      "epsilon_decay": 0.99996,
+      "epsilon_min": 0.1,
+      "target_update": 1000
+    },
+    "runtime_versions": {
+      "tensorflow": "2.18.1",
+      "tf-keras": "2.18.0",
+      "image-classifiers": "1.0.0",
+      "numpy": "2.0.2",
+      "mujoco": "3.15.0"
+    },
+    "checkpoint_sha256": "b9794dae9e5550fc98c563e37d2cf47c88e83ba7f2004855f630a24e2c347a14",
+    "episode_count": 10,
+    "max_lift_m": 3.885780586188048e-16,
+    "report_sha256": "3f20c36be62c6238b6c2d1a3db6aa620a2382bdc66bdb696f35f45dfb349221c",
+    "loss": {
+      "first": 0.451224684715271,
+      "last": 2.015270233154297,
+      "min": 0.14161880314350128,
+      "max": 47.54512023925781,
+      "finite": true
+    }
+  },
+  "tests": {
+    "unit_passed": 91,
+    "upstream_source_passed": 3,
+    "new_adapter_tests_included_in_unit": 3,
+    "skipped": 0,
+    "full_physics_suite_rerun": false
+  },
+  "evaluations": {
+    "greedy_upstream_ddqn": {
+      "successes": 0,
+      "episode_count": 5,
+      "success_rate": 0.0,
+      "mean_episode_reward": -133.18693767960997,
+      "reload_predictions_match": true,
+      "episodes": [
+        {
+          "seed": 1000,
+          "success": false,
+          "reward": -130.90562778181786,
+          "max_lift_m": 0.0,
+          "steps": 200,
+          "action_counts": [
+            0,
+            0,
+            0,
+            0,
+            200,
+            0,
+            0,
+            0
+          ],
+          "decoded_video_frames": 200
+        },
+        {
+          "seed": 1001,
+          "success": false,
+          "reward": -133.52842104136494,
+          "max_lift_m": 6.938893903907228e-17,
+          "steps": 200,
+          "action_counts": [
+            0,
+            0,
+            0,
+            0,
+            198,
+            2,
+            0,
+            0
+          ],
+          "decoded_video_frames": 200
+        },
+        {
+          "seed": 1002,
+          "success": false,
+          "reward": -133.53724595879888,
+          "max_lift_m": 0.0,
+          "steps": 200,
+          "action_counts": [
+            0,
+            0,
+            0,
+            0,
+            200,
+            0,
+            0,
+            0
+          ],
+          "decoded_video_frames": 200
+        },
+        {
+          "seed": 1003,
+          "success": false,
+          "reward": -131.9185167002933,
+          "max_lift_m": 0.0,
+          "steps": 200,
+          "action_counts": [
+            0,
+            0,
+            0,
+            0,
+            197,
+            3,
+            0,
+            0
+          ],
+          "decoded_video_frames": 200
+        },
+        {
+          "seed": 1004,
+          "success": false,
+          "reward": -136.04487691577486,
+          "max_lift_m": 2.914335439641036e-16,
+          "steps": 200,
+          "action_counts": [
+            0,
+            0,
+            0,
+            0,
+            199,
+            1,
+            0,
+            0
+          ],
+          "decoded_video_frames": 200
+        }
+      ],
+      "report_sha256": "c20ca18604d264fed2be10018671b900369f6ff5aa9a0231829b60002504d0c6"
+    },
+    "uniform_random": {
+      "successes": 0,
+      "episode_count": 5,
+      "success_rate": 0.0,
+      "mean_episode_reward": -56.041594340658065,
+      "reload_predictions_match": true,
+      "episodes": [
+        {
+          "seed": 1000,
+          "success": false,
+          "reward": -55.85741954816478,
+          "max_lift_m": 0.0,
+          "steps": 200,
+          "action_counts": [
+            18,
+            33,
+            28,
+            28,
+            19,
+            30,
+            23,
+            21
+          ],
+          "decoded_video_frames": 200
+        },
+        {
+          "seed": 1001,
+          "success": false,
+          "reward": -52.91080482181487,
+          "max_lift_m": 2.7755575615628914e-17,
+          "steps": 200,
+          "action_counts": [
+            30,
+            19,
+            25,
+            29,
+            28,
+            24,
+            24,
+            21
+          ],
+          "decoded_video_frames": 200
+        },
+        {
+          "seed": 1002,
+          "success": false,
+          "reward": -53.59166579858568,
+          "max_lift_m": 0.0,
+          "steps": 200,
+          "action_counts": [
+            24,
+            23,
+            31,
+            27,
+            21,
+            29,
+            27,
+            18
+          ],
+          "decoded_video_frames": 200
+        },
+        {
+          "seed": 1003,
+          "success": false,
+          "reward": -57.78674225540745,
+          "max_lift_m": 0.0,
+          "steps": 200,
+          "action_counts": [
+            20,
+            29,
+            28,
+            19,
+            25,
+            30,
+            23,
+            26
+          ],
+          "decoded_video_frames": 200
+        },
+        {
+          "seed": 1004,
+          "success": false,
+          "reward": -60.06133927931754,
+          "max_lift_m": 1.942890293094024e-16,
+          "steps": 200,
+          "action_counts": [
+            27,
+            25,
+            16,
+            28,
+            34,
+            18,
+            27,
+            25
+          ],
+          "decoded_video_frames": 200
+        }
+      ],
+      "report_sha256": "aa63e0257c53e51c5a767ffdeb08f9a48e4fbb220b8ae72c80415ea3533d9775"
+    }
+  },
+  "artifact_policy": "Dataset, weights, runtime and MP4 files stay in ignored local directories."
+}

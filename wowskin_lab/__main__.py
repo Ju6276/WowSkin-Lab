@@ -12,6 +12,7 @@ COMMANDS = {
     'dataset-check': 'Validate LeRobot v2.1 using its original loader and video decoder',
     'dataset-review': 'Build an offline synchronized optical episode replay',
     'optical-act': 'Train/evaluate a local optical baseline using upstream LeRobot ACT',
+    'gelsight-ddqn': 'Run pinned GelSightMujoco DDQN on Panda pick/place with recorded adapter patches',
     'official': 'Pinned ViSk / FTF human / FTF robot source, configuration and readiness',
     'pick-demo': 'Run the existing physical grasp/tug regression demo',
     'cable': 'Single Franka cable scene using pinned EBiM fixtures (local variant)',
@@ -75,6 +76,9 @@ def main(argv=None):
     if command == 'optical-act':
         from .learning.optical_act import main as optical_act
         return optical_act(rest)
+    if command == 'gelsight-ddqn':
+        from .learning.gelsight_ddqn import main as gelsight_ddqn
+        return gelsight_ddqn(rest)
     if command == 'record-auto':
         from .data.auto_collect import main as collect_auto
         return collect_auto(rest)
