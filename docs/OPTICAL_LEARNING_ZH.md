@@ -34,7 +34,7 @@ ACT 来自 **Hugging Face LeRobot 0.3.3**，实现为 [`lerobot.policies.act.mod
 
 MP4 是缩放、编码的检查副本，精确数组仍在源光学 H5。页面不显示场景相机的全部深度附件。
 
-本机回放入口为 `outputs/optical_replays_20261014/index.html`，可切换任务、TACTO／FOTS-DIGIT／GelSight 及示范。保留九条抓方块示范，新增三种后端各一条喂食和 single clip，另新增三条上下唇弹性 single clip，共十八条；卡扣模型可独立选择，TACTO 使用不透明外壳。目录含独立 HTML／MP4／JSON 副本，可用 `python -m http.server 8765 --bind 127.0.0.1 --directory outputs/optical_replays_20261014` 启动总入口。实验文件与原始采集数据一样被 Git 忽略，不随仓库分发。
+本机回放入口为 `outputs/optical_replays_20261014/index.html`，可切换任务、TACTO／FOTS-DIGIT／GelSight 及示范。保留九条抓方块示范，新增三种后端各一条喂食和 single clip，另新增三条上下唇弹性 single clip，共十八条；卡扣模型可独立选择，TACTO 使用不透明外壳。目录含独立 HTML／MP4／JSON 副本，可用 `python -m http.server 8765 --bind 127.0.0.1 --directory outputs/optical_replays_20261014` 启动总入口。完整数据包和生成的回放均保留在本机忽略目录，不随仓库推送；[examples/optical](../examples/optical/README.md) 保存清单、检查结果和截图，可在持有本机数据包时解包并重建回放。
 
 ## 小样本流程
 
@@ -88,7 +88,7 @@ MP4 是缩放、编码的检查副本，精确数组仍在源光学 H5。页面�
 
 三条已检查官方读取、五路视频全部帧数、RGB／深度／触觉时钟、每行 state 与实际下一条 action 对齐及 ACT 数据读取；17 项相关测试通过、无跳过，未运行完整仓库套件。结果在 `outputs/optical_elastic_20261014/verification.json`。没有测试松爪后的保持，也没有训练这批数据。FOTS 弹性插扣的多 body 接触仍不支持 marker（左右分别 224／378 和 193／378 帧），缺失状态原样保存；其余后端不提供 marker。
 
-2026-10-14 长指部颜色修正：TACTO 场景可视网格 `finger_0` 由绿色改为黑色，alpha 仍为 1；内侧网格保留来源颜色。已有十八条回放未重录，其中 TACTO 长指仍为绿色。本次修改不回填旧录像或采集 metadata。关闭随机光学噪声后，方块空载／实际夹持及喂食已夹勺状态的同状态对照中，三路场景相机均出现改色，双指触觉 RGB、压入深度、接触掩码和法向力逐项相同；TACTO 来源文件 SHA256 仍匹配。对照截图与报告在本机 `outputs/black_fingers_20261014/`。
+2026-10-14 长指部颜色修正：TACTO 场景可视网格 `finger_0` 由绿色改为黑色，alpha 仍为 1；内侧网格保留来源颜色。这次单独改色时尚未重录十八条回放，其中 TACTO 长指仍为绿色；后续重录见下文。本次修改不回填旧录像或采集 metadata。关闭随机光学噪声后，方块空载／实际夹持及喂食已夹勺状态的同状态对照中，三路场景相机均出现改色，双指触觉 RGB、压入深度、接触掩码和法向力逐项相同；TACTO 来源文件 SHA256 仍匹配。对照截图与报告在本机 `outputs/black_fingers_20261014/`。
 
 2026-10-14 提交前完整回归：`.venv/bin/python -m tests all` 实际运行 227 项，耗时 845.191 s；220 项通过、1 项错误、6 项跳过，进程退出码为 1。分组为 unit 85 项通过、physics 109 项通过／1 项错误、official 18 项通过、artifacts 8 项通过／6 项跳过。唯一错误为 `tests.physics.test_robotiq.RobotiqChecks.test_source_servo_and_contact_release`：Robotiq＋AnySkin 强夹线在 3.420 s 出现负体积比（左右约 −0.643／−0.573），仍是已记录的物理问题；不是光学颜色或录制接口通过就已解决的问题。
 
@@ -99,3 +99,9 @@ MP4 是缩放、编码的检查副本，精确数组仍在源光学 H5。页面�
 - `PseudoLabelArtifactChecks.test_baseline_and_public_data_preserved_and_no_heldout_training`、`test_saved_models_reproduce_report_without_claiming_measured_pseudo_depths`、`test_source_only_control_saved_metrics`：未运行可选伪标签实验。
 
 完整日志保存在本机 `outputs/black_fingers_20261014/tests_all.log`。另已检查采集／回放／训练命令的 `--help`、Python 编译及 `git diff --check`。这些结果包含真实光学录制、选集导出、五路视频读取、回放与 ACT 数据适配检查，不代表重新训练或策略任务成功率验收。
+
+2026-10-14 黑色重采与本机示例整理：TACTO 三条随机方块、喂食、刚性单卡扣、弹性单卡扣共六条均已用黑色长指部重新采集。本轮发现方块脚本的逐 episode seed 未同步进 raw metadata，已修正 `auto_collect.py`，并重录三个后端各三条方块，实际 reset seed 和 metadata 均为 0／1／2；方块采集还新增控制器代码快照与 SHA256。旧录制和失败尝试保留在本机，不放入本批示例。当前十八条完整示例按十二组保留在本机，全部包含 RGB-D、双指无损光学数据、100 Hz raw 数值及 LeRobot。本机分片、逐文件校验、解包和重建回放入口见[示例文档](../examples/optical/README.md)。本轮没有重新训练策略。
+
+本轮实际运行 88 项单元测试，全部通过；十八条本机数据在换目录解包后逐文件 SHA256 一致，全部通过官方读取、五路视频帧数、时间戳、逐行状态／下一条动作和 ACT 输入检查。回放已切换为当前黑色版本。结果保存在 `examples/optical/verification.json`；未重复运行上文的完整物理套件，Robotiq＋AnySkin 的已知问题仍保留。
+
+2026-10-14 按用户要求取消大数据上传：完整归档从待推送提交中移除，保留在本机；仅提交清单、检查结果、预览图和复现工具。上传及自动 push 进程已停止。取消前已有部分 LFS 对象传到远端，停止上传和移除 Git 指针不会自动删除这些对象。

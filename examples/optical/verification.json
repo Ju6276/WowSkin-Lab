@@ -1,0 +1,624 @@
+{
+  "schema": "wowskin_optical_examples_validation_v1",
+  "episodes": 18,
+  "collections": 12,
+  "byte_exact_unpack_verified": true,
+  "raw_state_next_action_alignment_verified": true,
+  "actual_black_tacto_video_reviewed": true,
+  "unit_tests": {
+    "run": 88,
+    "passed": 88
+  },
+  "policy_retrained": false,
+  "results": [
+    {
+      "id": "tacto_feeding",
+      "dataset": "data/examples_optical/tacto_feeding/feeding/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 1,
+      "frames": 299,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        149,
+        298
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 299,
+        "0/observation.images.camera2": 299,
+        "0/observation.images.camera52": 299,
+        "0/observation.images.tactile_left": 299,
+        "0/observation.images.tactile_right": 299
+      },
+      "depth_frame_pairs": {
+        "0": 299
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 299
+        }
+      ],
+      "single_episode_split_rejected": true,
+      "act_samples_finite": true
+    },
+    {
+      "id": "tacto_cable_insert_rigid",
+      "dataset": "data/examples_optical/tacto_cable_insert_rigid/cable_insert/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 1,
+      "frames": 356,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        178,
+        355
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 356,
+        "0/observation.images.camera2": 356,
+        "0/observation.images.camera52": 356,
+        "0/observation.images.tactile_left": 356,
+        "0/observation.images.tactile_right": 356
+      },
+      "depth_frame_pairs": {
+        "0": 356
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 356
+        }
+      ],
+      "single_episode_split_rejected": true,
+      "act_samples_finite": true
+    },
+    {
+      "id": "tacto_cable_insert_elastic_beam",
+      "dataset": "data/examples_optical/tacto_cable_insert_elastic_beam/cable_insert/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 1,
+      "frames": 394,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        197,
+        393
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 394,
+        "0/observation.images.camera2": 394,
+        "0/observation.images.camera52": 394,
+        "0/observation.images.tactile_left": 394,
+        "0/observation.images.tactile_right": 394
+      },
+      "depth_frame_pairs": {
+        "0": 394
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 394,
+          "upper_max_tip_displacement_mm": 9.657804981036097,
+          "lower_max_tip_displacement_mm": 0.34641295677348627
+        }
+      ],
+      "single_episode_split_rejected": true,
+      "act_samples_finite": true
+    },
+    {
+      "id": "digit_fots_feeding",
+      "dataset": "data/examples_optical/digit_fots_feeding/feeding/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 1,
+      "frames": 297,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        148,
+        296
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 297,
+        "0/observation.images.camera2": 297,
+        "0/observation.images.camera52": 297,
+        "0/observation.images.tactile_left": 297,
+        "0/observation.images.tactile_right": 297
+      },
+      "depth_frame_pairs": {
+        "0": 297
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 297
+        }
+      ],
+      "single_episode_split_rejected": true,
+      "act_samples_finite": true
+    },
+    {
+      "id": "digit_fots_cable_insert_rigid",
+      "dataset": "data/examples_optical/digit_fots_cable_insert_rigid/cable_insert/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 1,
+      "frames": 368,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        184,
+        367
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 368,
+        "0/observation.images.camera2": 368,
+        "0/observation.images.camera52": 368,
+        "0/observation.images.tactile_left": 368,
+        "0/observation.images.tactile_right": 368
+      },
+      "depth_frame_pairs": {
+        "0": 368
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 368
+        }
+      ],
+      "single_episode_split_rejected": true,
+      "act_samples_finite": true
+    },
+    {
+      "id": "digit_fots_cable_insert_elastic_beam",
+      "dataset": "data/examples_optical/digit_fots_cable_insert_elastic_beam/cable_insert/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 1,
+      "frames": 378,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        189,
+        377
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 378,
+        "0/observation.images.camera2": 378,
+        "0/observation.images.camera52": 378,
+        "0/observation.images.tactile_left": 378,
+        "0/observation.images.tactile_right": 378
+      },
+      "depth_frame_pairs": {
+        "0": 378
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 378,
+          "upper_max_tip_displacement_mm": 8.07905810278587,
+          "lower_max_tip_displacement_mm": 0.4415504918825004
+        }
+      ],
+      "single_episode_split_rejected": true,
+      "act_samples_finite": true
+    },
+    {
+      "id": "gelsight_feeding",
+      "dataset": "data/examples_optical/gelsight_feeding/feeding/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 1,
+      "frames": 297,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        148,
+        296
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 297,
+        "0/observation.images.camera2": 297,
+        "0/observation.images.camera52": 297,
+        "0/observation.images.tactile_left": 297,
+        "0/observation.images.tactile_right": 297
+      },
+      "depth_frame_pairs": {
+        "0": 297
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 297
+        }
+      ],
+      "single_episode_split_rejected": true,
+      "act_samples_finite": true
+    },
+    {
+      "id": "gelsight_cable_insert_rigid",
+      "dataset": "data/examples_optical/gelsight_cable_insert_rigid/cable_insert/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 1,
+      "frames": 372,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        186,
+        371
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 372,
+        "0/observation.images.camera2": 372,
+        "0/observation.images.camera52": 372,
+        "0/observation.images.tactile_left": 372,
+        "0/observation.images.tactile_right": 372
+      },
+      "depth_frame_pairs": {
+        "0": 372
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 372
+        }
+      ],
+      "single_episode_split_rejected": true,
+      "act_samples_finite": true
+    },
+    {
+      "id": "gelsight_cable_insert_elastic_beam",
+      "dataset": "data/examples_optical/gelsight_cable_insert_elastic_beam/cable_insert/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 1,
+      "frames": 383,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        191,
+        382
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 383,
+        "0/observation.images.camera2": 383,
+        "0/observation.images.camera52": 383,
+        "0/observation.images.tactile_left": 383,
+        "0/observation.images.tactile_right": 383
+      },
+      "depth_frame_pairs": {
+        "0": 383
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 383,
+          "upper_max_tip_displacement_mm": 8.65173036808269,
+          "lower_max_tip_displacement_mm": 0.29379944086322596
+        }
+      ],
+      "single_episode_split_rejected": true,
+      "act_samples_finite": true
+    },
+    {
+      "id": "tacto_pick_cube",
+      "dataset": "data/examples_optical/tacto_pick_cube/pick_cube/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 3,
+      "frames": 1110,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        185,
+        369,
+        370,
+        555,
+        739,
+        740,
+        925,
+        1109
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 370,
+        "0/observation.images.camera2": 370,
+        "0/observation.images.camera52": 370,
+        "0/observation.images.tactile_left": 370,
+        "0/observation.images.tactile_right": 370,
+        "1/observation.images.camera1": 370,
+        "1/observation.images.camera2": 370,
+        "1/observation.images.camera52": 370,
+        "1/observation.images.tactile_left": 370,
+        "1/observation.images.tactile_right": 370,
+        "2/observation.images.camera1": 370,
+        "2/observation.images.camera2": 370,
+        "2/observation.images.camera52": 370,
+        "2/observation.images.tactile_left": 370,
+        "2/observation.images.tactile_right": 370
+      },
+      "depth_frame_pairs": {
+        "0": 370,
+        "1": 370,
+        "2": 370
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 370
+        },
+        {
+          "episode": 1,
+          "seed": 1,
+          "frames": 370
+        },
+        {
+          "episode": 2,
+          "seed": 2,
+          "frames": 370
+        }
+      ],
+      "act_train_rows": 690,
+      "act_validation_rows": 345,
+      "act_samples_finite": true
+    },
+    {
+      "id": "digit_fots_pick_cube",
+      "dataset": "data/examples_optical/digit_fots_pick_cube/pick_cube/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 3,
+      "frames": 1110,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        185,
+        369,
+        370,
+        555,
+        739,
+        740,
+        925,
+        1109
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 370,
+        "0/observation.images.camera2": 370,
+        "0/observation.images.camera52": 370,
+        "0/observation.images.tactile_left": 370,
+        "0/observation.images.tactile_right": 370,
+        "1/observation.images.camera1": 370,
+        "1/observation.images.camera2": 370,
+        "1/observation.images.camera52": 370,
+        "1/observation.images.tactile_left": 370,
+        "1/observation.images.tactile_right": 370,
+        "2/observation.images.camera1": 370,
+        "2/observation.images.camera2": 370,
+        "2/observation.images.camera52": 370,
+        "2/observation.images.tactile_left": 370,
+        "2/observation.images.tactile_right": 370
+      },
+      "depth_frame_pairs": {
+        "0": 370,
+        "1": 370,
+        "2": 370
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 370
+        },
+        {
+          "episode": 1,
+          "seed": 1,
+          "frames": 370
+        },
+        {
+          "episode": 2,
+          "seed": 2,
+          "frames": 370
+        }
+      ],
+      "act_train_rows": 690,
+      "act_validation_rows": 345,
+      "act_samples_finite": true
+    },
+    {
+      "id": "gelsight_pick_cube",
+      "dataset": "data/examples_optical/gelsight_pick_cube/pick_cube/lerobot",
+      "lerobot_version": "0.3.3",
+      "format": "v2.1",
+      "episodes": 3,
+      "frames": 1110,
+      "fps": 30,
+      "cameras": [
+        "observation.images.camera1",
+        "observation.images.camera2",
+        "observation.images.camera52",
+        "observation.images.tactile_left",
+        "observation.images.tactile_right"
+      ],
+      "decoded_rows": [
+        0,
+        185,
+        369,
+        370,
+        555,
+        739,
+        740,
+        925,
+        1109
+      ],
+      "video_frame_counts": {
+        "0/observation.images.camera1": 370,
+        "0/observation.images.camera2": 370,
+        "0/observation.images.camera52": 370,
+        "0/observation.images.tactile_left": 370,
+        "0/observation.images.tactile_right": 370,
+        "1/observation.images.camera1": 370,
+        "1/observation.images.camera2": 370,
+        "1/observation.images.camera52": 370,
+        "1/observation.images.tactile_left": 370,
+        "1/observation.images.tactile_right": 370,
+        "2/observation.images.camera1": 370,
+        "2/observation.images.camera2": 370,
+        "2/observation.images.camera52": 370,
+        "2/observation.images.tactile_left": 370,
+        "2/observation.images.tactile_right": 370
+      },
+      "depth_frame_pairs": {
+        "0": 370,
+        "1": 370,
+        "2": 370
+      },
+      "instruction_validated": true,
+      "official_loader_passed": true,
+      "all_numeric_rows_finite": true,
+      "episodes_checked": [
+        {
+          "episode": 0,
+          "seed": 0,
+          "frames": 370
+        },
+        {
+          "episode": 1,
+          "seed": 1,
+          "frames": 370
+        },
+        {
+          "episode": 2,
+          "seed": 2,
+          "frames": 370
+        }
+      ],
+      "act_train_rows": 690,
+      "act_validation_rows": 345,
+      "act_samples_finite": true
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+[
+  {
+    "id": "tacto_pick_cube",
+    "source": "outputs/optical_black_20261014/tacto_cube_verified",
+    "task": "pick_cube",
+    "backend": "tacto",
+    "sensor_label": "TACTO · DIGIT",
+    "clip_model": null,
+    "episodes": 3,
+    "note": "脚本抓放；非学习策略",
+    "appearance": "opaque_black_long_fingers"
+  },
+  {
+    "id": "tacto_feeding",
+    "source": "outputs/optical_black_20261014/tacto_feeding",
+    "task": "feeding",
+    "backend": "tacto",
+    "sensor_label": "TACTO · DIGIT",
+    "clip_model": null,
+    "episodes": 1,
+    "note": "送至嘴前区域；不代表吞咽",
+    "appearance": "opaque_black_long_fingers"
+  },
+  {
+    "id": "tacto_cable_insert_rigid",
+    "source": "outputs/optical_black_20261014/tacto_single_clip_rigid",
+    "task": "cable_insert",
+    "backend": "tacto",
+    "sensor_label": "TACTO · DIGIT",
+    "clip_model": "rigid",
+    "episodes": 1,
+    "note": "刚性卡扣入槽；未评估松手保持",
+    "appearance": "opaque_black_long_fingers"
+  },
+  {
+    "id": "tacto_cable_insert_elastic_beam",
+    "source": "outputs/optical_black_20261014/tacto_single_clip_elastic",
+    "task": "cable_insert",
+    "backend": "tacto",
+    "sensor_label": "TACTO · DIGIT",
+    "clip_model": "elastic_beam",
+    "episodes": 1,
+    "note": "上下唇被动弹性；未评估松手保持",
+    "appearance": "opaque_black_long_fingers"
+  },
+  {
+    "id": "digit_fots_pick_cube",
+    "source": "outputs/optical_black_20261014/digit_fots_cube_verified",
+    "task": "pick_cube",
+    "backend": "digit_fots",
+    "sensor_label": "FOTS · DIGIT",
+    "clip_model": null,
+    "episodes": 3,
+    "note": "脚本抓放；非学习策略",
+    "appearance": "source_appearance"
+  },
+  {
+    "id": "digit_fots_feeding",
+    "source": "outputs/optical_tasks_20261014/digit_fots_feeding",
+    "task": "feeding",
+    "backend": "digit_fots",
+    "sensor_label": "FOTS · DIGIT",
+    "clip_model": null,
+    "episodes": 1,
+    "note": "送至嘴前区域；不代表吞咽",
+    "appearance": "source_appearance"
+  },
+  {
+    "id": "digit_fots_cable_insert_rigid",
+    "source": "outputs/optical_tasks_20261014/digit_fots_single_clip_v2",
+    "task": "cable_insert",
+    "backend": "digit_fots",
+    "sensor_label": "FOTS · DIGIT",
+    "clip_model": "rigid",
+    "episodes": 1,
+    "note": "刚性卡扣入槽；未评估松手保持",
+    "appearance": "source_appearance"
+  },
+  {
+    "id": "digit_fots_cable_insert_elastic_beam",
+    "source": "outputs/optical_elastic_20261014/digit_fots",
+    "task": "cable_insert",
+    "backend": "digit_fots",
+    "sensor_label": "FOTS · DIGIT",
+    "clip_model": "elastic_beam",
+    "episodes": 1,
+    "note": "上下唇被动弹性；未评估松手保持",
+    "appearance": "source_appearance"
+  },
+  {
+    "id": "gelsight_pick_cube",
+    "source": "outputs/optical_black_20261014/gelsight_cube_verified_retry",
+    "task": "pick_cube",
+    "backend": "gelsight",
+    "sensor_label": "GelSight · MuJoCo",
+    "clip_model": null,
+    "episodes": 3,
+    "note": "脚本抓放；非学习策略",
+    "appearance": "source_appearance"
+  },
+  {
+    "id": "gelsight_feeding",
+    "source": "outputs/optical_tasks_20261014/gelsight_feeding",
+    "task": "feeding",
+    "backend": "gelsight",
+    "sensor_label": "GelSight · MuJoCo",
+    "clip_model": null,
+    "episodes": 1,
+    "note": "送至嘴前区域；不代表吞咽",
+    "appearance": "source_appearance"
+  },
+  {
+    "id": "gelsight_cable_insert_rigid",
+    "source": "outputs/optical_tasks_20261014/gelsight_single_clip_v2",
+    "task": "cable_insert",
+    "backend": "gelsight",
+    "sensor_label": "GelSight · MuJoCo",
+    "clip_model": "rigid",
+    "episodes": 1,
+    "note": "刚性卡扣入槽；未评估松手保持",
+    "appearance": "source_appearance"
+  },
+  {
+    "id": "gelsight_cable_insert_elastic_beam",
+    "source": "outputs/optical_elastic_20261014/gelsight",
+    "task": "cable_insert",
+    "backend": "gelsight",
+    "sensor_label": "GelSight · MuJoCo",
+    "clip_model": "elastic_beam",
+    "episodes": 1,
+    "note": "上下唇被动弹性；未评估松手保持",
+    "appearance": "source_appearance"
+  }
+]

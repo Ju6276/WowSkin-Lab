@@ -1,0 +1,1483 @@
+{
+  "schema": "wowskin_optical_examples_v1",
+  "packaging_base_commit": "b061560b49c3f154237a0d8b4b346212bac26fb3",
+  "source_code_sha256": {
+    "wowskin_lab/data/auto_collect.py": "c5eb235ac59a474f2b1307c2e8d1e35777cb53bf9e81b4d032406e917580f6e0",
+    "wowskin_lab/data/scripted_tasks.py": "72bdc4b56106f6c5d8be2c0133352115d714250a95917fb913e4ee43a694ceb0",
+    "wowskin_lab/envs/digit_sources.py": "df8301209cb8a02d228320f9a9e330cea838dca2269470a7e0447e876cd1f7a3",
+    "assets/reference/tacto/manifest.json": "38c0668006ced9fda0bbcac309f2eb98b006c13addd7ba2ae8f0d489915be86d"
+  },
+  "archive_format": "tar.zst, ordered 512 MiB parts",
+  "entries": [
+    {
+      "id": "tacto_pick_cube",
+      "source": "outputs/optical_black_20261014/tacto_cube_verified",
+      "task": "pick_cube",
+      "backend": "tacto",
+      "sensor_label": "TACTO · DIGIT",
+      "clip_model": null,
+      "episodes": 3,
+      "note": "脚本抓放；非学习策略",
+      "appearance": "opaque_black_long_fingers",
+      "files": {
+        "collection_report.json": {
+          "bytes": 8440,
+          "sha256": "c5cc24a23b0c0ea5552a18c94c6ccb726d826ecbda3b799ae9a038f5f6405d39"
+        },
+        "controller_source.py": {
+          "bytes": 9565,
+          "sha256": "c5eb235ac59a474f2b1307c2e8d1e35777cb53bf9e81b4d032406e917580f6e0"
+        },
+        "pick_cube/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 79370,
+          "sha256": "3787dc33f9087515a2dddc09a6dfb638e5895f28e3d27ad2f94108526978d13f"
+        },
+        "pick_cube/lerobot/data/chunk-000/episode_000001.parquet": {
+          "bytes": 79219,
+          "sha256": "e91ebee088c51a03b1a6260b603592c9f5d16ba58df35ca11d6e6d491c08b9b1"
+        },
+        "pick_cube/lerobot/data/chunk-000/episode_000002.parquet": {
+          "bytes": 79349,
+          "sha256": "a13718ad1f7eda8448620f95e98eef328fd4efa247b7b6893d1b82d130ea88cf"
+        },
+        "pick_cube/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 412404631,
+          "sha256": "1ceb95a23580684ffd986b147b0edb8e1f374c45b26f16c51f361fa0c42a86d8"
+        },
+        "pick_cube/lerobot/depth/chunk-000/episode_000001.h5": {
+          "bytes": 415163961,
+          "sha256": "02e8aca17da82d224becdfa999edfa0c8ebbc3d7e441ecc188cba4dc52973ac9"
+        },
+        "pick_cube/lerobot/depth/chunk-000/episode_000002.h5": {
+          "bytes": 411356208,
+          "sha256": "d5facb1344a424ae48e9deb17a80658559cfc34f2a6bffcd9e3353ec42b1c00f"
+        },
+        "pick_cube/lerobot/meta/episodes.jsonl": {
+          "bytes": 414,
+          "sha256": "8375789647d387fcf345cb53b6642a02efcde4af7b03d24c4fc4d08cbb4417bd"
+        },
+        "pick_cube/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 20380,
+          "sha256": "d26880bad5ad3d197940d2d5f138be3772ddb55aa0edd32db7258edac8232dcc"
+        },
+        "pick_cube/lerobot/meta/info.json": {
+          "bytes": 7656,
+          "sha256": "0c5c32d7119ccfb72a4e28e47a2c34b6a47d6fcb5de03c8f2ab6a48145a96c8c"
+        },
+        "pick_cube/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "pick_cube/lerobot/meta/tasks.jsonl": {
+          "bytes": 117,
+          "sha256": "742aa5d2dac6b6b646e07b76e90e6298f260d0dfe8cc6536db7ce490ded499f5"
+        },
+        "pick_cube/lerobot/meta/wowskin.json": {
+          "bytes": 9918,
+          "sha256": "9cf3581b2ef05a0e6fdb4402685a68586d1268790b192b21755a3d9f5c772723"
+        },
+        "pick_cube/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 4101,
+          "sha256": "f30310d59d6ea0f1c3926e7d8078642f35e117ad36d29af6be48a0cbf6d38b41"
+        },
+        "pick_cube/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 247998994,
+          "sha256": "0b4849895dcefca603e10ba0ea24435c9011cb663f3127c98ef3ab0c9038499e"
+        },
+        "pick_cube/lerobot/optical/chunk-000/episode_000001.h5": {
+          "bytes": 251026327,
+          "sha256": "9af15d6eaf44c168dd83709c2dc342e052c4a6e1d38f4ba9d24b765fa4be6c1a"
+        },
+        "pick_cube/lerobot/optical/chunk-000/episode_000002.h5": {
+          "bytes": 250361544,
+          "sha256": "5485a0e3c91c3f6e6d1aea84a0f12aca40c2f0954006d91d3c6db779d0aa9139"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 2946105,
+          "sha256": "8a98cbb8dd701b0f87950854948570ef09f86c8a6df9b4cb80f255a24d923290"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera1/episode_000001.mp4": {
+          "bytes": 2929554,
+          "sha256": "e25f047d2fad07c985d6bd5cf4f762732d7cddbd4402b53fbba860f47ac21a70"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera1/episode_000002.mp4": {
+          "bytes": 2930478,
+          "sha256": "3a4fae51a332232df3b033e3743c2e3fa44947b3aaa6f6bf958c3decc6d9b272"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 2365697,
+          "sha256": "4653fca6435b7ede52cfac1c85069595abb183cb261fd3a0804593bcaca3d874"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera2/episode_000001.mp4": {
+          "bytes": 2375938,
+          "sha256": "15ebc4104427d3d9bfff74659d040da9058226de696d6cddc43847d6d1f10da6"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera2/episode_000002.mp4": {
+          "bytes": 2354559,
+          "sha256": "4e6b9a6a6b21a278b11233e2d53d9ff09ea7e12601d5d9cf5001a1f7d999f4d7"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 1900673,
+          "sha256": "cd2ba3074af35895a15d6f8a3f910031e32bf0e6684a495ea39c9623a1928bad"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera52/episode_000001.mp4": {
+          "bytes": 1904477,
+          "sha256": "4225384d99ad4d7464f6dc777c7cb6187235c073b8e4d758527dd82619125e18"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera52/episode_000002.mp4": {
+          "bytes": 1913311,
+          "sha256": "f0adb4e64934c9541501df0dd29fecd1c4cb022b97c212a23482d668f1038e96"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 975854,
+          "sha256": "c369cd65c901dbe21fbe6f0d5c39e1dcd23fe7392c26fadfaa7b25b2326a33a8"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000001.mp4": {
+          "bytes": 979388,
+          "sha256": "89d64ee16d201f6779b38b9163de89832fa60785dd0719ecafe00871133dc4c1"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000002.mp4": {
+          "bytes": 975141,
+          "sha256": "1aaf8905cfe7ef0797d40f5260571d61cdbdbb739fd69fc8827dd80a7ed97865"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 972094,
+          "sha256": "1f9b405861fea7c98e365ba7530c8a5b177f3e737d171dfc5b912c351d852c60"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000001.mp4": {
+          "bytes": 980855,
+          "sha256": "85d56bc20118368da3935990b2d9092ee4987c7243136100cd9417e6ed7a2d4d"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000002.mp4": {
+          "bytes": 974842,
+          "sha256": "ca36e9c91bbb273ab87efe170256ddc8e3e121929dff0bab2298eb7f085a9163"
+        },
+        "pick_cube/raw/capture_000000/measurements.h5": {
+          "bytes": 1714216,
+          "sha256": "31b6210da6b0233b9ce98e9202774b6e3728be68eb2fa391b16f035b2c027c9d"
+        },
+        "pick_cube/raw/capture_000000/metadata.json": {
+          "bytes": 14871,
+          "sha256": "746f900a2ff879b4b150c0b164e3aa5a4f941f920ffa494ab864215cdbf95085"
+        },
+        "pick_cube/raw/capture_000001/measurements.h5": {
+          "bytes": 1714216,
+          "sha256": "9d6c594f1d9dd0a59261fa6d4022759cec37ba02228f3221571539c1cab5e067"
+        },
+        "pick_cube/raw/capture_000001/metadata.json": {
+          "bytes": 14871,
+          "sha256": "135ce8059ca9a494dc86f50dc82f4702dfad9fded562fc87af7f11e823080d1d"
+        },
+        "pick_cube/raw/capture_000002/measurements.h5": {
+          "bytes": 1714216,
+          "sha256": "a99a0888ebc1f80cb781caa95f6b0d8dec17d9199bab1d38cae2729e0b4204d3"
+        },
+        "pick_cube/raw/capture_000002/metadata.json": {
+          "bytes": 14871,
+          "sha256": "9f0ea7beeca0ab083f0f8ac07e5dd5c5fd3f2a9620cfb808a6d50a33f530258c"
+        }
+      },
+      "frames": 1110,
+      "parts": [
+        {
+          "path": "archives/tacto_pick_cube.tar.zst.part000",
+          "bytes": 536870912,
+          "sha256": "3d7f644af8e5a6f23b3cfda2aeace2941a89c452599980434589a7c1cb21a71f"
+        },
+        {
+          "path": "archives/tacto_pick_cube.tar.zst.part001",
+          "bytes": 464162458,
+          "sha256": "bdf6d4ff50ac8c04e23adacc232caebee8fa9d44c758b6614e26af0f6c8f8332"
+        }
+      ]
+    },
+    {
+      "id": "tacto_feeding",
+      "source": "outputs/optical_black_20261014/tacto_feeding",
+      "task": "feeding",
+      "backend": "tacto",
+      "sensor_label": "TACTO · DIGIT",
+      "clip_model": null,
+      "episodes": 1,
+      "note": "送至嘴前区域；不代表吞咽",
+      "appearance": "opaque_black_long_fingers",
+      "files": {
+        "collection_report.json": {
+          "bytes": 3758,
+          "sha256": "acd750725bb6b4de58b0b6b219b0b37ff78781537c4d2035faf138fdbce8bfd1"
+        },
+        "controller_source.py": {
+          "bytes": 11744,
+          "sha256": "72bdc4b56106f6c5d8be2c0133352115d714250a95917fb913e4ee43a694ceb0"
+        },
+        "feeding/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 78235,
+          "sha256": "c8b6d8cf5b91999682e88db34093f16d7fcacc151aeb99ccbaa8a636e9ad44ab"
+        },
+        "feeding/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 497692864,
+          "sha256": "8839ec920d162a4fb065228ae3e7b9c2f796367b46d8ba7bf63cc3ba909cf79b"
+        },
+        "feeding/lerobot/meta/episodes.jsonl": {
+          "bytes": 91,
+          "sha256": "80ec7bd654ea7cd341c2c24d1ce1896a4219fdb9ad2a4d1804cf405447d8fac0"
+        },
+        "feeding/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 6912,
+          "sha256": "4c8939131e95c5a3377da26e8aac1c8223dcb8a966b41612981b6123c09bf5a2"
+        },
+        "feeding/lerobot/meta/info.json": {
+          "bytes": 7654,
+          "sha256": "da7c01ab517052b4b0a439cd58d96505bc4e47df13acd5d0dd845829e2925243"
+        },
+        "feeding/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "feeding/lerobot/meta/tasks.jsonl": {
+          "bytes": 70,
+          "sha256": "867db2fdbab478305e4d7c214d5da7e9666772065a3338fe2c3d32b7a90dc7da"
+        },
+        "feeding/lerobot/meta/wowskin.json": {
+          "bytes": 14481,
+          "sha256": "51545cca57b5a768a4f68cbf19c0582b4271e069f14629d820dbff3247150f95"
+        },
+        "feeding/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 1192,
+          "sha256": "1696f8476477972c32bb343fffc582eaaae9eb3c3bf9a791f5bd9d280bb942b1"
+        },
+        "feeding/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 183156268,
+          "sha256": "0e316a737b13cf9cd3a2c483e02c205ecd0addc5c276b145ff9a9c95a2654ff6"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 2866511,
+          "sha256": "b5ea4b9f5ca1dbc50498bc221261c396b65117ee883f061f2d28c397ee0c63d4"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 3563928,
+          "sha256": "420b9d3770b94ca5adf30fc36cb2974cb5a374e297205090057f4ae437f9a4a5"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 1788047,
+          "sha256": "ba288686de5ca5764610920f8c5c4bfba1c47b6bde020842423d9b3116af2e8b"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 777777,
+          "sha256": "c5bbb32e01f38f5ea85b4508550cbd7b709fc0157b44cf2ac0a2b04629fe43ac"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 774253,
+          "sha256": "129870ed70d024db15e80e6a23a10886bfbbee2d83d1c53ff29e8ea110666c8b"
+        },
+        "feeding/raw/capture_000000/measurements.h5": {
+          "bytes": 1565248,
+          "sha256": "3b5ccdf9b85ba7f0aa5ab079cae67986d4cad0747bb2c031460638cedb9fd472"
+        },
+        "feeding/raw/capture_000000/metadata.json": {
+          "bytes": 19553,
+          "sha256": "25b874f81e1fb758442886d91fce980e4a7c499df79505aed9aec457241b832d"
+        },
+        "verification.json": {
+          "bytes": 2274,
+          "sha256": "e91aabad0dcebe12097fa2c4e54f52f6e716583371866c795442a125c6359061"
+        }
+      },
+      "frames": 299,
+      "parts": [
+        {
+          "path": "archives/tacto_feeding.tar.zst.part000",
+          "bytes": 362090567,
+          "sha256": "6eb23a1b8a8a2e796007987d16b3e06afc22c0315ced8876d2dc6be46e3e0889"
+        }
+      ]
+    },
+    {
+      "id": "tacto_cable_insert_rigid",
+      "source": "outputs/optical_black_20261014/tacto_single_clip_rigid",
+      "task": "cable_insert",
+      "backend": "tacto",
+      "sensor_label": "TACTO · DIGIT",
+      "clip_model": "rigid",
+      "episodes": 1,
+      "note": "刚性卡扣入槽；未评估松手保持",
+      "appearance": "opaque_black_long_fingers",
+      "files": {
+        "cable_insert/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 83560,
+          "sha256": "e664ffc28235896c19e606ba7b1c4e66645a6936b2dc15b19c33eaeff87a3653"
+        },
+        "cable_insert/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 420628595,
+          "sha256": "40e1c2251b7c26db0981c4d935108912603d8643d7e5c2edab7759921f8ec22b"
+        },
+        "cable_insert/lerobot/meta/episodes.jsonl": {
+          "bytes": 82,
+          "sha256": "df4619a15ee1c716d871ca6c2823c89329c68fe8296eb53480ec0d48c1a9172e"
+        },
+        "cable_insert/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 6849,
+          "sha256": "d1f3212e66b5c4b0a3a88bd25c4a7a711622958287946ddb429d0c9e5efeddec"
+        },
+        "cable_insert/lerobot/meta/info.json": {
+          "bytes": 7654,
+          "sha256": "e46b662e673da36a0fb61cd5bc95d6c5d3578f4d4fb1ba7a78c9beff9e9700de"
+        },
+        "cable_insert/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "cable_insert/lerobot/meta/tasks.jsonl": {
+          "bytes": 61,
+          "sha256": "b9f0f7f756f64f38819fa617de1dbdd692dbacb1b61bd8f9be8e9d8c0a4288d4"
+        },
+        "cable_insert/lerobot/meta/wowskin.json": {
+          "bytes": 11486,
+          "sha256": "3296d28f59220535f9727f849df6c1167c259a6f802fcac920414a765bbf662a"
+        },
+        "cable_insert/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 1788,
+          "sha256": "f7be23e16655fb2e0300e0b104271498650273f2f2a7c774487e6d79571fd47e"
+        },
+        "cable_insert/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 226756483,
+          "sha256": "58cdf1d1d43e9905af57204653604847b352f466c0c8698cd4d0dff0eb631b9d"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 7795230,
+          "sha256": "7af231daee14319f360f7b468d11d5107b1d25a43337914e4552321a597af900"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 8208763,
+          "sha256": "83e3b5c8d06efe0e6ed444aaf7d8b07787ef769b7c96600f6aa628542b44c087"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 10651184,
+          "sha256": "7f5c72699b0e923e0cda8fddae922dfc9714dac60b3be1ef4075760e6d437351"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 928382,
+          "sha256": "6475c54176b218df407ef73e5ae717e3a4a12409a5bbcc97aa83955d9d32bbb3"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 923601,
+          "sha256": "e049255b7ff869abc69399f9f8fdcd413ff4064c3e7a1da521b097f00bd7a92d"
+        },
+        "cable_insert/raw/capture_000000/measurements.h5": {
+          "bytes": 1691368,
+          "sha256": "645b8deb1b4bfe0064899b6e940cf94c2d6f0af7fd6156f33902b7f916b840e5"
+        },
+        "cable_insert/raw/capture_000000/metadata.json": {
+          "bytes": 17967,
+          "sha256": "01038820cfea8b959efe34ce398329d80332a023ab1849cbe7b4e76031716cdd"
+        },
+        "collection_report.json": {
+          "bytes": 7321,
+          "sha256": "27e51b18af4b9dd98207ecee630db8e5cf639c8a3e547e909f9c34d47df6cda5"
+        },
+        "controller_source.py": {
+          "bytes": 11744,
+          "sha256": "72bdc4b56106f6c5d8be2c0133352115d714250a95917fb913e4ee43a694ceb0"
+        },
+        "verification.json": {
+          "bytes": 3175,
+          "sha256": "a7009331a6a7ccc13714efab6ff1bc7afd901123a827e8943b36e8d60444d06b"
+        }
+      },
+      "frames": 356,
+      "parts": [
+        {
+          "path": "archives/tacto_cable_insert_rigid.tar.zst.part000",
+          "bytes": 388875119,
+          "sha256": "d293fd0fe47598440487c737d9bf7f93b3a8fe9c74a36327f03f12f7a6b9a77e"
+        }
+      ]
+    },
+    {
+      "id": "tacto_cable_insert_elastic_beam",
+      "source": "outputs/optical_black_20261014/tacto_single_clip_elastic",
+      "task": "cable_insert",
+      "backend": "tacto",
+      "sensor_label": "TACTO · DIGIT",
+      "clip_model": "elastic_beam",
+      "episodes": 1,
+      "note": "上下唇被动弹性；未评估松手保持",
+      "appearance": "opaque_black_long_fingers",
+      "files": {
+        "cable_insert/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 91850,
+          "sha256": "62063e96d3734625798456cc207eb42be2d0dbecb8722f9b878db3aa0ff615ec"
+        },
+        "cable_insert/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 464575097,
+          "sha256": "8ee3b1b12a27a0126f59dc1b25b4caca1e868eced50b1a990531c5c5a92637bd"
+        },
+        "cable_insert/lerobot/meta/episodes.jsonl": {
+          "bytes": 82,
+          "sha256": "deb844a5d6f0349299f23f38cbd6f7ebc35a87b10acb1b14c0a6d726d00c2ff0"
+        },
+        "cable_insert/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 6821,
+          "sha256": "7c8dc026b203ab2ecf56159a6c410dbf935e7eb15d9665d767f788a9e949b584"
+        },
+        "cable_insert/lerobot/meta/info.json": {
+          "bytes": 7654,
+          "sha256": "18c5470368f460c8f8ccf5e71b6ca49056a373961b6046ab6f697793b0fb6d27"
+        },
+        "cable_insert/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "cable_insert/lerobot/meta/tasks.jsonl": {
+          "bytes": 61,
+          "sha256": "b9f0f7f756f64f38819fa617de1dbdd692dbacb1b61bd8f9be8e9d8c0a4288d4"
+        },
+        "cable_insert/lerobot/meta/wowskin.json": {
+          "bytes": 13941,
+          "sha256": "d294baa1ce80b237988bdb3cf38ab8ebf2d08d5b1d7bc3de736d25396c47b890"
+        },
+        "cable_insert/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 1792,
+          "sha256": "7bcfc37c2c0f953ccf752e58ec6541537dc1a5fab78c11521f87632adccfc825"
+        },
+        "cable_insert/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 246679693,
+          "sha256": "e29c98ace11c4d0faa234ca091d81ea3d0e5be9981cb51b8d08b0ffbaa5a38aa"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 8627666,
+          "sha256": "4cf48f8e94d6f83d0cd4457ae5f9f4c7fa53b775733f06cab5ca33813da501b2"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 9057310,
+          "sha256": "ce391046e8c6e0f3c156e4b83ce6c70f707261363b3c9681e3bca529e012e37c"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 11989460,
+          "sha256": "f9c1997c141b08566c02fab251941b2521342a74f823292e04f63d9f78da8c1c"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 1024321,
+          "sha256": "0d43a450094b14652a9de8541db03db08c2a762158aba92bee8acb919938500d"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 1014371,
+          "sha256": "545c41bbb8e5d4d7c03d53e72c7245ac9d7dcd71e76635d05caad00e39134d92"
+        },
+        "cable_insert/raw/capture_000000/measurements.h5": {
+          "bytes": 2043344,
+          "sha256": "af1d601b08cc722110b10ba43db03ea4f5005834c1337eb8637931096061b4d7"
+        },
+        "cable_insert/raw/capture_000000/metadata.json": {
+          "bytes": 20445,
+          "sha256": "add45e08a1c6cc5e08e14b480f56b306ae5e74003fa5b7b0e2fec1cba11ce416"
+        },
+        "collection_report.json": {
+          "bytes": 7489,
+          "sha256": "991c555fde5d5683d341c9c29706b660b8fae9a9398e564d8dd33010ace78a00"
+        },
+        "controller_source.py": {
+          "bytes": 11744,
+          "sha256": "72bdc4b56106f6c5d8be2c0133352115d714250a95917fb913e4ee43a694ceb0"
+        },
+        "verification.json": {
+          "bytes": 3177,
+          "sha256": "65155deeac0e62b790e13cd93a3ab50121e5d00fb69054f434f0384e80f03880"
+        }
+      },
+      "frames": 394,
+      "parts": [
+        {
+          "path": "archives/tacto_cable_insert_elastic_beam.tar.zst.part000",
+          "bytes": 426581783,
+          "sha256": "d92ddbef1b3f506f69851a888e5ab9abcc9328d4b4f1171b0f3ec02231326562"
+        }
+      ]
+    },
+    {
+      "id": "digit_fots_pick_cube",
+      "source": "outputs/optical_black_20261014/digit_fots_cube_verified",
+      "task": "pick_cube",
+      "backend": "digit_fots",
+      "sensor_label": "FOTS · DIGIT",
+      "clip_model": null,
+      "episodes": 3,
+      "note": "脚本抓放；非学习策略",
+      "appearance": "source_appearance",
+      "files": {
+        "collection_report.json": {
+          "bytes": 8451,
+          "sha256": "4f937ccf5d5b1b127dd004a1d7a00a0674d048d1659c98b9963cb06659cc655a"
+        },
+        "controller_source.py": {
+          "bytes": 9565,
+          "sha256": "c5eb235ac59a474f2b1307c2e8d1e35777cb53bf9e81b4d032406e917580f6e0"
+        },
+        "pick_cube/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 79923,
+          "sha256": "3fc04124a04cd4602c8de2eb7864f346df749e96c6b0f10b769dfc1799794439"
+        },
+        "pick_cube/lerobot/data/chunk-000/episode_000001.parquet": {
+          "bytes": 80012,
+          "sha256": "113d0a9e28b599c328201404a65fcc3502c9b22d620105e0c39843750d60e2a6"
+        },
+        "pick_cube/lerobot/data/chunk-000/episode_000002.parquet": {
+          "bytes": 79958,
+          "sha256": "2416f48224e0d25162a3ec1b24ea9083ae498f169ac2746c876a62e146b80de4"
+        },
+        "pick_cube/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 409349817,
+          "sha256": "5522f53e214433e1cb5a8aec47b481d3856a9408a287b37e1579a9641ea83e7b"
+        },
+        "pick_cube/lerobot/depth/chunk-000/episode_000001.h5": {
+          "bytes": 412370169,
+          "sha256": "af42f07f240004e80caa7f3506fdf9b6dc938d7444609f58e26100aa33ac4327"
+        },
+        "pick_cube/lerobot/depth/chunk-000/episode_000002.h5": {
+          "bytes": 408236127,
+          "sha256": "8fd1ffaa4de9401f8eedc31c9fbafd59ccd38c4441f31079bac98d1ffb224384"
+        },
+        "pick_cube/lerobot/meta/episodes.jsonl": {
+          "bytes": 414,
+          "sha256": "8375789647d387fcf345cb53b6642a02efcde4af7b03d24c4fc4d08cbb4417bd"
+        },
+        "pick_cube/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 20380,
+          "sha256": "b4bacbd0c30a0af10f68258f859112313d6d73f1fa399984d88f64fde6b58c50"
+        },
+        "pick_cube/lerobot/meta/info.json": {
+          "bytes": 7656,
+          "sha256": "0c5c32d7119ccfb72a4e28e47a2c34b6a47d6fcb5de03c8f2ab6a48145a96c8c"
+        },
+        "pick_cube/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "pick_cube/lerobot/meta/tasks.jsonl": {
+          "bytes": 117,
+          "sha256": "742aa5d2dac6b6b646e07b76e90e6298f260d0dfe8cc6536db7ce490ded499f5"
+        },
+        "pick_cube/lerobot/meta/wowskin.json": {
+          "bytes": 10525,
+          "sha256": "a61609d4f870d06fed4b77bfc284311bd1ac97f872fd6ad4a1f2cf6f0f777c2e"
+        },
+        "pick_cube/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 4115,
+          "sha256": "54979bb4d896249b40f8f821ca5238ff02ceff73c8f3949977550aef3b76831e"
+        },
+        "pick_cube/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 1437591742,
+          "sha256": "a0cdd2011b749f242759ed74fffbe5f93f4531b871623e3c2283c3e067ecc4ab"
+        },
+        "pick_cube/lerobot/optical/chunk-000/episode_000001.h5": {
+          "bytes": 1445480475,
+          "sha256": "be14f6daea99e76e33cb2931dfb7e9005265b569db54b263072d77d7326e12ca"
+        },
+        "pick_cube/lerobot/optical/chunk-000/episode_000002.h5": {
+          "bytes": 1450641173,
+          "sha256": "78ea01979b23a4ad8a6dd09cb3cebebc3fc32ca2c734aede83db414611547705"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 3032697,
+          "sha256": "6626160be2dd5aee819a8e34eef806f154397f0c66d807f51280843e5b874782"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera1/episode_000001.mp4": {
+          "bytes": 3012708,
+          "sha256": "08a782ec7000459d14387624ca2ed1ec6872f564af4287ff07224a73c1426d11"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera1/episode_000002.mp4": {
+          "bytes": 3022459,
+          "sha256": "8672e02759462ee0d0d2e4c52e4efc443e2dfeffb176b2b0dbf777210b90ecf1"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 2475375,
+          "sha256": "e332b8a451d6e3dc5a9f34dfc0bfa2617f019e7432ee4eb486bc14e86afc7576"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera2/episode_000001.mp4": {
+          "bytes": 2483130,
+          "sha256": "5a9dc9844d228431935dcbc29765b8e4fc0947be7a5d66e2a7c8d8213be2a9d9"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera2/episode_000002.mp4": {
+          "bytes": 2460409,
+          "sha256": "c825fc1d7b0a08d9a013968e774c18e47476bc86557eeceb1130c38d73eb1736"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 1999455,
+          "sha256": "9115edaede6493a67b354f8bc45e3f490aa1e4ed9cb2ac66c25fe9fc26eb9671"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera52/episode_000001.mp4": {
+          "bytes": 2006066,
+          "sha256": "843ba7ba99941622fa9967269804d5da17b7b7f3fc7c672ff8a0f619b12aa188"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera52/episode_000002.mp4": {
+          "bytes": 2012718,
+          "sha256": "ebc3d2d6c568add9dc0e261db255e1dfdccf8da49dfa1f39ecad56ad64e4d571"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 341498,
+          "sha256": "f641cacfb18ce85a2c8526ade93088b8013b2085e1f614172efd3e8270c2fab5"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000001.mp4": {
+          "bytes": 340814,
+          "sha256": "11006bcc039a0ad2cffb611668488102a13dda87bc7e2b051ca9d69e3199540e"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000002.mp4": {
+          "bytes": 343932,
+          "sha256": "6f225e6a882536b0ab2ae00f3e4b9c0ed2f8289053db762f36494e5f462e4360"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 342353,
+          "sha256": "79c54231e20b124e9d19361e309f28fbf94c0b34eee4713000baa5d501224058"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000001.mp4": {
+          "bytes": 343390,
+          "sha256": "d60943189b3ad271e7a2c28c377a1d55c27bb7837da0e9bd44c7feff03a79c03"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000002.mp4": {
+          "bytes": 344135,
+          "sha256": "9a533993912b1d918abdd0369ea99d4a0680d2bcd12c4f19def1bf1e6d58d028"
+        },
+        "pick_cube/raw/capture_000000/measurements.h5": {
+          "bytes": 1714216,
+          "sha256": "fb997be9b4d74c580d331eb2ca7fc380e61149df16e29422d0bcb47172bd8293"
+        },
+        "pick_cube/raw/capture_000000/metadata.json": {
+          "bytes": 15477,
+          "sha256": "2095f74705f9465de4e8e07ef0ae5b0078f4bc34a2bb22377351eff9a67e54fd"
+        },
+        "pick_cube/raw/capture_000001/measurements.h5": {
+          "bytes": 1714216,
+          "sha256": "52c93e60a5ef3f0c71e2bcff0bb5512df40266c5af4997faf7054c28df816d2a"
+        },
+        "pick_cube/raw/capture_000001/metadata.json": {
+          "bytes": 15479,
+          "sha256": "cf1c66da0c46798cff5da9d12ee59b702dcbe53d58e2eb7961d0191dcb5f1e64"
+        },
+        "pick_cube/raw/capture_000002/measurements.h5": {
+          "bytes": 1714216,
+          "sha256": "c9fb975fca86657b3a93827ad6aa60a15a83f59bf4fbc031cbca7f406fd657d1"
+        },
+        "pick_cube/raw/capture_000002/metadata.json": {
+          "bytes": 15477,
+          "sha256": "ecef7714fc01bf4be30a880d00a495da4a9e78b903b41cc0fa1e702caad37963"
+        }
+      },
+      "frames": 1110,
+      "parts": [
+        {
+          "path": "archives/digit_fots_pick_cube.tar.zst.part000",
+          "bytes": 536870912,
+          "sha256": "025be534546cb5cfc9f07640dcb1e9a6193774f483a39f879852e52bb3cc7be0"
+        },
+        {
+          "path": "archives/digit_fots_pick_cube.tar.zst.part001",
+          "bytes": 536870912,
+          "sha256": "65edad72a218f34d537b298cdef64d7c32431763370e543288c3cf2e31371a7e"
+        },
+        {
+          "path": "archives/digit_fots_pick_cube.tar.zst.part002",
+          "bytes": 357917614,
+          "sha256": "450f68e284b6e417afdd7ffa7fd3a7ad8a3ab596c5052f3e4c71040105eba892"
+        }
+      ]
+    },
+    {
+      "id": "digit_fots_feeding",
+      "source": "outputs/optical_tasks_20261014/digit_fots_feeding",
+      "task": "feeding",
+      "backend": "digit_fots",
+      "sensor_label": "FOTS · DIGIT",
+      "clip_model": null,
+      "episodes": 1,
+      "note": "送至嘴前区域；不代表吞咽",
+      "appearance": "source_appearance",
+      "files": {
+        "collection_report.json": {
+          "bytes": 3698,
+          "sha256": "ebc0c899903dfa4bf6bd1979182d7618473b5835656055f27f1e3d868504e916"
+        },
+        "feeding/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 77720,
+          "sha256": "38ecac2a5309b185f674db9b959b95568f3fbf3ec055499f4e5793f58b54ef9a"
+        },
+        "feeding/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 515162250,
+          "sha256": "6e30211b0a0dcec32846fc97a50fcb15d6a208e705152a8322c70340ab2f64c0"
+        },
+        "feeding/lerobot/meta/episodes.jsonl": {
+          "bytes": 91,
+          "sha256": "af07a4d2a5c8b41728056eddd1263b2c18aa8d4159b1d2ae71bfd34dbe09cd2c"
+        },
+        "feeding/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 7034,
+          "sha256": "d93ae785b6cda56216ca44a8e466469029ddfea6c2b4d40947125aef0dc72338"
+        },
+        "feeding/lerobot/meta/info.json": {
+          "bytes": 7654,
+          "sha256": "db673b5e9cf78434930ae40453f171ab2515cc7e291eae80165ab60f89c8f53a"
+        },
+        "feeding/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "feeding/lerobot/meta/tasks.jsonl": {
+          "bytes": 70,
+          "sha256": "867db2fdbab478305e4d7c214d5da7e9666772065a3338fe2c3d32b7a90dc7da"
+        },
+        "feeding/lerobot/meta/wowskin.json": {
+          "bytes": 15092,
+          "sha256": "c5b9661ca3f009cd715c99d43950010a2fd82fda4768f5bbd4f1cf2735bebbd2"
+        },
+        "feeding/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 1196,
+          "sha256": "cca95d7c40c0a911f7f5c03ac23684f560ba804fe35acd0c29371be209f6afbd"
+        },
+        "feeding/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 1317109686,
+          "sha256": "7cee28d93e5c4858051786c7684d11f085e47288cc982fc79b01b831a3b0436e"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 2827901,
+          "sha256": "7c4de49c3354862aba1ea0c54067cd3d3f9d955b23c6e3ed01d9edff38e5a12b"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 3571770,
+          "sha256": "ff9a21e54bfde7795751b889796188e21c273b19212fb4f3cddd6ed6406dfc6a"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 2013684,
+          "sha256": "20f7df582b6847dc86f99451737bd7cb9bc0bcb02c0e279e65b084b93c0e374d"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 237282,
+          "sha256": "84e39efebcbb2fb520cf8f03c17454d41713e1f9c159ff66d466a955f5948636"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 237661,
+          "sha256": "e921212860eb79fdedd24844738a4d8cabf1e9e9683148d233d9019bd1136ab5"
+        },
+        "feeding/raw/capture_000000/measurements.h5": {
+          "bytes": 1565248,
+          "sha256": "3f6ca4c7b6b330ded9a21bdaf277b123e0a67d1b62fa0c6dc8903ec80e9ac523"
+        },
+        "feeding/raw/capture_000000/metadata.json": {
+          "bytes": 20140,
+          "sha256": "5a95ce9b4153041c24022afabc6f82a99a95feadd1d9c12354084a6a9b18d76d"
+        },
+        "verification.json": {
+          "bytes": 2279,
+          "sha256": "98ff1a54a545c5c91a11196f2b79d876021297436b6c1327025626d4297e2dce"
+        }
+      },
+      "frames": 297,
+      "parts": [
+        {
+          "path": "archives/digit_fots_feeding.tar.zst.part000",
+          "bytes": 536870912,
+          "sha256": "35148bd425d0392c3b5fcc497661c325dbfd042f579fedf76c05a7ad0abbef30"
+        },
+        {
+          "path": "archives/digit_fots_feeding.tar.zst.part001",
+          "bytes": 171881182,
+          "sha256": "0327657abb12234c85eabc6154394085c76c5d550510ac0867abe40dd53f93f9"
+        }
+      ]
+    },
+    {
+      "id": "digit_fots_cable_insert_rigid",
+      "source": "outputs/optical_tasks_20261014/digit_fots_single_clip_v2",
+      "task": "cable_insert",
+      "backend": "digit_fots",
+      "sensor_label": "FOTS · DIGIT",
+      "clip_model": "rigid",
+      "episodes": 1,
+      "note": "刚性卡扣入槽；未评估松手保持",
+      "appearance": "source_appearance",
+      "files": {
+        "cable_insert/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 86608,
+          "sha256": "13ab73b65646d3faee39c7419a432dc2fe2ee7c1589dad74e24c5fb68b53cb53"
+        },
+        "cable_insert/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 432596060,
+          "sha256": "e06df0661bcdb38f20c03bbb29123e5871d06942fa2c74307c6a82019e04826f"
+        },
+        "cable_insert/lerobot/meta/episodes.jsonl": {
+          "bytes": 82,
+          "sha256": "d3d7494883f212747cdec32f0a49cc20b83c767c9bdc93d9403a8dd338bc0db2"
+        },
+        "cable_insert/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 6771,
+          "sha256": "33bbb4d88ddf5c2ddf1199d52bbc3d6e2d79c2a545d3735f7b0501fc3e4ffc65"
+        },
+        "cable_insert/lerobot/meta/info.json": {
+          "bytes": 7654,
+          "sha256": "5dc24e75c4def9a5edfb30686d1e695d21f85de0119e52c281bee66a92727599"
+        },
+        "cable_insert/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "cable_insert/lerobot/meta/tasks.jsonl": {
+          "bytes": 61,
+          "sha256": "b9f0f7f756f64f38819fa617de1dbdd692dbacb1b61bd8f9be8e9d8c0a4288d4"
+        },
+        "cable_insert/lerobot/meta/wowskin.json": {
+          "bytes": 12064,
+          "sha256": "5f9128327a0dac3a272c0507bc76c19e9d096001b978520b00d9a9cf7544efc8"
+        },
+        "cable_insert/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 1790,
+          "sha256": "657ad1554f9113917f45b2f86c078671355aff51c07933e52e66105dc341d378"
+        },
+        "cable_insert/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 1631031560,
+          "sha256": "3b959935e34fa24716a2cb01c62ab1ad932eca9baa3bc5e37a88dd479fc35a04"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 8087725,
+          "sha256": "4d1b8e07d59d7b0e2c7f2ac13149fc01eb896b7e20a92ae1d42a1831a0b81c7a"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 8576700,
+          "sha256": "22a0df94601f8897dcff5a8f3d01b63c59971100e35088df1d0175914347c77d"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 10422596,
+          "sha256": "d53ef3ebc52723fd53b665748c7d22bc10cfc5f0fc2937d36274efc63c0d7bb4"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 302541,
+          "sha256": "0c5b6c64926d5854af3e3aad5269e4d4c1f8f3afd1768096cbaf0fa7e98e496b"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 304436,
+          "sha256": "f119615920764d80042b88409bdfc80b44b212a5ea8c26f72ab0924b201104ec"
+        },
+        "cable_insert/raw/capture_000000/measurements.h5": {
+          "bytes": 1691368,
+          "sha256": "85514ee0255cb8c8e8fc9e9693845af0d03b0a6cb32e479e61bf4c04da29fb73"
+        },
+        "cable_insert/raw/capture_000000/metadata.json": {
+          "bytes": 18520,
+          "sha256": "130446dfb5947278892064467aeb0c9b2820ee649c8f5de0df66843a99a2d32e"
+        },
+        "collection_report.json": {
+          "bytes": 7305,
+          "sha256": "b0d8c0302974dc84a36929d94dba42169fbab119f2c336fa56b25024a18d3262"
+        },
+        "controller_source.py": {
+          "bytes": 9525,
+          "sha256": "53500cc53f5de7a93385137015f226dc8a742bc4e4da0246d209a364503c6598"
+        },
+        "verification.json": {
+          "bytes": 3177,
+          "sha256": "afc77242f96800735228bd76bb0677bf43d45822deb1e3a60b3cd5d87af07fd6"
+        }
+      },
+      "frames": 368,
+      "parts": [
+        {
+          "path": "archives/digit_fots_cable_insert_rigid.tar.zst.part000",
+          "bytes": 536870912,
+          "sha256": "96ef43348c6dd70773d127a6315e5cbde428ee008258be8935ee03f6aaf9b9e2"
+        },
+        {
+          "path": "archives/digit_fots_cable_insert_rigid.tar.zst.part001",
+          "bytes": 118001486,
+          "sha256": "172d4e7c8f1d7c72322127ab04bfe1ab83ce4beaf00fcf6712c4672d086c307c"
+        }
+      ]
+    },
+    {
+      "id": "digit_fots_cable_insert_elastic_beam",
+      "source": "outputs/optical_elastic_20261014/digit_fots",
+      "task": "cable_insert",
+      "backend": "digit_fots",
+      "sensor_label": "FOTS · DIGIT",
+      "clip_model": "elastic_beam",
+      "episodes": 1,
+      "note": "上下唇被动弹性；未评估松手保持",
+      "appearance": "source_appearance",
+      "files": {
+        "cable_insert/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 89797,
+          "sha256": "df15e2fca0d3a5247289a86c6aecd8a14ef559f5e294c9ca29fff536b35885c4"
+        },
+        "cable_insert/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 449006811,
+          "sha256": "2fb41b7b2d851ddfa7521cecba5bd2cd7be1802e5a9dba52bc2381de18e4f840"
+        },
+        "cable_insert/lerobot/meta/episodes.jsonl": {
+          "bytes": 82,
+          "sha256": "cbcb472f7c80ebe8d28c6df3c973b3a1e6fa93fda62c42c5988891f9df99c2a8"
+        },
+        "cable_insert/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 6857,
+          "sha256": "5f6fddb19d68204f1174308242da2bf1c15f70e8470bc5984798b3054b80e9a7"
+        },
+        "cable_insert/lerobot/meta/info.json": {
+          "bytes": 7654,
+          "sha256": "ac59e1e6f132855ebfb50a8c94e71934f2a79848faaf90fe78d01f67d8abb6de"
+        },
+        "cable_insert/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "cable_insert/lerobot/meta/tasks.jsonl": {
+          "bytes": 61,
+          "sha256": "b9f0f7f756f64f38819fa617de1dbdd692dbacb1b61bd8f9be8e9d8c0a4288d4"
+        },
+        "cable_insert/lerobot/meta/wowskin.json": {
+          "bytes": 14548,
+          "sha256": "1ad37975c9efdea6374a88f23634a437b4f0d418c168fdc4ce38805efd892cc5"
+        },
+        "cable_insert/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 1779,
+          "sha256": "a23f1e8f9d742016a998f5f99548a4113b98df57b9ccc99ebb088e13b193efe1"
+        },
+        "cable_insert/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 1668992171,
+          "sha256": "62f595f6ae6e48e155674429db50e318e94d1dd68e89224d73d43f33a5a35310"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 7978125,
+          "sha256": "47df6c72fd5237016a952dead7d691184f64bfa9d740b820b1b8c324607fc781"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 8468145,
+          "sha256": "bd5603e8331cdbbbab9a6b2e1883137f6cc783555c554b6e94498473f7eb53e4"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 10158498,
+          "sha256": "03378b28996a46f3b685073631b6273d8f75350f0bc4d2c99e350844e7ce5a1f"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 301343,
+          "sha256": "bb48a23860b434de10856738399baec174e8aab3467788814237200144cd77e0"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 302331,
+          "sha256": "b830c80b24e2cbff8f514c7ef8dd0f7be7a7fcf74b9d1332890b297c6c2974b2"
+        },
+        "cable_insert/raw/capture_000000/measurements.h5": {
+          "bytes": 1871312,
+          "sha256": "2058447d896424ab620cf7619b543c7820239fb6c262d6253853c94a08865b26"
+        },
+        "cable_insert/raw/capture_000000/metadata.json": {
+          "bytes": 21047,
+          "sha256": "32286fceecaaffd58ef6d28f96623c5f826c9b03b2f0aa93236e574d2df8e49d"
+        },
+        "collection_report.json": {
+          "bytes": 7464,
+          "sha256": "16d14efd6097a099aa552cba18cdc79740158df9e15dc3fff372c8f1c120dec3"
+        },
+        "controller_source.py": {
+          "bytes": 11744,
+          "sha256": "72bdc4b56106f6c5d8be2c0133352115d714250a95917fb913e4ee43a694ceb0"
+        },
+        "verification.json": {
+          "bytes": 4244,
+          "sha256": "93fc7b546172f4ac8f416fedab3772d4b663e57614e62909d7ec524b03815edd"
+        }
+      },
+      "frames": 378,
+      "parts": [
+        {
+          "path": "archives/digit_fots_cable_insert_elastic_beam.tar.zst.part000",
+          "bytes": 536870912,
+          "sha256": "8922f8b67b07da938ca4f568431541f2aecd6b0907388c98b108968aad057b61"
+        },
+        {
+          "path": "archives/digit_fots_cable_insert_elastic_beam.tar.zst.part001",
+          "bytes": 132600066,
+          "sha256": "aad1d29a02c713bb1bc2543b248108783239be4ca29fc692ee9a11bc644e01f3"
+        }
+      ]
+    },
+    {
+      "id": "gelsight_pick_cube",
+      "source": "outputs/optical_black_20261014/gelsight_cube_verified_retry",
+      "task": "pick_cube",
+      "backend": "gelsight",
+      "sensor_label": "GelSight · MuJoCo",
+      "clip_model": null,
+      "episodes": 3,
+      "note": "脚本抓放；非学习策略",
+      "appearance": "source_appearance",
+      "files": {
+        "collection_report.json": {
+          "bytes": 8474,
+          "sha256": "56d31e92c7c1e569566eab2fea006333c616e49a07e88de380db77e524273802"
+        },
+        "controller_source.py": {
+          "bytes": 9565,
+          "sha256": "c5eb235ac59a474f2b1307c2e8d1e35777cb53bf9e81b4d032406e917580f6e0"
+        },
+        "pick_cube/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 80759,
+          "sha256": "4c2117a631ae68ef62849d5d1b51c464d8a7930266d1b7253d7b3f6897635460"
+        },
+        "pick_cube/lerobot/data/chunk-000/episode_000001.parquet": {
+          "bytes": 80069,
+          "sha256": "0deb811603b881fd3e308d2ca09133a1eee1f3978a86463eb1f254d913174944"
+        },
+        "pick_cube/lerobot/data/chunk-000/episode_000002.parquet": {
+          "bytes": 80114,
+          "sha256": "d52932f30aacc9d2e99aaa9b26cb17a63f4ea13c06ccd510f9cbe5f7f433349e"
+        },
+        "pick_cube/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 396662494,
+          "sha256": "7c4ed0aee8481ad9354c24510793c58a9d3841a32dee71d00cdcef298d74fd76"
+        },
+        "pick_cube/lerobot/depth/chunk-000/episode_000001.h5": {
+          "bytes": 398534167,
+          "sha256": "03d8fef824f2b97f4b0c54141d9e477bb4ccbfc602f0e602a5dc201483ee73b5"
+        },
+        "pick_cube/lerobot/depth/chunk-000/episode_000002.h5": {
+          "bytes": 394456245,
+          "sha256": "e00bdcb48b8493829d229b88b12c3d751e36e5ddba743d20410878a958e8cfe2"
+        },
+        "pick_cube/lerobot/meta/episodes.jsonl": {
+          "bytes": 414,
+          "sha256": "8375789647d387fcf345cb53b6642a02efcde4af7b03d24c4fc4d08cbb4417bd"
+        },
+        "pick_cube/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 20438,
+          "sha256": "f24a4ceaef5dd4e6bc35ddf05a6b926941a48e05c82bd9af6dc8fa81b17137ea"
+        },
+        "pick_cube/lerobot/meta/info.json": {
+          "bytes": 7656,
+          "sha256": "34be666c55d680871563f197cd7b89c09caa67d514620af6ddb0ab92edcb5e02"
+        },
+        "pick_cube/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "pick_cube/lerobot/meta/tasks.jsonl": {
+          "bytes": 117,
+          "sha256": "742aa5d2dac6b6b646e07b76e90e6298f260d0dfe8cc6536db7ce490ded499f5"
+        },
+        "pick_cube/lerobot/meta/wowskin.json": {
+          "bytes": 10307,
+          "sha256": "4df671abf36618aaf399d4c438c3e341ada6a4f5b7346eb8e845e9375f22916f"
+        },
+        "pick_cube/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 4129,
+          "sha256": "87435a0c60878c44ed7a07b54296cce4f328f3e31f9ca4888dbe4b9fc2917b1d"
+        },
+        "pick_cube/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 94660011,
+          "sha256": "eea820b7e547c97fc7a1fa5d5fef7c0f05fc792d255b10e99f6b21343fc649d3"
+        },
+        "pick_cube/lerobot/optical/chunk-000/episode_000001.h5": {
+          "bytes": 87747874,
+          "sha256": "a64a2b653362ef396514e6d6aaaa448f3c0a181ded5d3f826f8949c992d83390"
+        },
+        "pick_cube/lerobot/optical/chunk-000/episode_000002.h5": {
+          "bytes": 87503008,
+          "sha256": "9a3e15d15973491c5de7c14d0919e67d29edeab941551ea4646845b911085b32"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 3013306,
+          "sha256": "b297ef73eae239c73c13d037c28a597cbc6a18840b846a2e92713454bd4a9fdc"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera1/episode_000001.mp4": {
+          "bytes": 2992304,
+          "sha256": "5b0687f9018e6e877d3c7bfb6aef6e1ea06363671cd3790208d3d04b90b5937a"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera1/episode_000002.mp4": {
+          "bytes": 2998369,
+          "sha256": "a8cfc25963c5b475050993f1bf749530df3e4e9d2632321b0a1883ba8cd11a32"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 2419170,
+          "sha256": "a34eeab0e574f94702a16f53607f1fc2239109ae2668d162457b2e7b163d0265"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera2/episode_000001.mp4": {
+          "bytes": 2418973,
+          "sha256": "09fe1af7b17012a6923300fe04f3467e335ece3b062f3d4ace6c773b0c0a7291"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera2/episode_000002.mp4": {
+          "bytes": 2400161,
+          "sha256": "e3cca859b507263cc2e0e977c698f498c08680a7aa31f3ceb2cad4f861e024e7"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 1788504,
+          "sha256": "d83a699a1538d587641c673bcda64b0e054078f6c63d59abf46b85e4be834eb7"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera52/episode_000001.mp4": {
+          "bytes": 1804352,
+          "sha256": "ff03869fef7d7f4f5c9ce55f1035e0bbf5ac880ac059f7ebf1d5106bba0a5cab"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.camera52/episode_000002.mp4": {
+          "bytes": 1795541,
+          "sha256": "91137e5e991425768ef6175edf2d5f57752e758d49b09c5d2e7b3ae95608865d"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 147897,
+          "sha256": "5067b994e132b4a813549c25c278f7f0a189d70e9524259b2c4b9dba394643fe"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000001.mp4": {
+          "bytes": 138213,
+          "sha256": "74d4c1d76807af6437e38639163c1fa6c1a8ce3e9542b73b1d3bf8f6139bcf9f"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000002.mp4": {
+          "bytes": 138574,
+          "sha256": "ffbe4b0ee796d8e714e42713049c87f5488fa4017043b5a43bc40e3af8728532"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 145742,
+          "sha256": "041921afe1751f13278494f82b38a90678e90da804fd1ba52e4d49292cad8199"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000001.mp4": {
+          "bytes": 138644,
+          "sha256": "17381c93ece5eeebaa203d655e8bb2a8ebfa8e9019b03152f53b61e6592e907e"
+        },
+        "pick_cube/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000002.mp4": {
+          "bytes": 137634,
+          "sha256": "1ed4d700ca30f458b938129722a0a05bcdebf48d472b5c850a6abf8b6c9be861"
+        },
+        "pick_cube/raw/capture_000000/measurements.h5": {
+          "bytes": 1714216,
+          "sha256": "cb8e95e83c1ed5840ad9d7a0f77786b43ef4f3bbaf94c264f039107efb7cf67f"
+        },
+        "pick_cube/raw/capture_000000/metadata.json": {
+          "bytes": 15247,
+          "sha256": "17e0db18f3de42b669ecc2e77cbc26664ce66f7fe1728a26209fee493d472d66"
+        },
+        "pick_cube/raw/capture_000001/measurements.h5": {
+          "bytes": 1714216,
+          "sha256": "648a48930df67bbfc008091d870bb9245b7b02670f7d9eada001e03189def088"
+        },
+        "pick_cube/raw/capture_000001/metadata.json": {
+          "bytes": 15248,
+          "sha256": "b75f88f1670ce52325a46e58c817770863adba4a2d4768d3ec985b0798c0b014"
+        },
+        "pick_cube/raw/capture_000002/measurements.h5": {
+          "bytes": 1714216,
+          "sha256": "b5d9d98973d14f9930345e75dfb33c405e159f4ca6817313f4396340e48d2565"
+        },
+        "pick_cube/raw/capture_000002/metadata.json": {
+          "bytes": 15247,
+          "sha256": "1aa4a60bcbb83ee6f4fc84d32b6011682b510d41c42f0fda2b5e4dbfc5f160c1"
+        }
+      },
+      "frames": 1110,
+      "parts": [
+        {
+          "path": "archives/gelsight_pick_cube.tar.zst.part000",
+          "bytes": 536870912,
+          "sha256": "567105de4b4953601619beeebc88f59806217b3b4777b3f381b284d63e5e9959"
+        },
+        {
+          "path": "archives/gelsight_pick_cube.tar.zst.part001",
+          "bytes": 73541924,
+          "sha256": "43a342fcf10abce5893d04b32bedb7ab78ebda79afdcaee85b553b82a7748dd2"
+        }
+      ]
+    },
+    {
+      "id": "gelsight_feeding",
+      "source": "outputs/optical_tasks_20261014/gelsight_feeding",
+      "task": "feeding",
+      "backend": "gelsight",
+      "sensor_label": "GelSight · MuJoCo",
+      "clip_model": null,
+      "episodes": 1,
+      "note": "送至嘴前区域；不代表吞咽",
+      "appearance": "source_appearance",
+      "files": {
+        "collection_report.json": {
+          "bytes": 3696,
+          "sha256": "bfe69f2916794a967804a949ebe6403beb51625ac48435e743051adb185fb04c"
+        },
+        "feeding/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 77612,
+          "sha256": "98e5c6a52794a1015c0d8fa6c32285727bde264a1fc09f17afe12a8875c0e0fe"
+        },
+        "feeding/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 509921485,
+          "sha256": "037c5cc4410d33e603bd7855e135bf1302784d51ebc91965c80f9137a9846da7"
+        },
+        "feeding/lerobot/meta/episodes.jsonl": {
+          "bytes": 91,
+          "sha256": "af07a4d2a5c8b41728056eddd1263b2c18aa8d4159b1d2ae71bfd34dbe09cd2c"
+        },
+        "feeding/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 6942,
+          "sha256": "690b2d25c69bf2d9d7b6e27cd5019ce80b550f7ac281d37972df2a753e9c4fac"
+        },
+        "feeding/lerobot/meta/info.json": {
+          "bytes": 7654,
+          "sha256": "f718ae63fd2986be32ed9625b947b56956951d94bb0e8523a4df7a6b79037f2a"
+        },
+        "feeding/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "feeding/lerobot/meta/tasks.jsonl": {
+          "bytes": 70,
+          "sha256": "867db2fdbab478305e4d7c214d5da7e9666772065a3338fe2c3d32b7a90dc7da"
+        },
+        "feeding/lerobot/meta/wowskin.json": {
+          "bytes": 14874,
+          "sha256": "08e8dc898129b6e7cfded2ec0fd0d8b0b79d37e083025754bc0259369e059324"
+        },
+        "feeding/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 1196,
+          "sha256": "78b3dc826804dd2adcd7a9bf963786e4644c55ba376eac9c65fe6b574c67d469"
+        },
+        "feeding/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 82239199,
+          "sha256": "63bc0e0a9592dc398275d941bd8fd69da17a212550ce1e162edbe2f2237e27ae"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 2820413,
+          "sha256": "b528dce85c2a1dab576b2c208ee77880fd188fa630478144253a35e161706676"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 3574416,
+          "sha256": "63dcab43cadc12fbe5042a222599b1b1626b988c7d4015948e4d8ede9419c198"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 1869983,
+          "sha256": "540c53659e4c7d4265164e9f2a2a4685f8553bd993179b18f9e9ad2ede9abe3f"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 119880,
+          "sha256": "abf958aafa216e8a596d3b67de366cdf3c80f77cf5fb8e97667f64cfe6314a70"
+        },
+        "feeding/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 114192,
+          "sha256": "d5a067dad5c1f2ad33be235777f6e86abfc99b7a1991f059e59f5b8500370377"
+        },
+        "feeding/raw/capture_000000/measurements.h5": {
+          "bytes": 1565248,
+          "sha256": "d9156e1d69b5b8c3c4489761b07a52874e9da5cb44eb20dc5811a3e8b6aba30a"
+        },
+        "feeding/raw/capture_000000/metadata.json": {
+          "bytes": 19911,
+          "sha256": "0bfabf6907e55396df08af4ca8c588b403195980d6c4f9c4bd1c3399cff08742"
+        },
+        "verification.json": {
+          "bytes": 2281,
+          "sha256": "b5b8b60eef672ae799e8fb9dd48d64c2271166fc1d06504ca99a577cf85d3e6f"
+        }
+      },
+      "frames": 297,
+      "parts": [
+        {
+          "path": "archives/gelsight_feeding.tar.zst.part000",
+          "bytes": 282064203,
+          "sha256": "4f81b9d5ebcd1131246b48f948ff45db4e9cc724758dc86b44a8a2adb5d1ef24"
+        }
+      ]
+    },
+    {
+      "id": "gelsight_cable_insert_rigid",
+      "source": "outputs/optical_tasks_20261014/gelsight_single_clip_v2",
+      "task": "cable_insert",
+      "backend": "gelsight",
+      "sensor_label": "GelSight · MuJoCo",
+      "clip_model": "rigid",
+      "episodes": 1,
+      "note": "刚性卡扣入槽；未评估松手保持",
+      "appearance": "source_appearance",
+      "files": {
+        "cable_insert/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 87541,
+          "sha256": "b6abbb0fa04f0f8911f82a33dfaa4882681949f6b6dabe9e8d26e2736001efff"
+        },
+        "cable_insert/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 426071658,
+          "sha256": "d23580ce04495f1d89e7b848ec9e8256dc415be6aec806063000b1351407e668"
+        },
+        "cable_insert/lerobot/meta/episodes.jsonl": {
+          "bytes": 82,
+          "sha256": "82db699fe3764aaa3d4b8a22f4d20bf161cf850c49af93c5f3bcc9ce62e4df27"
+        },
+        "cable_insert/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 6810,
+          "sha256": "dca249156de40b36b61946d94a52e07390aa04cdefceae9e16ef43bf1b44f184"
+        },
+        "cable_insert/lerobot/meta/info.json": {
+          "bytes": 7654,
+          "sha256": "655af442c3a4d6378e4a3890ae9b89edb1ee42240fa13cea6a928a1b591e45d3"
+        },
+        "cable_insert/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "cable_insert/lerobot/meta/tasks.jsonl": {
+          "bytes": 61,
+          "sha256": "b9f0f7f756f64f38819fa617de1dbdd692dbacb1b61bd8f9be8e9d8c0a4288d4"
+        },
+        "cable_insert/lerobot/meta/wowskin.json": {
+          "bytes": 11846,
+          "sha256": "adae0f170f8903795b7c3b75ea1e60d02f5ccb2d02685d666cd3eb36c7be0923"
+        },
+        "cable_insert/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 1787,
+          "sha256": "27978b4cef537ca670815d9f2daeb486fb92aea74e7ce87dd49fbe12c3f7dc7f"
+        },
+        "cable_insert/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 76373270,
+          "sha256": "4151a7567c70534b2d25fe449b50f0f010a2fc7152d512dca25a99e7f50f455c"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 8054305,
+          "sha256": "b27034bd241284368f1735ac8f9642fb68cac531f4c42539f8c99ddd3eb95f5a"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 8625751,
+          "sha256": "75524777e7520fb539c9fe4c927ce2cf3aec532f0e1ef4e1b339c79c75f52e2c"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 9071287,
+          "sha256": "a6736ac5ef7638094c1760fca6216e3fa096c122a0f05a91bf927981070fa0d7"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 145551,
+          "sha256": "e8fdb1afa4cd107ff4ca9277ee7448d961da93389187e920201fde78fec094bf"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 149097,
+          "sha256": "9bc726b298216798c8e7cc0facb5abafe5c36674960a709a33b0ea72a40affa0"
+        },
+        "cable_insert/raw/capture_000000/measurements.h5": {
+          "bytes": 1691368,
+          "sha256": "7c6c04754cf2f16d0f294d57f6c5fd9c1b9dfcc2edd5fae674cd8ab10d068f59"
+        },
+        "cable_insert/raw/capture_000000/metadata.json": {
+          "bytes": 18289,
+          "sha256": "ac9d84df912cf735e30e9debb89526788ab2bd0f53091621391d6e728d139d1a"
+        },
+        "collection_report.json": {
+          "bytes": 7298,
+          "sha256": "3ce65d8341be47477b5e4640278199b8feed719f32d4ed23e1c9c56162282341"
+        },
+        "controller_source.py": {
+          "bytes": 9525,
+          "sha256": "53500cc53f5de7a93385137015f226dc8a742bc4e4da0246d209a364503c6598"
+        },
+        "verification.json": {
+          "bytes": 3175,
+          "sha256": "6896c8d283a55fb16e5828bf7d3454909deeda3c5ce51a877245e75853791383"
+        }
+      },
+      "frames": 372,
+      "parts": [
+        {
+          "path": "archives/gelsight_cable_insert_rigid.tar.zst.part000",
+          "bytes": 266188063,
+          "sha256": "d23dcff4c95c5550939904eda557821145fbe8943a3738bb2a1c5910cd460704"
+        }
+      ]
+    },
+    {
+      "id": "gelsight_cable_insert_elastic_beam",
+      "source": "outputs/optical_elastic_20261014/gelsight",
+      "task": "cable_insert",
+      "backend": "gelsight",
+      "sensor_label": "GelSight · MuJoCo",
+      "clip_model": "elastic_beam",
+      "episodes": 1,
+      "note": "上下唇被动弹性；未评估松手保持",
+      "appearance": "source_appearance",
+      "files": {
+        "cable_insert/lerobot/data/chunk-000/episode_000000.parquet": {
+          "bytes": 86810,
+          "sha256": "8887da4294d81b15426c9b63ca91b1cd3e6019530a707bfc0733f9dc5bcb07c3"
+        },
+        "cable_insert/lerobot/depth/chunk-000/episode_000000.h5": {
+          "bytes": 430301362,
+          "sha256": "aa4721f06c1686ab8dfc4f485208459c1c95ee1bb370270e2f190ddd05b1ea4a"
+        },
+        "cable_insert/lerobot/meta/episodes.jsonl": {
+          "bytes": 82,
+          "sha256": "4583755ab674d5fc6116d92fde0738811d52b3d24fc05518580426c6ab42f531"
+        },
+        "cable_insert/lerobot/meta/episodes_stats.jsonl": {
+          "bytes": 6835,
+          "sha256": "fad3487d1c27143ff132bd116dfd04bdf489f7566800a230115f84299f39be7f"
+        },
+        "cable_insert/lerobot/meta/info.json": {
+          "bytes": 7654,
+          "sha256": "354f8ee25c67a4500fccf6a97a6981090cd145ff5bc86d12318b6edcb926016a"
+        },
+        "cable_insert/lerobot/meta/modality.json": {
+          "bytes": 1919,
+          "sha256": "41027eca300bd1c6816882b23defbbd51a313bd08f7987dcadf86ce5704134c0"
+        },
+        "cable_insert/lerobot/meta/tasks.jsonl": {
+          "bytes": 61,
+          "sha256": "b9f0f7f756f64f38819fa617de1dbdd692dbacb1b61bd8f9be8e9d8c0a4288d4"
+        },
+        "cable_insert/lerobot/meta/wowskin.json": {
+          "bytes": 14330,
+          "sha256": "2dd7f1c0c6f91b3f97295a400223b29e1ad15afc2cf9d5432f0d3fcc284ff176"
+        },
+        "cable_insert/lerobot/meta/wowskin_sources.jsonl": {
+          "bytes": 1777,
+          "sha256": "c4a699ec81c8318defd38708ce88b3349b177a5446d540958055d7e3d9619fb6"
+        },
+        "cable_insert/lerobot/optical/chunk-000/episode_000000.h5": {
+          "bytes": 72532834,
+          "sha256": "d65356903e8aee765fc2133c963aca927562f6130c66abd798363df6d8e270c3"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera1/episode_000000.mp4": {
+          "bytes": 8083103,
+          "sha256": "1fafb3aef082982a910bcdb21ceea0a9ba3c1eb084c323028811c9b5485f0df6"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera2/episode_000000.mp4": {
+          "bytes": 8559176,
+          "sha256": "7e75f56f06bcfc168f53782aac3684660deb781b13fb833580ad175936314bd9"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.camera52/episode_000000.mp4": {
+          "bytes": 9131146,
+          "sha256": "52a3815a14aff5e5d86be9ed513aeca46bfc3c28e322ac409ccd17eb348603f2"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_left/episode_000000.mp4": {
+          "bytes": 141267,
+          "sha256": "e56a376b7bfa3e4b39e8ffb2c26a56c14d0394721a9de6fff382bb5760ab2da6"
+        },
+        "cable_insert/lerobot/videos/chunk-000/observation.images.tactile_right/episode_000000.mp4": {
+          "bytes": 140385,
+          "sha256": "c7a3dd2b45502a2026db4d8f57d0e1e3a04214842aab8e1b325a679f4ae3dfff"
+        },
+        "cable_insert/raw/capture_000000/measurements.h5": {
+          "bytes": 1871312,
+          "sha256": "b8761790003f1f6733f6c03cd64ffb7110f6eadb7cf1fc32be44ac7949ee6d17"
+        },
+        "cable_insert/raw/capture_000000/metadata.json": {
+          "bytes": 20815,
+          "sha256": "6ec8c05f43851b9faa27a125837501aee1ce95895dcca7d47dfa237c11388d86"
+        },
+        "collection_report.json": {
+          "bytes": 7464,
+          "sha256": "0a5b7bd641efc7cec30f718bcedb57767e2dc68204fb40afe07644b69ca382c0"
+        },
+        "controller_source.py": {
+          "bytes": 11744,
+          "sha256": "72bdc4b56106f6c5d8be2c0133352115d714250a95917fb913e4ee43a694ceb0"
+        },
+        "verification.json": {
+          "bytes": 4131,
+          "sha256": "b7f506f40ab801c63bd7727c8ebd197e2bcbc2050a1c513b6cdd1d66d7d4c570"
+        }
+      },
+      "frames": 383,
+      "parts": [
+        {
+          "path": "archives/gelsight_cable_insert_elastic_beam.tar.zst.part000",
+          "bytes": 255745413,
+          "sha256": "e36973a95d41b299e36a33237538ed9b9da32aad9ed10b46df2c73bdf0b587dd"
+        }
+      ]
+    }
+  ],
+  "episodes": 18,
+  "archive_bytes": 7057746262,
+  "unpacked_bytes": 18964683172
+}

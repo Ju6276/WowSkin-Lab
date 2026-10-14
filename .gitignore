@@ -32,3 +32,6 @@ dist/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Full example recordings and archives stay local.
+/examples/optical/archives/

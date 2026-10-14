@@ -5,6 +5,7 @@ policy inputs contain rendered cameras, measured robot state and tactile measure
 This is scripted simulation data, not human teleoperation or paper results.
 """
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -55,7 +56,11 @@ def collect(output, episodes=2, seed=0, randomize=False, *, magnetic_fit=None,
     # A complete pick/lower/release includes unloaded states; never fill them.
     require_training_tactile(env)
     output.mkdir(parents=True)
+    controller_source = Path(__file__).read_bytes()
+    (output/'controller_source.py').write_bytes(controller_source)
     result = dict(source='scripted_simulation_acquisition', human_demonstrations=False,
+                  controller_sha256=hashlib.sha256(controller_source).hexdigest(),
+                  controller_source_file='controller_source.py',
                   controller_uses_initial_simulator_object_position=True,
                   object_ground_truth_exported_to_policy=False,
                   calibrated=False, episodes=[])
@@ -69,6 +74,7 @@ def collect(output, episodes=2, seed=0, randomize=False, *, magnetic_fit=None,
     with recorder_type(env, output, source='scripted_pick_move_place',
                        instruction=instruction, record_depth=record_depth) as recorder:
         for episode in range(episodes):
+            env.cfg['seed'] = seed+episode
             env.reset(seed=seed+episode)
             cube = env.data.xpos[env.probe_body].copy()
             destination = np.asarray(env.pick_place.config['target_center_xy_m'])

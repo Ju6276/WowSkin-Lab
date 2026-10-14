@@ -85,7 +85,7 @@ Pico 支持佩戴／对面模式，都需在头显浏览器中进入 WebXR；松
 
 每次只选一种传感器，左右各装一个同类型模块。默认 AnySkin；DIGIT 可选 TACTO 或 FOTS，GelSight 使用独立的 GelSightMujoco 原模型（不是 Mini）。三种光学配置均接入 Panda 五类任务、三路场景 RGB-D、双指光学显示和手动录制；Robotiq 光学安装尚未接入。
 
-TACTO 的场景长指部现在使用不透明黑色；旧录像保留采集时的颜色。黑色版本请使用新录制目录重新采集。
+TACTO 的场景长指部现在使用不透明黑色；旧录像保留采集时的颜色。六条黑色版 TACTO 示例已重录，见[示例记录与本机使用说明](examples/optical/README.md)。继续采集请使用新录制目录。
 
 ```bash
 # 可选依赖装到同一个 .venv，固定源代码／CAD／权重版本
@@ -137,7 +137,7 @@ TACTO／GelSight 完整长组件替换原短指几何；FOTS 独立模块装在�
   --episode 0 --output outputs/review_tacto_feeding
 ```
 
-三种光学后端各一条喂食、刚性 single clip 和上下唇弹性 single clip 已完成采集、导出、读取和回放检查；单条示范不足以划分独立训练／验证集，这两项任务尚未训练和闭环验收。本机回放入口为 `outputs/optical_replays_20261014/index.html`，这些实验数据与回放被 Git 忽略，不随仓库分发。具体结果及字段限制见[光学学习说明](docs/OPTICAL_LEARNING_ZH.md)。
+三种光学后端各一条喂食、刚性 single clip 和上下唇弹性 single clip 已完成采集、导出、读取和回放检查；单条示范不足以划分独立训练／验证集，这两项任务尚未训练和闭环验收。本机回放入口为 `outputs/optical_replays_20261014/index.html`。十八条完整示例数据和生成的回放均保留在本机，不随仓库推送。[examples/optical](examples/optical/README.md) 只保存清单、检查结果、少量截图及本机校验／解包／重建回放说明。具体结果及字段限制见[光学学习说明](docs/OPTICAL_LEARNING_ZH.md)。
 
 ## 脆性薯片试验
 
@@ -193,6 +193,7 @@ scripts/      安装、训练、评估；diagnostics/ 为可选实验
 tests/        unit、physics、official、artifacts、manual
 docs/         采集、学习、模型参数与论文索引
 data/         本机示范与算法导出，不进 Git
+examples/     示例清单、检查结果、截图与复现说明；大数据包不进 Git
 outputs/      本机权重、标定与诊断输出，不进 Git
 ```
 

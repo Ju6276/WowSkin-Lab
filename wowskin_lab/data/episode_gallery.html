@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WowSkin · 光学采集回放</title>
+<style>
+:root{color-scheme:light;--paper:#f4f3eb;--ink:#243b31;--muted:#55665c;--line:#c8cec2;--accent:#29654b}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 "Avenir Next","PingFang SC",sans-serif}
+main{max-width:1460px;margin:auto;padding:32px clamp(16px,4vw,56px) 0}.eyebrow{margin:0 0 7px;font-size:12px;letter-spacing:.14em;color:var(--muted)}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:24px;border-bottom:1px solid var(--line);padding-bottom:18px}h1{margin:0;font-size:clamp(26px,3vw,38px);font-weight:600;letter-spacing:-.035em}.count{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.intro{margin:18px 0 23px;max-width:970px;color:var(--muted)}.selectors{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end}label{display:grid;gap:5px;font-size:12px;color:var(--muted)}select{min-height:44px;min-width:180px;font:15px "Avenir Next","PingFang SC",sans-serif;background:#faf9f2;color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:9px 35px 9px 12px;cursor:pointer}select:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}a{color:var(--accent);text-underline-offset:4px}.open{margin-left:auto;padding-bottom:8px;white-space:nowrap}
+.selection{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding:16px 0 13px;font-size:13px;color:var(--muted)}.selection strong{color:var(--ink);font-weight:600}.player{max-width:1460px;margin:auto}iframe{display:block;border:0;width:100%;height:1460px;background:var(--paper)}
+@media(max-width:700px){main{padding-top:22px}header{display:block}.count{display:block;margin-top:7px}.selectors{gap:12px}label{flex:1;min-width:140px}select{width:100%;min-width:0}.open{width:100%;margin-left:0}.selection{gap:4px}iframe{height:1700px}}
+</style>
+<main>
+<p class="eyebrow">WOWSKIN LAB / DEMONSTRATIONS</p>
+<header><h1>光学采集回放</h1><span class="count" id="count"></span></header>
+<p class="intro">规则脚本采集的仿真示范，可切换任务、触觉后端和示范编号。本批 TACTO 使用不透明黑色长指部；评分范围见各段说明。</p>
+<nav class="selectors" aria-label="选择录制回放">
+<label>任务<select id="task" aria-controls="replay"></select></label>
+<label>触觉后端<select id="sensor" aria-controls="replay"></select></label>
+<label id="clipField" hidden>卡扣模型<select id="clip" aria-controls="replay"></select></label>
+<label>示范<select id="episode" aria-controls="replay"></select></label>
+<a class="open" id="open" target="_blank" rel="noopener">单独打开此回放 ↗</a>
+</nav>
+<div class="selection" role="status" aria-live="polite"><strong id="identity"></strong><span id="provenance"></span></div>
+</main>
+<div class="player"><iframe id="replay" title="同步录制回放"></iframe></div>
+<noscript>请启用 JavaScript，或直接打开 tacto、digit_fots、gelsight 目录下的单段回放。</noscript>
+<script id="catalog" type="application/json">__CATALOG_DATA__</script>
+<script>
+'use strict';
+const entries=JSON.parse(document.getElementById('catalog').textContent), $=id=>document.getElementById(id);
+const taskNames={pick_cube:'抓方块',feeding:'喂食',cable_insert:'Single clip',cable:'绕线',peg_insert:'栓插入',chip_tray:'薯片'};
+const clipNames={rigid:'刚性',elastic_beam:'上下唇弹性'};
+const tasks=[...new Set(entries.map(item=>item.task))];
+for(const task of tasks)$('task').add(new Option(taskNames[task]||task,task));
+for(const task of Object.keys(taskNames).filter(task=>!tasks.includes(task))){const option=new Option(taskNames[task]+' · 暂无完整示范',task);option.disabled=true;$('task').add(option);}
+const sensors=[...new Map(entries.map(item=>[item.backend,item.sensor_label])).entries()];
+for(const [value,label] of sensors)$('sensor').add(new Option(label,value));
+$('count').textContent=`${tasks.length} 个任务 · ${sensors.length} 种后端 · ${entries.length} 条示范`;
+let current='', observer;
+function select(item){
+  $('task').value=item.task;
+  $('sensor').value=item.backend;
+  $('clipField').hidden=item.task!=='cable_insert';
+  const models=[...new Set(entries.filter(row=>row.task===item.task&&row.backend===item.backend&&row.clip_model).map(row=>row.clip_model))];
+  $('clip').replaceChildren(...models.map(model=>new Option(clipNames[model]||model,model)));
+  $('clip').value=item.clip_model||'';
+  const variant=item.clip_model ? ' / '+clipNames[item.clip_model] : '';
+  const group=entries.filter(row=>row.task===item.task&&row.backend===item.backend&&row.clip_model===item.clip_model);
+  $('episode').replaceChildren(...group.map(row=>new Option(`示范 ${String(row.episode+1).padStart(2,'0')} · seed ${row.seed}`,row.id)));
+  $('episode').value=item.id;
+  $('identity').textContent=`${taskNames[item.task]||item.task}${variant} / ${item.sensor_label} / 示范 ${String(item.episode+1).padStart(2,'0')} · ${item.frames} 帧`;
+  $('provenance').textContent=`脚本采集 · 自动评分${item.success?'成功':'未成功'} · ${item.note}`;
+  $('open').href=item.url;
+  if(current!==item.id){current=item.id;$('replay').title=`${taskNames[item.task]||item.task}${variant} · ${item.sensor_label} · 示范 ${item.episode+1}`;$('replay').src=item.url;}
+  if(location.hash.slice(1)!==item.id)history.replaceState(null,'','#'+item.id);
+}
+function fromHash(){select(entries.find(item=>item.id===location.hash.slice(1))||entries[0]);}
+function pick(){const group=entries.filter(item=>item.task===$('task').value&&item.backend===$('sensor').value);select(group.find(item=>item.clip_model===($('clip').value||'elastic_beam'))||group[0]||entries.find(item=>item.task===$('task').value));}
+$('task').onchange=pick;
+$('sensor').onchange=pick;
+$('clip').onchange=pick;
+$('episode').onchange=()=>select(entries.find(item=>item.id===$('episode').value));
+window.addEventListener('hashchange',fromHash);
+$('replay').onload=()=>{
+  if(observer)observer.disconnect();
+  try{const body=$('replay').contentDocument.body;if(!body)return;
+    const resize=()=>{$('replay').style.height=Math.ceil(body.getBoundingClientRect().height+32)+'px';};
+    observer=new ResizeObserver(resize);observer.observe(body);resize();
+  }catch(error){/* A local file can still play with the fixed iframe height. */}
+};
+fromHash();
+</script>
+</html>
