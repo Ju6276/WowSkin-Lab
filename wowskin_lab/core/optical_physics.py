@@ -89,17 +89,8 @@ def contact_state(env, side, objects=None):
 
 
 def sample(env, controller):
-    start = float(env.data.time)
-    callback = getattr(env, 'after_physics_step', None)
-    for _ in range(env.steps_per_sample):
-        controller(env)
-        mujoco.mj_step(env.model, env.data)
-        if callback:
-            callback()
-    if (not np.isclose(env.data.time, start+1/env.cfg['sample_hz'], atol=1e-8)
-            or np.any(env.data.warning.number) or not np.isfinite(env.data.qpos).all()):
-        raise RuntimeError('MuJoCo instability/warning; refusing to export invalid optical state')
-    mujoco.mj_forward(env.model, env.data)
+    from .stepping import advance
+    advance(env, controller)
     left, right = (contact_state(env, side) for side in ('left', 'right'))
     target = [contact_state(env, side, env.contact_geoms)['normal_force_n'] for side in ('left', 'right')]
     return dict(**left, passive_normal_force_n=right['normal_force_n'],

@@ -4,13 +4,14 @@ Capture once at the existing clocks, then pack reviewed episodes with the
 official API. Keep full-rate raw data for FTF in the same collection directory.
 No policy, synthetic labels, duplicate images, or filled tactile observations.
 """
+from contextlib import ExitStack
 import hashlib
 import importlib.metadata
 import json
 import os
 from pathlib import Path
 
-import cv2
+import av
 import h5py
 import numpy as np
 
@@ -159,19 +160,19 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
         raise ValueError('This raw episode is already in the LeRobot dataset')
     pending.write_text(f'Packing {source}\n')
     source_videos = [video_path(source, i, meta) for i in camera_ids]
-    caps = [cv2.VideoCapture(str(path)) for path in source_videos]
+    videos = ExitStack()
     optical_file = None
     count, max_clock_offset = 0, 0.
     episode_index = ds.num_episodes
     try:
+        containers = [videos.enter_context(av.open(str(path))) for path in source_videos]
+        decoders = [iter(container.decode(video=0)) for container in containers]
         if optical:
             optical_file = h5py.File(optical_path(source, meta))
         instruction = episode_instruction(meta['task'], meta.get('instruction'))
         if ds.meta.get_task_index(instruction) is None:
             ds.meta.add_task(instruction)
         instruction_index = ds.meta.get_task_index(instruction)
-        if not all(c.isOpened() for c in caps):
-            raise ValueError('Cannot decode all source cameras')
         with h5py.File(source/'measurements.h5') as f:
             times, camera_times = f['timestamp'][:], f['camera_timestamp'][:]
             indices = np.searchsorted(times, camera_times-1e-9)
@@ -185,8 +186,8 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
                 raise ValueError('Expected a contiguous demonstration with at least two camera frames')
             first_time = float(camera_times[selected[0]])
             for j, i in enumerate(indices):
-                decoded = [c.read() for c in caps]
-                if not all(ok for ok, _ in decoded):
+                decoded = [next(decoder, None) for decoder in decoders]
+                if any(image is None for image in decoded):
                     raise ValueError(f'Missing original camera frame {j}')
                 if not keep[j]:
                     continue
@@ -215,8 +216,8 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
                         frame['observation.images.tactile_'+side] = optical_file[f'frames/{j:06d}/{side}/rgb'][:]
                 else:
                     frame['observation.tactile'] = f['sensor_states'][i].astype('float32')
-                for camera, (_, bgr) in zip(camera_ids, decoded):
-                    frame[f'observation.images.camera{camera}'] = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                for camera, image in zip(camera_ids, decoded):
+                    frame[f'observation.images.camera{camera}'] = image.to_ndarray(format='rgb24')
                 if not all(np.isfinite(v).all() for v in frame.values()):
                     raise ValueError('Nonfinite LeRobot frame')
                 ds.add_frame(frame, task=instruction)
@@ -224,7 +225,7 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
                 count += 1
                 if count == 1 or count % 30 == 0 or count == len(indices):
                     progress('SAVING', f'Preparing LeRobot frames {count}/{len(indices)}')
-            if any(c.read()[0] for c in caps):
+            if any(next(decoder, None) is not None for decoder in decoders):
                 raise ValueError('Extra video frames without source timestamps')
         progress('SAVING', f'Encoding {len(ds.meta.video_keys)} videos and writing Parquet ({count} frames)')
         ds.save_episode()
@@ -265,8 +266,7 @@ def append_raw_episode(source, destination, *, progress=None, finalize=None):
     finally:
         if optical_file:
             optical_file.close()
-        for c in caps:
-            c.release()
+        videos.close()
         ds.stop_image_writer()
 
 

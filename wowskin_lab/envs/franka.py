@@ -228,7 +228,8 @@ class FrankaTactileSim(TactileSim):
         return quality
 
     def reading(self):
-        row = self.sample(lambda _: self.control())
+        from wowskin_lab.core.stepping import robot_control
+        row = self.sample(robot_control)
         if getattr(self, "is_optical", False):
             return row
         passive = self.passive_vertices_local()

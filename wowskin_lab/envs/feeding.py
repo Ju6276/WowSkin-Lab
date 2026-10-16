@@ -428,7 +428,7 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         try:
             return super().sample(controller)
         except RuntimeError as error:
-            if not any(message in str(error) for message in ('MuJoCo instability/warning', 'FEM invalid', 'Silicone mesh inverted/nonfinite')):
+            if not any(message in str(error) for message in ('MuJoCo instability/warning', 'MuJoCo Warp physics fault', 'FEM invalid', 'Silicone mesh inverted/nonfinite')):
                 raise
             # Restore the sample boundary before propagating the failure.
             # Discard failed force peaks, filtering and random draws;

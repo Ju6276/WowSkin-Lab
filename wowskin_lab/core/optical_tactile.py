@@ -6,6 +6,7 @@ SE(3) composition, all contacting geoms, and independent per-sensor renderers.
 """
 from dataclasses import dataclass
 from pathlib import Path
+import os
 import sys
 
 import mujoco
@@ -37,9 +38,12 @@ def contact_forces(model, data, gel):
     gels = set(np.atleast_1d(gel).tolist())
     forces, force = {}, np.zeros(6)
     for index, contact in enumerate(data.contact):
-        if not gels.intersection((contact.geom1, contact.geom2)):
+        # Warp readback updates geom, not MuJoCo's deprecated geom1/geom2
+        # storage. They are separate fields, so the legacy values can be stale.
+        first, second = map(int, contact.geom)
+        if not gels.intersection((first, second)):
             continue
-        other = contact.geom2 if contact.geom1 in gels else contact.geom1
+        other = second if first in gels else first
         if other in gels:
             continue
         if other < 0:
@@ -109,6 +113,9 @@ class OpticalTactile:
                 gel_ids = tuple(model.geom(g).id for g in ((gel,) if isinstance(gel, str) else gel))
                 self.sensors[name] = (site_id, gel_ids)
                 self.renderers[name] = Renderer(width, height, background_bgr, self.config_path)
+                if sys.platform != 'darwin' and os.environ.get('PYOPENGL_PLATFORM') == 'egl':
+                    from .optical_egl import share_display
+                    share_display(self.renderers[name].r)
                 if self.renderers[name].nb_cam != 1:
                     raise ValueError('The DIGIT adapter requires one camera per module; it cannot discard extra cameras')
         except Exception:

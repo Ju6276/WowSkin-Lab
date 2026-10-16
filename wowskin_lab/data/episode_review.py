@@ -96,11 +96,10 @@ def review(path, output, *, episode=0):
         frames = len(camera_times)
         if packed and packed[2]['frames'] != frames:
             raise ValueError('LeRobot provenance and raw camera count differ')
-        caps = [cv2.VideoCapture(str(video)) for video in videos]
-        for cap in caps:
-            stack.callback(cap.release)
-        if not all(cap.isOpened() for cap in caps):
-            raise ValueError('Cannot open every recorded scene camera')
+        # LeRobot may encode AV1; OpenCV builds do not consistently decode it.
+        # Use the same PyAV decoder family as the pinned dataset reader.
+        containers = [stack.enter_context(av.open(str(video))) for video in videos]
+        decoders = [iter(container.decode(video=0)) for container in containers]
         # One shared scale across both fingers and the entire episode.
         limit = max(1e-6, max(float(np.max(optics[f'frames/{i:06d}/{s}/indentation_m'][:]))
                              for i in range(frames) for s in ('left', 'right')))
@@ -139,11 +138,11 @@ def review(path, output, *, episode=0):
         stream.options = {'crf': '18', 'preset': 'fast', 'g': '30'}
         for i in range(frames):
             scene_tiles = []
-            for camera, cap in zip(cameras, caps):
-                ok, bgr = cap.read()
-                if not ok:
+            for camera, decoder in zip(cameras, decoders):
+                frame = next(decoder, None)
+                if frame is None:
                     raise ValueError(f'Missing camera {camera} frame {i}')
-                scene_tiles.append(_tile(bgr[..., ::-1], f'Camera {camera}', width=1280//len(cameras)))
+                scene_tiles.append(_tile(frame.to_ndarray(format='rgb24'), f'Camera {camera}', width=1280//len(cameras)))
             scene = np.concatenate(scene_tiles, axis=1)
             scene = cv2.copyMakeBorder(scene, 0, 0, 0, 1280-scene.shape[1], cv2.BORDER_REPLICATE)
             rows, details = [scene], {}
@@ -165,7 +164,7 @@ def review(path, output, *, episode=0):
             frame = av.VideoFrame.from_ndarray(np.concatenate(rows), format='rgb24')
             for packet in stream.encode(frame):
                 movie.mux(packet)
-        if any(cap.read()[0] for cap in caps):
+        if any(next(decoder, None) is not None for decoder in decoders):
             raise ValueError('Video contains extra frames without timestamps')
         for packet in stream.encode():
             movie.mux(packet)

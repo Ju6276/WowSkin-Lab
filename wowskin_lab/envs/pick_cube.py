@@ -313,9 +313,11 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         return obs
 
     def sample(self, controller=None):
+        from wowskin_lab.core.stepping import robot_control
+        controller = controller or robot_control
         if self.is_optical:
             from wowskin_lab.core.optical_physics import sample
-            return sample(self, controller or (lambda _: self.control()))
+            return sample(self, controller)
         return super().sample(controller)
 
     def sensor_surfaces(self):
@@ -682,6 +684,8 @@ def response_configuration(args):
         cfg['optical_depth_display_max_mm'] = depth_range
     else:
         cfg = configuration(seed=getattr(args, 'seed', 0))
+    from wowskin_lab.core.stepping import configuration as physics_configuration
+    cfg.update(physics_configuration(args))
     if getattr(args, 'pad_backing_contact', False):
         cfg['pad_backing_contact'] = True
     # Explicit operational option, not a repair of the deformation model.
@@ -1243,6 +1247,8 @@ def viewer(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    from wowskin_lab.core.stepping import add_arguments
+    add_arguments(parser)
     parser.add_argument("command", choices=["viewer", "demo"], nargs="?", default="viewer")
     parser.add_argument("--no-pollen", action="store_true")
     parser.add_argument("--sensor-backend", choices=("tacto", "digit_fots", "gelsight"), help=argparse.SUPPRESS)

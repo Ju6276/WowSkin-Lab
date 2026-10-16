@@ -1,0 +1,198 @@
+"""CUDA physics behind the existing environment and recorder interfaces.
+
+Initialization/reset and IK stay on CPU. Recorded forces/poses are downloaded
+from Warp without calling CPU mj_forward. Cameras and tactile readout retain
+their existing implementations. No CPU physics fallback on a GPU error.
+"""
+import importlib.metadata
+
+import mujoco
+import mujoco_warp as mjw
+import numpy as np
+import warp as wp
+
+from .runtime import GpuSimulation, capture_step
+from ..stepping import robot_control
+
+
+@wp.kernel
+def _audit(q: wp.array2d[float], v: wp.array2d[float], flags: wp.array[int],
+           iterations: wp.array[int], health: wp.array[int]):
+    i = wp.tid()
+    if i == 0:
+        wp.atomic_or(health, 0, flags[0])
+        wp.atomic_max(health, 1, iterations[0])
+    if i < q.shape[1] and not wp.isfinite(q[0, i]):
+        wp.atomic_or(health, 0, 1073741824)
+    if i < v.shape[1] and not wp.isfinite(v[0, i]):
+        wp.atomic_or(health, 0, 1073741824)
+
+
+class WarpBackend:
+    def __init__(self, env):
+        from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv
+        if not isinstance(env, PandaPickCubeTactileEnv):
+            raise ValueError('Warp collection currently requires a robot task environment')
+        if hasattr(env, 'fracture'):
+            raise ValueError('Warp chip fracture is not supported: dynamic fragment collision masks and sparse weld readout require a separate adapter. Use CPU for chip_tray.')
+        if mujoco.__version__ != '3.15.0' or importlib.metadata.version('mujoco-warp') != '3.15.0':
+            raise ValueError('GPU collection requires MuJoCo and MuJoCo Warp 3.15.0')
+        self.env = env
+        self.faulted = False
+        self.steps = 0
+        self.start_time = float(env.data.time)
+        m, d = env.model, env.data
+        if not hasattr(env, '_gpu_source_options'):
+            env._gpu_source_options = {name: getattr(m.opt, name) for name in
+                ('disableflags', 'jacobian', 'noslip_iterations', 'iterations', 'tolerance')}
+        changes = []
+        if env.cfg.get('gpu_disable_multiccd'):
+            m.opt.disableflags |= int(mujoco.mjtDisableBit.mjDSBL_MULTICCD)
+            changes.append('MULTICCD explicitly disabled; original margins retained')
+        if env.cfg.get('gpu_disable_nativeccd'):
+            m.opt.disableflags |= int(mujoco.mjtDisableBit.mjDSBL_NATIVECCD)
+            changes.append('NATIVECCD explicitly disabled; original mesh contact margins retained')
+        if env.cfg.get('gpu_disable_noslip'):
+            m.opt.noslip_iterations = 0
+            changes.append('Extra no-slip solver explicitly disabled; friction coefficients retained')
+        elif m.opt.noslip_iterations:
+            raise ValueError('MuJoCo Warp has no no-slip solver. Use CPU, or explicitly pass --gpu-disable-noslip and validate grasp/slip behavior.')
+        if m.nv > 60:
+            m.opt.jacobian = mujoco.mjtJacobian.mjJAC_SPARSE
+            changes.append('Sparse Jacobian required by Warp above 60 DoFs')
+        if env.cfg.get('gpu_solver_iterations') is not None:
+            m.opt.iterations = env.cfg['gpu_solver_iterations']
+            changes.append(f'Explicit constraint iteration limit {m.opt.iterations}')
+        if env.cfg.get('gpu_solver_tolerance') is not None:
+            m.opt.tolerance = env.cfg['gpu_solver_tolerance']
+            changes.append(f'Explicit constraint tolerance {m.opt.tolerance}')
+        # Rebuild CPU constraint storage once before upload; no CPU dynamics
+        # solve is performed on the normal acquisition path after this point.
+        mujoco.mj_forward(m, d)
+        self.gpu_pd = (env.cfg.get('arm_controller', 'ik_pd') == 'ik_pd'
+                       and env.control.__func__ is PandaPickCubeTactileEnv.control
+                       and not env.cfg.get('finger_contact_stop')
+                       and env.cfg.get('gripper_control_mode') in
+                       ('panda_menagerie_position', 'panda_robosuite_position', 'ebim_robotiq_position'))
+        arm = dict(qids=env.arm_q, vids=env.arm_v, aids=env.arm_controls,
+                   target=env.joint_target) if self.gpu_pd else None
+        self.sim = GpuSimulation(m, d, arm=arm, cable_plugin_warp=bool(m.nplugin))
+        if self.sim.cable:
+            changes.append('Native cable elasticity translated to Warp passive-force kernels')
+        self.health = wp.zeros(2, dtype=int)
+        self.sim.compile()
+        # A full physics step and its validity check form one serial graph.
+        self.step_graph, self.step_scratch = capture_step(self.sim.model, self.sim.data, self._step)
+        mjw.forward(self.sim.model, self.sim.data)
+        wp.synchronize()
+        self.forward_graph, self.forward_scratch = capture_step(self.sim.model, self.sim.data, self._forward)
+        self.health.zero_()
+        self.last_diagnostics = {}
+        self.max_solver_iterations = 0
+        env.cfg['physics_execution'] = dict(
+            backend='mujoco_warp', device=str(wp.get_device()),
+            gpu_name=wp.get_device().name, mujoco=mujoco.__version__,
+            mujoco_warp=importlib.metadata.version('mujoco-warp'), warp=wp.__version__,
+            precision='float32', cuda_graph=True, cable_elasticity='warp_native_cable' if self.sim.cable else None,
+            compatibility_changes=changes, solver=mujoco.mjtSolver(m.opt.solver).name,
+            iterations=int(m.opt.iterations), tolerance=float(m.opt.tolerance), timestep_s=float(m.opt.timestep),
+            reset='native CPU initialization/settling', ik='CPU',
+            observation='GPU state and forces downloaded; existing CPU tactile readout and MuJoCo renderer',
+            clock='integer executed physics ticks; float64 acquisition timestamps',
+            fault_policy='stop on any GPU overflow, iteration limit, or nonfinite state; no CPU fallback')
+        self._check()
+        self.download()
+
+    def _check(self):
+        d = self.sim.data
+        wp.launch(_audit, max(self.env.model.nq, self.env.model.nv),
+                  [d.qpos, d.qvel, d.overflow, d.solver_niter, self.health])
+
+    def _step(self):
+        self.sim.raw_step()
+        self._check()
+
+    def _forward(self):
+        mjw.forward(self.sim.model, self.sim.data)
+        self._check()
+
+    def validate(self):
+        flags, iterations = map(int, self.health.numpy())
+        self.max_solver_iterations = max(self.max_solver_iterations, iterations)
+        self.last_diagnostics = dict(overflow_flags=flags, physics_steps=self.steps,
+                                     max_solver_iterations=self.max_solver_iterations)
+        if flags:
+            self.faulted = True
+            names = [name for name, value in mjw.OverflowType.__members__.items()
+                     if name not in ('ALL', 'NONE') and flags & int(value)]
+            if flags & 1073741824:
+                names.append('NONFINITE')
+            raise RuntimeError(f'MuJoCo Warp physics fault ({", ".join(names)}); reset required; refusing to export invalid data')
+
+    def upload_controls(self):
+        d, gpu = self.env.data, self.sim.data
+        for name in ('ctrl', 'xfrc_applied', 'qfrc_applied', 'mocap_pos', 'mocap_quat', 'eq_active'):
+            target = getattr(gpu, name)
+            value = np.asarray(getattr(d, name))
+            if value.size:
+                target.assign(value[None])
+        if self.gpu_pd:
+            self.sim.arm['target'].assign(self.env.joint_target)
+
+    def download(self):
+        self.validate()
+        mjw.get_data_into(self.env.data, self.env.model, self.sim.data)
+        # Warp 3.15 exports global flex element/vertex IDs; native MjContact
+        # uses indices local to each flex. Correct the readout convention only.
+        # No CPU collision/force solve is used to rebuild the contacts.
+        m, d = self.env.model, self.env.data
+        d.contact.geom1[:] = d.contact.geom[:, 0]
+        d.contact.geom2[:] = d.contact.geom[:, 1]
+        if m.nflex:
+            for field, offsets in (('elem', m.flex_elemadr), ('vert', m.flex_vertadr)):
+                indices = getattr(d.contact, field)
+                valid = (d.contact.flex >= 0) & (indices >= 0)
+                indices[valid] -= offsets[d.contact.flex[valid]]
+        else:
+            # Warp skips these fields for rigid-only models. Reallocated
+            # native contacts otherwise retain zeros/stale flex IDs, which
+            # falsely mark table contacts as skin contacts in task scoring.
+            for field in ('flex', 'elem', 'vert'):
+                getattr(d.contact, field)[:] = -1
+        # The clock counts actual executed steps. It is not an interpolation
+        # or an extra integration, and avoids float32 timestamp accumulation.
+        self.env.data.time = self.start_time+self.steps*float(self.env.model.opt.timestep)
+
+    def advance(self, controller):
+        if self.faulted:
+            raise RuntimeError('MuJoCo Warp physics fault: reset required before continuing')
+        if controller is not robot_control:
+            raise ValueError('Warp task sampling requires the standard robot controller')
+        env = self.env
+        self.health.zero_()
+        callback = getattr(env, 'after_physics_step', None)
+        fast = self.gpu_pd and callback is None and env.tug_until <= env.data.time
+        try:
+            if fast:
+                controller(env)
+                self.upload_controls()
+                for _ in range(env.steps_per_sample):
+                    wp.capture_launch(self.step_graph)
+                    self.steps += 1
+            else:
+                # Preserve each-step force feedback and task peak metrics.
+                for _ in range(env.steps_per_sample):
+                    controller(env)
+                    self.upload_controls()
+                    wp.capture_launch(self.step_graph)
+                    self.steps += 1
+                    self.download()
+                    if callback is not None:
+                        callback()
+            # Contact forces and poses for the recorder refer to the endpoint.
+            self.sim.data.time.assign(np.array([self.start_time+self.steps*env.model.opt.timestep], dtype=np.float32))
+            wp.capture_launch(self.forward_graph)
+            self.download()
+        except Exception:
+            self.faulted = True
+            raise

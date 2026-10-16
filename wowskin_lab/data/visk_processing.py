@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+import av
 import cv2
 import h5py
 import numpy as np
@@ -94,27 +95,24 @@ def _align_episode(raw, target, camera_ids=None, command_actions=False):
          ((float(state_t[k]), json.dumps(tactile[k].tolist())) for k in index))
     for i in camera_ids:
         from .media import video_path
-        cap = cv2.VideoCapture(str(video_path(raw, i, metadata)))
         writer = cv2.VideoWriter(str(target/f'videos/camera{i}.mp4'), cv2.VideoWriter_fourcc(*'mp4v'), 30, (640, 480))
         count = 0
         source_index = 0
         try:
-            if not cap.isOpened() or not writer.isOpened():
+            if not writer.isOpened():
                 raise RuntimeError(f'{raw}: camera {i} video cannot be opened')
-            while True:
-                ok, frame = cap.read()
-                if not ok:
-                    break
-                if frame.shape != (480, 640, 3):
-                    raise ValueError('Camera resolution changed within demonstration')
-                if source_index >= len(camera_keep):
-                    raise ValueError('Video has more frames than recorded camera timestamps')
-                if camera_keep[source_index]:
-                    writer.write(frame)
-                    count += 1
-                source_index += 1
+            with av.open(str(video_path(raw, i, metadata))) as container:
+                for decoded in container.decode(video=0):
+                    frame = decoded.to_ndarray(format='bgr24')
+                    if frame.shape != (480, 640, 3):
+                        raise ValueError('Camera resolution changed within demonstration')
+                    if source_index >= len(camera_keep):
+                        raise ValueError('Video has more frames than recorded camera timestamps')
+                    if camera_keep[source_index]:
+                        writer.write(frame)
+                        count += 1
+                    source_index += 1
         finally:
-            cap.release()
             writer.release()
         if source_index != len(camera_keep) or count != len(camera_t):
             raise ValueError(f'{raw}: camera {i} frames={count}, timestamps={len(camera_t)}')

@@ -352,21 +352,8 @@ class TactileSim:
                     contacts=count)
 
     def sample(self, controller=None):
-        start = self.data.time
-        after_step = getattr(self, 'after_physics_step', None)
-        for _ in range(self.steps_per_sample):
-            if controller is None:
-                self.controls()
-            else:
-                controller(self)
-            mujoco.mj_step(self.model, self.data)
-            if after_step is not None:
-                after_step()
-        expected = start + self.steps_per_sample*self.cfg["timestep_s"]
-        if not np.isclose(self.data.time, expected, atol=1e-8) or np.any(self.data.warning.number):
-            raise RuntimeError("MuJoCo instability/warning; refusing to export invalid data")
-        # Make positions, velocities and contact forces refer to the same time.
-        mujoco.mj_forward(self.model, self.data)
+        from .stepping import advance
+        advance(self, controller)
         readout = self.tactile_readout(self.tactile_quality())
         result = self.contact_state()
         result.update(time_s=float(self.data.time), probe_xyz_m=self.data.xpos[self.probe_body].copy(),

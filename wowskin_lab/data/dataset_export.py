@@ -11,7 +11,7 @@ from pathlib import Path
 import shutil
 import sys
 
-import cv2
+import av
 import h5py
 import numpy as np
 from scipy.spatial.transform import Rotation
@@ -82,20 +82,16 @@ def _validate(path):
 
 
 def _video_frames(path, times, keep):
-    cap = cv2.VideoCapture(str(path))
-    if not cap.isOpened():
-        raise ValueError(f'Cannot open {path}')
-    try:
+    with av.open(str(path)) as container:
+        frames = iter(container.decode(video=0))
         for index, timestamp in enumerate(times):
-            ok, frame = cap.read()
-            if not ok:
+            frame = next(frames, None)
+            if frame is None:
                 raise ValueError(f'{path}: missing frame {index}')
             if keep[index]:
-                yield frame, float(timestamp)*1000
-        if cap.read()[0]:
+                yield frame.to_ndarray(format='bgr24'), float(timestamp)*1000
+        if next(frames, None) is not None:
             raise ValueError(f'{path}: extra frames beyond camera timestamps')
-    finally:
-        cap.release()
 
 
 def _export_ftf(source, target_root, demo, meta):

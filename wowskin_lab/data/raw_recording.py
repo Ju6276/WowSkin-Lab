@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import time
 from types import SimpleNamespace
 
 import cv2
@@ -27,6 +28,8 @@ class RawRobotRecorder:
     schema = 'wowskin_robot_dataset_v1'
 
     def __init__(self, env, directory, source='keyboard', *, instruction=None, record_depth=True):
+        from wowskin_lab.core.stepping import prepare
+        prepare(env)
         if not np.isclose(env.cfg['sample_hz'], 100):
             raise ValueError('Raw robot acquisition requires 100 Hz tactile samples')
         self.env, self.directory, self.source = env, Path(directory), source
@@ -59,7 +62,11 @@ class RawRobotRecorder:
         return self
 
     def __exit__(self, *exc):
-        self.close()
+        try:
+            if exc[1] is not None:
+                self.abort(str(exc[1]))
+        finally:
+            self.close()
 
     def _metadata(self):
         path = self.writer.path/'metadata.json'
@@ -68,6 +75,8 @@ class RawRobotRecorder:
         temporary.replace(path)
 
     def start(self):
+        from wowskin_lab.core.stepping import prepare
+        prepare(self.env)
         self.set_progress('PREPARING', 'Opening camera, depth and 100 Hz state files')
         require_training_tactile(self.env)
         if self.active:
@@ -81,6 +90,8 @@ class RawRobotRecorder:
         media = collection/'.pending_media'/path.name
         media.mkdir(parents=True)
         self.writer = SimpleNamespace(path=path, count=0)
+        self.capture_wall_start = time.perf_counter()
+        self.capture_sim_start = float(self.env.data.time)
         self.metadata = dict(schema=self.schema, status='in_progress',
             backend='mujoco', source=self.source, task=self.directory.name,
             instruction=self.instruction, instruction_source=self.instruction_source,
@@ -259,6 +270,14 @@ class RawRobotRecorder:
             self.optical_writer.close()
             self.optical_writer = None
         self.metadata.update(status=status, state_samples=samples, camera_frames=self.writer.count)
+        wall = time.perf_counter()-self.capture_wall_start
+        simulated = float(self.env.data.time)-self.capture_sim_start
+        self.metadata['acquisition_timing'] = dict(wall_s=wall, simulation_s=simulated,
+            realtime_factor=simulated/wall if wall else 0.,
+            scope='Active raw capture including rendering, writing and operator pauses; excludes GPU preparation and LeRobot packing')
+        backend = getattr(self.env, '_gpu_physics', None)
+        if backend is not None:
+            self.metadata['physics_diagnostics'] = dict(backend.last_diagnostics)
         if hasattr(self.env, 'task_evaluation'):
             self.metadata['task_evaluation'] = self.env.task_evaluation()
             self.metadata['status_source'] = 'operator review; independent from automatic task score'

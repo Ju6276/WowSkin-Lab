@@ -28,6 +28,11 @@ np.mat = np.asmatrix
 torch.load = functools.partial(torch.load, map_location='cpu', weights_only=True)
 from tactile_render import get_simapproach
 from marker_motion import MarkerMotion
+# Compare the adapter against the author's algorithm on the same CPU device.
+# Otherwise CUDA availability silently changes the reference arithmetic.
+import tactile_render, utils.prepost_mlp
+tactile_render.device = torch.device('cpu')
+utils.prepost_mlp.device = torch.device('cpu')
 p=os.environ['FOTS_PARITY_DIR']
 d=np.load(p+'/raw.npy')
 with torch.inference_mode():

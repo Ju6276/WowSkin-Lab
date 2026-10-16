@@ -213,3 +213,7 @@ H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机
 正常遥操作只在按 B 后保存正式采集。完整 NPZ/CSV 诊断需显式 `--diagnostic-log`；故障自动保留最后最多 200 条样本，位于 `outputs/diagnostics/<task>/teleop_…/`。
 
 三路相机布局可用 `.venv/bin/python scripts/preview_cameras.py --help` 查看；原两路与四路参考布局保存在 `configs/cameras.json`，不会自动改动当前采集配置。切换配置必须用新数据目录。
+
+## NVIDIA GPU 后端
+
+Mac 继续默认 CPU；Linux NVIDIA 使用同一仓库和采集入口，显式加 `--physics-backend warp`。安装、接触兼容选项、原绳子弹性迁移与验收范围见 [GPU 采集说明](GPU_COLLECTION_ZH.md)。不同后端与求解配置分别保存数据。

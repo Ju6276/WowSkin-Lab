@@ -1,0 +1,4 @@
+# Optional GPU tools, in addition to the project runtime. NVIDIA CUDA only.
+mujoco==3.15.0
+warp-lang==1.18.0
+mujoco-warp==3.15.0

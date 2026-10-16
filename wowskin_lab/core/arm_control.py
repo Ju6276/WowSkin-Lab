@@ -50,6 +50,14 @@ def joint_pd_reset(method):
     @wraps(method)
     def reset(self, *args, **kwargs):
         depth = getattr(self, '_arm_reset_depth', 0)
+        if depth == 0:
+            # Every native reset uses the same source settings, including the
+            # first reset before GPU preparation. Reapply GPU options afterward.
+            for name, value in getattr(self, '_gpu_source_options', {}).items():
+                setattr(self.model.opt, name, value)
+            # Re-upload the fully initialized task state after the outer reset.
+            # CUDA Graphs retain array pointers; never reuse a stale reset state.
+            self._gpu_physics = None
         self._arm_reset_depth = depth+1
         try:
             result = method(self, *args, **kwargs)
