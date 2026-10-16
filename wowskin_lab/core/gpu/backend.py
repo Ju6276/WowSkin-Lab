@@ -10,6 +10,7 @@ import mujoco
 import mujoco_warp as mjw
 import numpy as np
 import warp as wp
+from mujoco_warp._src import types
 
 from .runtime import GpuSimulation, capture_step
 from ..stepping import robot_control
@@ -26,6 +27,45 @@ def _audit(q: wp.array2d[float], v: wp.array2d[float], flags: wp.array[int],
         wp.atomic_or(health, 0, 1073741824)
     if i < v.shape[1] and not wp.isfinite(v[0, i]):
         wp.atomic_or(health, 0, 1073741824)
+
+
+@wp.kernel
+def _head_interval_start(metrics: wp.array[wp.float64]):
+    metrics[4] = wp.float64(0.0)
+
+
+@wp.kernel
+def _head_contact_metrics(ncon: wp.array[int], world: wp.array[int],
+                          kind: wp.array[int], geom: wp.array[wp.vec2i],
+                          frame: wp.array[wp.mat33], force: wp.array[wp.spatial_vector],
+                          head: wp.array[int], timestep: wp.float64, metrics: wp.array[wp.float64]):
+    # Match Feeding.after_physics_step: sum magnitudes, signed world force,
+    # every-step peaks and impulse. Keep the original contact ordering.
+    total = wp.float64(0.0)
+    net = wp.vec3d(0.0)
+    for i in range(wp.min(ncon[0], geom.shape[0])):
+        if world[i] != 0 or (kind[i] & int(types.ContactType.CONSTRAINT | types.ContactType.PASSIVE)) == 0:
+            continue
+        left = int(0)
+        right = int(0)
+        if geom[i][0] >= 0:
+            left = head[geom[i][0]]
+        if geom[i][1] >= 0:
+            right = head[geom[i][1]]
+        if left != 0 or right != 0:
+            local = wp.vec3d(wp.spatial_top(force[i]))
+            total += wp.length(local)
+            sign = wp.float64(-1.0)
+            if right != 0:
+                sign = wp.float64(1.0)
+            net += sign * (wp.transpose(wp.mat33d(frame[i])) * local)
+    metrics[0] = total
+    metrics[1] = net[0]
+    metrics[2] = net[1]
+    metrics[3] = net[2]
+    metrics[4] = wp.max(metrics[4], total)
+    metrics[5] = wp.max(metrics[5], total)
+    metrics[6] += total * timestep
 
 
 class WarpBackend:
@@ -81,6 +121,23 @@ class WarpBackend:
             changes.append('Native cable elasticity translated to Warp passive-force kernels')
         self.health = wp.zeros(2, dtype=int)
         self.sim.compile()
+        self.head_metrics = None
+        from wowskin_lab.envs.feeding import PandaFeedingEnv
+        callback = getattr(env, 'after_physics_step', None)
+        if getattr(callback, '__func__', None) is PandaFeedingEnv.after_physics_step:
+            mask = np.zeros(m.ngeom, dtype=np.int32)
+            mask[list(env.head_geoms)] = 1
+            self.head_geoms = wp.array(mask)
+            self.head_contacts = wp.array(np.arange(self.sim.data.naconmax), dtype=int)
+            self.head_forces = wp.zeros(self.sim.data.naconmax, dtype=wp.spatial_vector)
+            self.head_metrics = wp.array([env.head_force_n, *env.head_net_force,
+                env.head_interval_peak_n, env.head_peak_n, env.head_contact_impulse_ns], dtype=wp.float64)
+            # Compile observation kernels before Graph capture, without taking
+            # another physics step or counting this warm-up as an observation.
+            saved = self.head_metrics.numpy()
+            self._head_metrics()
+            wp.synchronize()
+            self.head_metrics.assign(saved)
         # A full physics step and its validity check form one serial graph.
         self.step_graph, self.step_scratch = capture_step(self.sim.model, self.sim.data, self._step)
         mjw.forward(self.sim.model, self.sim.data)
@@ -94,6 +151,7 @@ class WarpBackend:
             gpu_name=wp.get_device().name, mujoco=mujoco.__version__,
             mujoco_warp=importlib.metadata.version('mujoco-warp'), warp=wp.__version__,
             precision='float32', cuda_graph=True, cable_elasticity='warp_native_cable' if self.sim.cable else None,
+            head_contact_statistics='GPU every physics step' if self.head_metrics is not None else None,
             compatibility_changes=changes, solver=mujoco.mjtSolver(m.opt.solver).name,
             iterations=int(m.opt.iterations), tolerance=float(m.opt.tolerance), timestep_s=float(m.opt.timestep),
             reset='native CPU initialization/settling', ik='CPU',
@@ -111,6 +169,15 @@ class WarpBackend:
     def _step(self):
         self.sim.raw_step()
         self._check()
+        if self.head_metrics is not None:
+            self._head_metrics()
+
+    def _head_metrics(self):
+        m, d = self.sim.model, self.sim.data
+        mjw.contact_force(m, d, self.head_contacts, False, self.head_forces)
+        wp.launch(_head_contact_metrics, 1, [d.nacon, d.contact.worldid, d.contact.type,
+                  d.contact.geom, d.contact.frame, self.head_forces, self.head_geoms,
+                  float(self.env.model.opt.timestep), self.head_metrics])
 
     def _forward(self):
         mjw.forward(self.sim.model, self.sim.data)
@@ -171,6 +238,9 @@ class WarpBackend:
         env = self.env
         self.health.zero_()
         callback = getattr(env, 'after_physics_step', None)
+        if self.head_metrics is not None:
+            wp.launch(_head_interval_start, 1, [self.head_metrics])
+            callback = None
         fast = self.gpu_pd and callback is None and env.tug_until <= env.data.time
         try:
             if fast:
@@ -193,6 +263,11 @@ class WarpBackend:
             self.sim.data.time.assign(np.array([self.start_time+self.steps*env.model.opt.timestep], dtype=np.float32))
             wp.capture_launch(self.forward_graph)
             self.download()
+            if self.head_metrics is not None:
+                stats = self.head_metrics.numpy()
+                env.head_force_n = float(stats[0])
+                env.head_net_force = stats[1:4].copy()
+                env.head_interval_peak_n, env.head_peak_n, env.head_contact_impulse_ns = map(float, stats[4:])
         except Exception:
             self.faulted = True
             raise

@@ -180,3 +180,62 @@ class ContactReadbackChecks(unittest.TestCase):
         env = PandaChipEnv(cfg, pollen=False)
         with self.assertRaisesRegex(ValueError, 'dynamic fragment collision masks'):
             prepare(env)
+
+
+class FeedingMetricsChecks(unittest.TestCase):
+    def environment(self):
+        from wowskin_lab.envs.feeding import PandaFeedingEnv
+        return PandaFeedingEnv(response_configuration(SimpleNamespace(task='feeding',
+            sensor_backend='tacto', ideal=True, physics_backend='warp',
+            gpu_disable_multiccd=True, gpu_disable_nativeccd=True,
+            gpu_disable_noslip=True)), pollen=False)
+
+    def test_head_force_peak_and_impulse_match_native_readout(self):
+        from wowskin_lab.envs.feeding import HEAD_SCALE
+        from wowskin_lab.core.gpu.backend import _head_interval_start
+        env = self.environment()
+        backend = prepare(env)
+        saved = env.data.qpos.copy()
+        bean = env.bean_bodies[0]
+        adr = env.model.jnt_qposadr[env.model.body_jntadr[bean]]
+        head = env.model.body('configurable_visual_head').id
+        pos = env.data.xpos[head].copy()
+        rot = env.data.xmat[head].reshape(3, 3).copy()
+        # Diagnostic contacts with both head hulls, then actual separation.
+        # Compare the same solved contacts, rather than two diverging solvers.
+        for local in ([0., -.045, 0.], [0., .055, .056], None):
+            env.head_interval_peak_n = 0.
+            wp.launch(_head_interval_start, 1, [backend.head_metrics])
+            q = saved.copy()
+            if local is not None:
+                q[adr:adr+3] = pos + rot @ np.asarray(local) * HEAD_SCALE
+            backend.sim.data.qpos.assign(q[None])
+            backend._forward()
+            backend.download()
+            for _ in range(3):
+                env.after_physics_step()
+                backend._head_metrics()
+                expected = [env.head_force_n, *env.head_net_force,
+                            env.head_interval_peak_n, env.head_peak_n, env.head_contact_impulse_ns]
+                np.testing.assert_allclose(backend.head_metrics.numpy(), expected, rtol=1e-6, atol=1e-7)
+            if local is not None:
+                self.assertGreater(env.head_force_n, 0.)
+        self.assertEqual(env.head_force_n, 0.)
+        self.assertEqual(env.head_interval_peak_n, 0.)
+        self.assertGreater(env.head_peak_n, 0.)
+        self.assertGreater(env.head_contact_impulse_ns, 0.)
+        env.reset()
+        np.testing.assert_array_equal(prepare(env).head_metrics.numpy(), 0.)
+
+    def test_one_readback_per_sample_without_cpu_head_callback(self):
+        from wowskin_lab.core.stepping import robot_control
+        env = self.environment()
+        backend = prepare(env)
+        self.assertIsNotNone(backend.head_metrics)
+        with patch.object(backend, 'download', wraps=backend.download) as download, \
+             patch.object(env, 'after_physics_step', side_effect=AssertionError('CPU per-step callback')):
+            for _ in range(5):
+                backend.advance(robot_control)
+            self.assertEqual(download.call_count, 5)
+        self.assertEqual(backend.steps, 5*env.steps_per_sample)
+        self.assertAlmostEqual(env.data.time, .05, places=10)
