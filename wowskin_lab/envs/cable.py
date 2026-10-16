@@ -213,6 +213,9 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         return np.stack((centres-axis*half[:,None], centres+axis*half[:,None]), axis=1)
 
     def evaluate_clip(self):
+        gpu = getattr(self, '_gpu_physics', None)
+        if gpu is not None:
+            return gpu.scoring.update()
         ends = self.cable_segments()
         clip = self.model.body('cclip_0').id
         local = (ends-self.data.xpos[clip])@self.data.xmat[clip].reshape(3,3)
@@ -247,7 +250,10 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         row.update(self.evaluate_clip())
         row['success'] = self.success = self.clip_score.success
         if hasattr(self, 'routing_score'):
-            row.update(self.routing_score.update(float(self.data.time), self.cable_segments()))
+            if getattr(self, '_gpu_physics', None) is not None:
+                row.update(self.routing_score.metrics)
+            else:
+                row.update(self.routing_score.update(float(self.data.time), self.cable_segments()))
             row['success'] = self.success = self.routing_score.success
             row['cable_end_anchor_error_m'] = float(np.linalg.norm(row['cable_end_m']-
                 self.cfg['cable_routing']['endpoint_world_m'][1]))

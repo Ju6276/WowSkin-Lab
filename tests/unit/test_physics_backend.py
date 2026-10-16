@@ -22,7 +22,7 @@ class PhysicsBackendChecks(unittest.TestCase):
     def test_gpu_options_are_explicit_and_validated(self):
         for option in ({'gpu_disable_multiccd': True}, {'gpu_disable_noslip': True},
                        {'gpu_solver_iterations': 100}, {'gpu_disable_nativeccd': True},
-                       {'gpu_solver_tolerance': 1e-6}):
+                       {'gpu_solver_tolerance': 1e-6}, {'camera_backend': 'warp'}):
             with self.subTest(option=option), self.assertRaisesRegex(ValueError, 'require'):
                 configuration(SimpleNamespace(**option))
         for invalid in (0., -1., float('nan'), float('inf')):
@@ -38,6 +38,7 @@ class PhysicsBackendChecks(unittest.TestCase):
                     patch(module, side_effect=RuntimeError('scene boundary')) as scene:
                 args = ['--output', str(Path(tmp)/'data'), '--task', task,
                         '--sensor-backend', 'tacto', '--physics-backend', 'warp',
+                        '--camera-backend', 'warp',
                         '--gpu-disable-multiccd', '--gpu-disable-noslip', '--gpu-solver-iterations', '100']
                 if task == 'cable':
                     args += ['--cable-layout', 'single_clip']
@@ -45,6 +46,7 @@ class PhysicsBackendChecks(unittest.TestCase):
                     main(args)
                 cfg = scene.call_args.args[0]
                 self.assertEqual(cfg['physics_backend'], 'warp')
+                self.assertEqual(cfg['camera_backend'], 'warp')
                 self.assertTrue(cfg['gpu_disable_multiccd'])
                 self.assertTrue(cfg['gpu_disable_noslip'])
                 self.assertEqual(cfg['gpu_solver_iterations'], 100)

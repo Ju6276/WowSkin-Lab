@@ -109,8 +109,8 @@ class PollenPredictor:
         with torch.inference_mode():
             for start in range(0, len(values), batch_size):
                 normalized = (values[start:start+batch_size]-self.mean)/self.scale
-                tensor = torch.from_numpy(normalized.astype(np.float32)).unsqueeze(1)
-                result.append(torch.sigmoid(self.model(tensor)).numpy().reshape(-1))
+                tensor = torch.from_numpy(normalized.astype(np.float32)).unsqueeze(1).to(next(self.model.parameters()).device)
+                result.append(torch.sigmoid(self.model(tensor)).cpu().numpy().reshape(-1))
         return np.concatenate(result) if result else np.empty(0, dtype=np.float32)
 
     def update(self, magnetic):

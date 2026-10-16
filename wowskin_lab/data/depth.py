@@ -12,7 +12,10 @@ DEPTH_PATH = 'depth/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.h5'
 
 
 class DepthWriter:
-    def __init__(self, path, model):
+    def __init__(self, path, model, *, renderer='opengl'):
+        if renderer not in ('opengl', 'warp'):
+            raise ValueError(f'Unknown depth renderer: {renderer}')
+        self.renderer = renderer
         self.file = h5py.File(path, 'w')
         self.near = float(model.vis.map.znear * model.stat.extent)
         self.far = float(model.vis.map.zfar * model.stat.extent)
@@ -20,7 +23,8 @@ class DepthWriter:
             convention='OpenCV optical +Z, not Euclidean ray range',
             alignment='Same scene, camera, pixels and simulation time as RGB',
             source='MuJoCo renderer ground truth; no real depth-camera noise model',
-            invalid='valid_cameraN excludes nonfinite/near/far-plane pixels; original depth values are preserved',
+            renderer=renderer, background='zero/no hit' if renderer == 'warp' else 'far plane',
+            invalid='valid_cameraN excludes zero/near/far-plane pixels; original finite depth values are preserved',
             near_m=self.near, far_m=self.far)
 
     def _append(self, key, value, image=False):
@@ -35,7 +39,8 @@ class DepthWriter:
 
     def camera(self, camera, depth, intrinsic):
         depth = np.asarray(depth, dtype=np.float32)
-        if depth.shape != (480, 640) or not np.isfinite(depth).all() or np.any(depth <= 0):
+        if (depth.shape != (480, 640) or not np.isfinite(depth).all()
+                or np.any(depth < 0) or (self.renderer == 'opengl' and np.any(depth == 0))):
             raise ValueError('Invalid metric depth from renderer')
         valid = (depth >= self.near) & (depth < self.far * (1-1e-5))
         self._append(f'camera{camera}', depth, image=True)

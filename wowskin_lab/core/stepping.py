@@ -6,6 +6,8 @@ import mujoco
 def add_arguments(parser):
     parser.add_argument('--physics-backend', choices=('cpu', 'warp'), default='cpu',
                         help='CPU MuJoCo (Mac/Linux), or NVIDIA CUDA via MuJoCo Warp')
+    parser.add_argument('--camera-backend', choices=('opengl', 'warp'), default='opengl',
+                        help='Scene RGB-D renderer; Warp reads CUDA state directly and changes image appearance. Source tactile optics are retained.')
     parser.add_argument('--gpu-disable-multiccd', action='store_true',
                         help='Explicit GPU compatibility choice; retain margins but disable MULTICCD')
     parser.add_argument('--gpu-disable-nativeccd', action='store_true',
@@ -20,6 +22,9 @@ def add_arguments(parser):
 
 def configuration(args):
     backend = getattr(args, 'physics_backend', 'cpu')
+    camera = getattr(args, 'camera_backend', 'opengl')
+    if camera not in ('opengl', 'warp') or (camera == 'warp' and backend != 'warp'):
+        raise ValueError('Warp scene cameras require --physics-backend warp')
     multiccd = bool(getattr(args, 'gpu_disable_multiccd', False))
     nativeccd = bool(getattr(args, 'gpu_disable_nativeccd', False))
     noslip = bool(getattr(args, 'gpu_disable_noslip', False))
@@ -33,7 +38,7 @@ def configuration(args):
         raise ValueError('GPU solver iterations must be positive')
     if backend == 'cpu' and (multiccd or nativeccd or noslip or iterations is not None or tolerance is not None):
         raise ValueError('GPU options require --physics-backend warp')
-    return dict(physics_backend=backend, gpu_disable_multiccd=multiccd, gpu_disable_noslip=noslip,
+    return dict(physics_backend=backend, camera_backend=camera, gpu_disable_multiccd=multiccd, gpu_disable_noslip=noslip,
                 gpu_disable_nativeccd=nativeccd,
                 gpu_solver_iterations=iterations, gpu_solver_tolerance=tolerance)
 

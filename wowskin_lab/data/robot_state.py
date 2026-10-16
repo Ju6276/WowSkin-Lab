@@ -51,14 +51,20 @@ def robot_sample(env):
     position = env.data.site_xpos[env.tcp_site]
     rotation = env.data.site_xmat[env.tcp_site].reshape(3, 3)
     # Spatial velocity from actual MuJoCo qvel, not a derivative of rotvec.
-    jac_pos, jac_rot = np.zeros((3, env.model.nv)), np.zeros((3, env.model.nv))
-    mujoco.mj_jacSite(env.model, env.data, jac_pos, jac_rot, env.tcp_site)
-    linear_world, angular_world = jac_pos @ env.data.qvel, jac_rot @ env.data.qvel
-    jac_base_pos, jac_base_rot = np.zeros_like(jac_pos), np.zeros_like(jac_rot)
-    mujoco.mj_jacBody(env.model, env.data, jac_base_pos, jac_base_rot, env.model.body(BASE_BODY).id)
-    base_linear, base_angular = jac_base_pos @ env.data.qvel, jac_base_rot @ env.data.qvel
-    linear_base = transform[:3, :3].T @ (linear_world-base_linear-np.cross(base_angular, position-transform[:3, 3]))
-    angular_base = transform[:3, :3].T @ (angular_world-base_angular)
+    gpu = getattr(env, '_gpu_physics', None)
+    if gpu is not None:
+        base, world = gpu.observations.velocity_values
+        linear_base, angular_base = base[:3], base[3:]
+        linear_world, angular_world = world[:3], world[3:]
+    else:
+        jac_pos, jac_rot = np.zeros((3, env.model.nv)), np.zeros((3, env.model.nv))
+        mujoco.mj_jacSite(env.model, env.data, jac_pos, jac_rot, env.tcp_site)
+        linear_world, angular_world = jac_pos @ env.data.qvel, jac_rot @ env.data.qvel
+        jac_base_pos, jac_base_rot = np.zeros_like(jac_pos), np.zeros_like(jac_rot)
+        mujoco.mj_jacBody(env.model, env.data, jac_base_pos, jac_base_rot, env.model.body(BASE_BODY).id)
+        base_linear, base_angular = jac_base_pos @ env.data.qvel, jac_base_rot @ env.data.qvel
+        linear_base = transform[:3, :3].T @ (linear_world-base_linear-np.cross(base_angular, position-transform[:3, 3]))
+        angular_base = transform[:3, :3].T @ (angular_world-base_angular)
     return dict(cartesian_states=pose_in_base(position, rotation, transform),
                 commanded_pose=pose_in_base(env.target_xyz, env.target_rotation, transform),
                 cartesian_states_world=np.r_[position, Rotation.from_matrix(rotation).as_rotvec()],

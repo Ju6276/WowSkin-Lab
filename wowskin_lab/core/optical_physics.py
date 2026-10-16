@@ -59,6 +59,11 @@ def surfaces(env):
 
 
 def contact_state(env, side, objects=None):
+    gpu = getattr(env, '_gpu_physics', None)
+    if gpu is not None and gpu.observations.values is not None:
+        result = gpu.observations.contact_state(side, objects)
+        if result is not None:
+            return result
     m, d = env.model, env.data
     geoms = env.optical_gel_geoms[side]
     total, weighted, count = 0., 0., 0

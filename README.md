@@ -201,7 +201,7 @@ outputs/      本机权重、标定与诊断输出，不进 Git
 
 默认 AnySkin 采用 MuJoCo 3.15 降阶指腹＋拟合偶极子；光学选项使用各自源模型。`--ideal` 关闭合成触觉噪声、滤波和延迟，不关闭接触力学。控制限制、参数来源与物理失效规则见 [模型说明](docs/MODEL_CALIBRATION_ZH.md)。AnySkin 只支持当前 trilinear 降阶模型；旧完整节点模式及其选择参数已移除，不再需要 MuJoCo 3.5。旧 full 模型记录不能按降阶模型重放。
 
-[MuJoCo GPU / CUDA Graph 后端](docs/GPU_COLLECTION_ZH.md)已接入共用环境、遥操作和自动采集：Mac 默认 CPU，NVIDIA 显式加 `--physics-backend warp`。绳子使用迁移自原插件的 Warp 弹性力，MPM 替换已撤下。GPU 兼容接触选项需显式启用；保留 CPU 初始化、IK、读数与保存，当前不承诺所有任务与 CPU 默认接触结果一致或实时。
+[MuJoCo GPU / CUDA Graph 后端](docs/GPU_COLLECTION_ZH.md)已接入共用环境、遥操作和自动采集：Mac 默认 CPU，NVIDIA 显式加 `--physics-backend warp`。绳子使用迁移自原插件的 Warp 弹性力，MPM 替换已撤下。GPU 兼容接触选项需显式启用；默认 IK/PD、触觉核心读数和任务评分已在 GPU，CPU 保留初始化、界面与保存。可显式加 `--camera-backend warp` 使用官方 GPU 场景相机；默认 OpenGL 保持原图像。不同渲染器分目录采集，当前不承诺所有任务与 CPU 默认接触结果一致或实时。
 
 ```bash
 # 以下检查包含学习接口，先按学习文档获取固定版 ViSk

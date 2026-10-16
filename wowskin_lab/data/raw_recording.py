@@ -41,7 +41,11 @@ class RawRobotRecorder:
         self.instruction = episode_instruction(task, instruction)
         self.instruction_source = 'task_template' if instruction is None else 'user_provided'
         self.record_depth, self.depth = record_depth, None
-        self.renderer = mujoco.Renderer(env.model, width=640, height=480)
+        if env.cfg.get('camera_backend', 'opengl') == 'warp':
+            from wowskin_lab.core.gpu.cameras import WarpCameras
+            self.renderer = WarpCameras(env)
+        else:
+            self.renderer = mujoco.Renderer(env.model, width=640, height=480)
         self.writer, self.h5, self.videos = None, None, {}
         self.progress = ('IDLE', 'B starts recording')
         self.optics, self.optical_writer = None, None
@@ -81,6 +85,10 @@ class RawRobotRecorder:
         require_training_tactile(self.env)
         if self.active:
             raise RuntimeError('Finish the current demonstration first')
+        if self.env.cfg.get('camera_backend') == 'warp':
+            # Prepare ray-tracing buffers and its Graph before the acquisition
+            # timer; reset changes the physics arrays held by the renderer.
+            self.renderer.update_scene(self.env.data, camera=next(iter(self.cameras.values())))
         self.directory.mkdir(parents=True, exist_ok=True)
         ids = [int(m.group(1)) for p in self.directory.iterdir()
                if (m := re.match(r'^(?:capture|demonstration)_(\d+)', p.name))]
@@ -121,7 +129,10 @@ class RawRobotRecorder:
             convention='OpenCV optical +Z, not Euclidean ray range',
             synchronized_with='camera_timestamp and corresponding RGB frame',
             compression='lossless LZF; original float values and validity masks',
-            source='MuJoCo renderer, no real depth-camera noise model')
+            source='MuJoCo Warp ray tracer' if self.env.cfg.get('camera_backend') == 'warp' else 'MuJoCo OpenGL renderer',
+            noise_model='none', background='zero/no hit' if self.env.cfg.get('camera_backend') == 'warp' else 'OpenGL far plane')
+        self.metadata['camera_renderer'] = dict(backend=self.env.cfg.get('camera_backend', 'opengl'),
+            source_tactile_optics_unchanged=True, pixel_equivalent_across_backends=False)
         if not self.optics:
             self.metadata.update(magnetic_metadata(self.env))
         self.metadata['mesh_quality'] = dict(
@@ -153,7 +164,8 @@ class RawRobotRecorder:
                     self.optics.reset()
                 self.optical_writer = OpticalWriter(media/'optical.h5', self.env, self.optics)
             if self.record_depth:
-                self.depth = DepthWriter(media/'depth.h5', self.env.model)
+                self.depth = DepthWriter(media/'depth.h5', self.env.model,
+                                         renderer=self.env.cfg.get('camera_backend', 'opengl'))
             for i in self.camera_ids:
                 video = cv2.VideoWriter(str(media/f'cam_{i}.mp4'), cv2.VideoWriter_fourcc(*'mp4v'),
                                         30, (640, 480))

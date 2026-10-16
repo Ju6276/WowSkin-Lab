@@ -6,7 +6,8 @@ from .optical_tactile import OpticalTactile
 def make_optics(env, sensor, *, ideal=False, shadow=True, **tacto_options):
     if sensor == 'digit_fots':
         from .fots_mujoco import NativeFOTSOptical
-        return NativeFOTSOptical(env.model, env.sensors, ideal=ideal, shadow=shadow)
+        return NativeFOTSOptical(env.model, env.sensors, ideal=ideal, shadow=shadow,
+            device='cuda' if getattr(env, 'cfg', {}).get('physics_backend') == 'warp' else 'cpu')
     if sensor == 'gelsight':
         from .gelsight_mujoco import GelSightMujocoOptical
         return GelSightMujocoOptical(env.model, env.sensors, ideal=ideal)

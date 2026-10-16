@@ -153,7 +153,7 @@ class ElasticSingleClipController(SingleClipController):
 
 def collect_task(output, episodes, seed, *, task, cable_layout, sensor_backend,
                  ideal, record_format, instruction, record_depth, clip_model='rigid',
-                 physics_backend='cpu', gpu_disable_multiccd=False, gpu_disable_nativeccd=False,
+                 physics_backend='cpu', camera_backend='opengl', gpu_disable_multiccd=False, gpu_disable_nativeccd=False,
                  gpu_disable_noslip=False, gpu_solver_iterations=None, gpu_solver_tolerance=None):
     if clip_model not in ('rigid', 'elastic_beam'):
         raise ValueError('Unknown clip model')
@@ -175,7 +175,7 @@ def collect_task(output, episodes, seed, *, task, cable_layout, sensor_backend,
         raise ValueError(record_format)
     cfg = response_configuration(SimpleNamespace(task=task, cable_layout=cable_layout,
         sensor_backend=sensor_backend, ideal=ideal, seed=seed, clip_model=clip_model,
-        physics_backend=physics_backend, gpu_disable_multiccd=gpu_disable_multiccd,
+        physics_backend=physics_backend, camera_backend=camera_backend, gpu_disable_multiccd=gpu_disable_multiccd,
         gpu_disable_nativeccd=gpu_disable_nativeccd, gpu_disable_noslip=gpu_disable_noslip,
         gpu_solver_iterations=gpu_solver_iterations, gpu_solver_tolerance=gpu_solver_tolerance))
     if task == 'cable':

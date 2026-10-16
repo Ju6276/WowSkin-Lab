@@ -508,6 +508,9 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         return self.observation(), float(self.success), False, False, row
 
     def evaluate_delivery(self, row):
+        gpu = getattr(self, '_gpu_physics', None)
+        if gpu is not None:
+            return gpu.scoring.update()
         head = self.model.body('configurable_visual_head').id
         rotation = self.data.xmat[self.probe_body].reshape(3, 3)
         point = self.data.xpos[self.probe_body]+rotation@np.asarray(self.delivery.config['bowl_center_spoon_m'])

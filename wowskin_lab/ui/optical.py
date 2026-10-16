@@ -13,7 +13,7 @@ class OpticalHUD(TactileHUD):
 
     def bind(self, model, data):
         from wowskin_lab.core.optical_backends import make_optics
-        snapshot = SimpleNamespace(model=model, data=data, sensors=self.sim.sensors)
+        snapshot = SimpleNamespace(model=model, data=data, sensors=self.sim.sensors, cfg=self.sim.cfg)
         self.optics = make_optics(snapshot, self.sim.cfg['sensor'], ideal=self.sim.cfg.get('optical_ideal', False),
                                  shadow=self.sim.cfg.get('optical_shadow', True))
         self.data = data

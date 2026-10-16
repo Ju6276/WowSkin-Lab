@@ -19,8 +19,8 @@ from .optical_tactile import OpticalFrame, contact_forces
 SOURCE = ROOT/'third_party/FOTS-mujoco'
 
 
-@lru_cache(maxsize=1)
-def upstream():
+@lru_cache(maxsize=2)
+def upstream(device='cpu'):
     modules = {}
 
     def load(name, path, extra=None):
@@ -38,7 +38,7 @@ def upstream():
 
     mlp = load('src.train.mlp_model', 'src/train/mlp_model.py')
     preproc = load('utils.prepost_mlp', 'utils/prepost_mlp.py', {'torch': SimpleNamespace(**vars(torch))})
-    preproc.device = torch.device('cpu')
+    preproc.device = torch.device(device)
     load('planar_shadow', 'planar_shadow.py', {'numpy': SimpleNamespace(**dict(vars(np), mat=np.asmatrix))})
     render = load('utils.mlp_render', 'utils/mlp_render.py')
     marker = load('marker_motion', 'marker_motion.py')
@@ -46,9 +46,9 @@ def upstream():
 
 
 class NativeFOTSRenderer:
-    def __init__(self):
-        MLP, self.Render, self.Marker = upstream()
-        self.model = MLP().cpu().eval()
+    def __init__(self, device='cpu'):
+        MLP, self.Render, self.Marker = upstream(device)
+        self.model = MLP().to(device).eval()
         self.model.load_state_dict(torch.load(SOURCE/'models/mlp_n2c_r.pth', map_location='cpu', weights_only=True))
         self.background = np.load(SOURCE/'assets/gel/digit_bg.npy')
         self.baseline = np.load(SOURCE/'utils/utils_data/ini_depth_extent.npy')
@@ -79,9 +79,9 @@ class NativeFOTSRenderer:
 class NativeFOTSOptical:
     label = 'DIGIT / FOTS author MuJoCo branch'
 
-    def __init__(self, model, sensors, *, ideal=False, shadow=True):
+    def __init__(self, model, sensors, *, ideal=False, shadow=True, device='cpu'):
         self.model, self.sensors, self.shadow = model, sensors, shadow
-        self.optics = NativeFOTSRenderer()
+        self.optics = NativeFOTSRenderer(device)
         original = mujoco.MjModel.from_xml_path(str(SOURCE/'assets/gel/fots_mujoco.xml'))
         self.near, self.far = (float(np.float32(value*original.stat.extent))
                               for value in (original.vis.map.znear, original.vis.map.zfar))

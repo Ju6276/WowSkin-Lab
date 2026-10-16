@@ -181,9 +181,10 @@ class ResponseModel:
         distance = np.linalg.norm(np.asarray(self.meta['known_xy_mm'])-q[:2], axis=1).min()
         if not allow_extrapolation and distance > self.meta['max_xy_distance_mm']:
             raise ValueError('Position too far from the sampled XY region; extrapolation refused')
-        t = torch.tensor((q-self.meta['x_mean'])/self.meta['x_scale'], dtype=torch.float32)
+        t = torch.tensor((q-self.meta['x_mean'])/self.meta['x_scale'], dtype=torch.float32,
+                         device=next(self.model.parameters()).device)
         with torch.no_grad():
-            return self.model(t).numpy()*self.meta['y_scale']+self.meta['y_mean']
+            return self.model(t).cpu().numpy()*self.meta['y_scale']+self.meta['y_mean']
 
 
 def main():

@@ -328,6 +328,9 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
                          for b in (self.mount_body, self.passive_mount)])
 
     def pad_forces(self):
+        gpu = getattr(self, '_gpu_physics', None)
+        if not self.is_optical and gpu is not None and gpu.observations.values is not None:
+            return gpu.observations.contact_values[:, 6].copy()
         if self.is_optical:
             from wowskin_lab.core.optical_physics import contact_state
             return np.array([contact_state(self, s)['normal_force_n'] for s in ('left','right')])
@@ -366,6 +369,10 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
                 self.mouse_wrench[sl] *= min(1., limit/max(norm, 1e-12))
 
     def solve_ik(self):
+        gpu = getattr(self, '_gpu_physics', None)
+        if gpu is not None and gpu.ik is not None:
+            gpu.ik.solve()
+            return
         # Optional local Cartesian slew limits; IK and physical actuator
         # bounds remain active in both modes. No joint teleportation.
         delta = self.target_xyz-self.servo_xyz
@@ -404,9 +411,11 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         if progress is not None:
             progress()
         d, m = self.data, self.model
-        torque = arm_torque(self)
-        limits = m.actuator_ctrlrange[self.arm_controls]
-        d.ctrl[self.arm_controls] = np.clip(torque, limits[:, 0], limits[:, 1])
+        gpu = getattr(self, '_gpu_physics', None)
+        if gpu is None or not gpu.gpu_pd:
+            torque = arm_torque(self)
+            limits = m.actuator_ctrlrange[self.arm_controls]
+            d.ctrl[self.arm_controls] = np.clip(torque, limits[:, 0], limits[:, 1])
         if self.cfg.get('finger_contact_stop', False):
             from wowskin_lab.core.finger_contact import pads_touch
             closure = self.finger_contact_stop.apply(
@@ -444,6 +453,8 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         return applied
 
     def step(self, action):
+        from wowskin_lab.core.stepping import prepare
+        prepare(self)
         before_pose = np.r_[self.data.site_xpos[self.tcp_site],
                             rotation_vector(self.data.site_xmat[self.tcp_site])]
         action_time = float(self.data.time)
@@ -499,6 +510,9 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
 
 
     def evaluate_pick_place(self, row):
+        gpu = getattr(self, '_gpu_physics', None)
+        if gpu is not None:
+            return gpu.scoring.update()
         velocity = np.zeros(6)
         mujoco.mj_objectVelocity(self.model, self.data, mujoco.mjtObj.mjOBJ_BODY,
                                 self.probe_body, velocity, 0)
@@ -965,7 +979,8 @@ def viewer(args):
     with (mouse or nullcontext()), (pico or nullcontext()), (recorder or nullcontext()), mujoco.viewer.launch_passive(display_model, display_data, key_callback=keyboard.native_callback,
                                     show_left_ui=False, show_right_ui=False) as handle, keyboard, PhysicsWorker(
                                         env, handle, keyboard, display_model, display_data,
-                                        on_abort=getattr(recorder, 'abort', None)) as physics, CameraPreview(display_model, display_data, hud, TaskGuides(env), pointcloud=cloud_options) as previews:
+                                        on_abort=getattr(recorder, 'abort', None)) as physics, CameraPreview(display_model, display_data, hud, TaskGuides(env), pointcloud=cloud_options,
+                                            gpu_frames=physics.camera_frame if cfg.get('camera_backend') == 'warp' else None) as previews:
         recording_busy, busy_started = False, 0.
         def present(handle):
             if recording_busy:
