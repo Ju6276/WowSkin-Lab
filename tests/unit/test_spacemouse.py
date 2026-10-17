@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from wowskin_lab.teleop.spacemouse import MouseState, SpaceMouseController
+from wowskin_lab.teleop.spacemouse import MouseState, SpaceMouseController, apply_spacenav_event, spacenav_reports
 
 
 def report(kind, values):
@@ -173,6 +173,36 @@ class SpaceMouseChecks(unittest.TestCase):
         s.feed([3,0,0], 2.1); s.feed([3,3,0], 2.2)
         controller.action(env, s.sample(), 90, now=2.2)
         self.assertAlmostEqual(env.grip_target, -.025)
+
+    def test_spacenav_raw_events_become_hid_reports(self):
+        raw = np.zeros(6, dtype='<i2')
+        buttons, removed, changed = apply_spacenav_event(1, 400, 400, raw, 0)
+        self.assertEqual((buttons, removed, changed), (0, False, False))
+        np.testing.assert_array_equal(raw, np.zeros(6, dtype='<i2'))
+        buttons, removed, changed = apply_spacenav_event(2, 1, 0, raw, 0)
+        self.assertEqual((buttons, removed, changed), (0, False, False))
+        buttons, reports = spacenav_reports([(5, 0, 350), (5, 1, -99999), (6, 1, 0), (6, 1, 1)], raw, 0)
+        self.assertEqual(buttons, 3)
+        self.assertEqual(int(raw[0]), 350)
+        self.assertEqual(int(raw[1]), -32768)
+        self.assertEqual(reports[0], bytes((3, 1)))
+        self.assertEqual(reports[1], bytes((3, 3)))
+        self.assertEqual(reports[2][:1], b'\x01')
+        self.assertEqual(len(reports[2]), 13)
+        state = MouseState()
+        for report in reports:
+            state.feed(report, 10.)
+        _, again = spacenav_reports([], raw, buttons)
+        state.feed(again[-1], 10.2)
+        snap = state.sample()
+        np.testing.assert_allclose(snap.axes[:2], [1., -1.])
+        self.assertEqual(snap.presses, ('close', 'hold'))
+        self.assertEqual(snap.received[0], 10.2)
+        buttons, _, changed = apply_spacenav_event(6, 0, 0, raw, buttons)
+        self.assertTrue(changed)
+        self.assertEqual(buttons, 2)
+        with self.assertRaises(ConnectionError):
+            spacenav_reports([(3, 1, 4)], raw, buttons)
 
 
 if __name__ == '__main__':

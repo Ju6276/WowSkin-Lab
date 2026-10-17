@@ -1,11 +1,12 @@
-"""Backend options cannot silently alter CPU runs or bypass CLI dispatch."""
+"""Collection stays on CPU MuJoCo and does not load a GPU package."""
+import contextlib
+import io
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
 
-from wowskin_lab.core.stepping import configuration, prepare
+from wowskin_lab.core.stepping import configuration
 from wowskin_lab.data.auto_collect import main
 
 
@@ -19,34 +20,17 @@ class PhysicsBackendChecks(unittest.TestCase):
             'assert prepare(SimpleNamespace(cfg={})) is None; '
             'assert "warp" not in sys.modules; assert "mujoco_warp" not in sys.modules'], check=True)
 
-    def test_gpu_options_are_explicit_and_validated(self):
-        for option in ({'gpu_disable_multiccd': True}, {'gpu_disable_noslip': True},
-                       {'gpu_solver_iterations': 100}, {'gpu_disable_nativeccd': True},
-                       {'gpu_solver_tolerance': 1e-6}, {'camera_backend': 'warp'}):
-            with self.subTest(option=option), self.assertRaisesRegex(ValueError, 'require'):
+    def test_configuration_is_cpu_and_rejects_gpu_options(self):
+        cfg = configuration(SimpleNamespace())
+        self.assertEqual(cfg, dict(physics_backend='cpu', camera_backend='opengl'))
+        for option in ({'physics_backend': 'warp'}, {'camera_backend': 'warp'},
+                       {'gpu_disable_multiccd': True}, {'gpu_disable_noslip': True},
+                       {'gpu_disable_nativeccd': True}, {'gpu_solver_iterations': 100},
+                       {'gpu_solver_tolerance': 1e-6}):
+            with self.subTest(option=option), self.assertRaisesRegex(ValueError, 'removed'):
                 configuration(SimpleNamespace(**option))
-        for invalid in (0., -1., float('nan'), float('inf')):
-            with self.assertRaisesRegex(ValueError, 'finite and positive'):
-                configuration(SimpleNamespace(physics_backend='warp', gpu_solver_tolerance=invalid))
-        with self.assertRaisesRegex(ValueError, 'positive'):
-            configuration(SimpleNamespace(physics_backend='warp', gpu_solver_iterations=0))
 
-    def test_gpu_cli_reaches_cube_and_cable_configuration(self):
-        for task, module in (('pick_cube', 'wowskin_lab.data.auto_collect.PandaPickCubeTactileEnv'),
-                             ('cable', 'wowskin_lab.envs.cable.PandaCableEnv')):
-            with self.subTest(task=task), TemporaryDirectory() as tmp, \
-                    patch(module, side_effect=RuntimeError('scene boundary')) as scene:
-                args = ['--output', str(Path(tmp)/'data'), '--task', task,
-                        '--sensor-backend', 'tacto', '--physics-backend', 'warp',
-                        '--camera-backend', 'warp',
-                        '--gpu-disable-multiccd', '--gpu-disable-noslip', '--gpu-solver-iterations', '100']
-                if task == 'cable':
-                    args += ['--cable-layout', 'single_clip']
-                with self.assertRaisesRegex(RuntimeError, 'scene boundary'):
-                    main(args)
-                cfg = scene.call_args.args[0]
-                self.assertEqual(cfg['physics_backend'], 'warp')
-                self.assertEqual(cfg['camera_backend'], 'warp')
-                self.assertTrue(cfg['gpu_disable_multiccd'])
-                self.assertTrue(cfg['gpu_disable_noslip'])
-                self.assertEqual(cfg['gpu_solver_iterations'], 100)
+    def test_cli_rejects_gpu_backend(self):
+        with TemporaryDirectory() as tmp, contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            main(['--output', str(Path(tmp)/'data'), '--task', 'pick_cube',
+                  '--sensor-backend', 'tacto', '--physics-backend', 'warp'])

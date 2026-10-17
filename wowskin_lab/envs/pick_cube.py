@@ -328,9 +328,6 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
                          for b in (self.mount_body, self.passive_mount)])
 
     def pad_forces(self):
-        gpu = getattr(self, '_gpu_physics', None)
-        if not self.is_optical and gpu is not None and gpu.observations.values is not None:
-            return gpu.observations.contact_values[:, 6].copy()
         if self.is_optical:
             from wowskin_lab.core.optical_physics import contact_state
             return np.array([contact_state(self, s)['normal_force_n'] for s in ('left','right')])
@@ -369,10 +366,6 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
                 self.mouse_wrench[sl] *= min(1., limit/max(norm, 1e-12))
 
     def solve_ik(self):
-        gpu = getattr(self, '_gpu_physics', None)
-        if gpu is not None and gpu.ik is not None:
-            gpu.ik.solve()
-            return
         # Optional local Cartesian slew limits; IK and physical actuator
         # bounds remain active in both modes. No joint teleportation.
         delta = self.target_xyz-self.servo_xyz
@@ -411,11 +404,9 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
         if progress is not None:
             progress()
         d, m = self.data, self.model
-        gpu = getattr(self, '_gpu_physics', None)
-        if gpu is None or not gpu.gpu_pd:
-            torque = arm_torque(self)
-            limits = m.actuator_ctrlrange[self.arm_controls]
-            d.ctrl[self.arm_controls] = np.clip(torque, limits[:, 0], limits[:, 1])
+        torque = arm_torque(self)
+        limits = m.actuator_ctrlrange[self.arm_controls]
+        d.ctrl[self.arm_controls] = np.clip(torque, limits[:, 0], limits[:, 1])
         if self.cfg.get('finger_contact_stop', False):
             from wowskin_lab.core.finger_contact import pads_touch
             closure = self.finger_contact_stop.apply(
@@ -510,9 +501,6 @@ class PandaPickCubeTactileEnv(FrankaTactileSim):
 
 
     def evaluate_pick_place(self, row):
-        gpu = getattr(self, '_gpu_physics', None)
-        if gpu is not None:
-            return gpu.scoring.update()
         velocity = np.zeros(6)
         mujoco.mj_objectVelocity(self.model, self.data, mujoco.mjtObj.mjOBJ_BODY,
                                 self.probe_body, velocity, 0)
@@ -843,6 +831,12 @@ def demo(args):
 
 
 def viewer(args):
+    import sys
+    x11_ready = False
+    if sys.platform.startswith('linux'):
+        from wowskin_lab.ui.x11_input import prepare_x11_threads
+        # Before GLFW. Linux teleop needs this Display for focus and held keys.
+        x11_ready = prepare_x11_threads()
     import copy
     import mujoco.viewer
     from wowskin_lab.ui.physics_worker import PhysicsWorker
@@ -877,9 +871,10 @@ def viewer(args):
         cfg['tcp_angular_speed_rad_s'] = args.pico_angular_speed
     mouse, mouse_controller = None, None
     if args.input == 'spacemouse':
-        import sys
-        if sys.platform != 'darwin':
-            raise RuntimeError('SpaceMouse viewer focus handling currently validated only on macOS')
+        if sys.platform.startswith('linux') and not x11_ready:
+            raise RuntimeError('SpaceMouse on Linux needs an X11 session so the knob stops when the MuJoCo '
+                               'window is not focused. Use a desktop with DISPLAY set (XWayland is enough), '
+                               'or pass --input keyboard.')
         from wowskin_lab.teleop.spacemouse import SpaceMouse, SpaceMouseController
         mouse = SpaceMouse()
         mouse_controller = SpaceMouseController(args.spacemouse_speed, args.spacemouse_angular_speed,
@@ -979,8 +974,12 @@ def viewer(args):
     with (mouse or nullcontext()), (pico or nullcontext()), (recorder or nullcontext()), mujoco.viewer.launch_passive(display_model, display_data, key_callback=keyboard.native_callback,
                                     show_left_ui=False, show_right_ui=False) as handle, keyboard, PhysicsWorker(
                                         env, handle, keyboard, display_model, display_data,
-                                        on_abort=getattr(recorder, 'abort', None)) as physics, CameraPreview(display_model, display_data, hud, TaskGuides(env), pointcloud=cloud_options,
-                                            gpu_frames=physics.camera_frame if cfg.get('camera_backend') == 'warp' else None) as previews:
+                                        on_abort=getattr(recorder, 'abort', None)) as physics, CameraPreview(
+                                            display_model, display_data, hud, TaskGuides(env), pointcloud=cloud_options) as previews:
+        if mouse is not None and keyboard.focus_backend is None:
+            detail = f' ({keyboard.focus_error})' if keyboard.focus_error else ''
+            raise RuntimeError('SpaceMouse needs the MuJoCo window focus watch, which did not start'
+                               + detail + '. On Linux that window must be an X11 window.')
         recording_busy, busy_started = False, 0.
         def present(handle):
             if recording_busy:
@@ -1018,16 +1017,23 @@ def viewer(args):
                         keyboard.event(ord('P'), False)
         if mouse:
             env.cfg['spacemouse']['device'] = mouse.info
-            print(f"SpaceMouse: {mouse.info['product_string']} | exclusive HID={mouse.info.get('exclusive_hid', False)} | push/tilt in camera frame | left close, right open | B/Enter/N record | click MuJoCo window to control", flush=True)
+            print(f"SpaceMouse: {mouse.info['product_string']} | {mouse.info.get('backend', 'hid')} | exclusive HID={mouse.info.get('exclusive_hid', False)} | push/tilt in camera frame | left close, right open | B/Enter/N record | click MuJoCo window to control", flush=True)
         def apply_camera():
             cam = task_camera(env, close, operator=bool(pico))
             apply_free_camera(handle, cam)
         apply_camera()
         if pico:
             pico.open_usb()
-        style = None if keyboard.continuous else ViewerStyleGuard(handle, "WASDEQXZCTFRVHIJKLUOMY09,.")
-        print("Keyboard: window-local press/release; native shortcuts consumed" if keyboard.continuous
-              else "Keyboard: non-macOS single-step fallback (no held-key support)", flush=True)
+        # AppKit consumes keys. X11 and the single-step path do not, so put MuJoCo's vis toggles back.
+        style = None if keyboard.focus_backend == 'appkit' else ViewerStyleGuard(handle, "WASDEQXZCTFRVHIJKLUOMY09,.")
+        if keyboard.focus_backend == 'appkit':
+            print("Keyboard: window-local press/release; native shortcuts consumed", flush=True)
+        elif keyboard.focus_backend == 'x11':
+            print("Keyboard: held keys while the MuJoCo window is focused; MuJoCo still receives those keys", flush=True)
+        else:
+            print("Keyboard: single-step fallback (no held-key support)", flush=True)
+            if keyboard.focus_error:
+                print(f"Keyboard focus watch: {keyboard.focus_error}", flush=True)
         print('Point cloud: M two/three/off | Y view | 0 RGB/source color | 9 zoom; preview only, no temporal accumulation', flush=True)
         while handle.is_running() and time.monotonic() < deadline:
             start = time.monotonic()

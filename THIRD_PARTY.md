@@ -18,8 +18,6 @@
 
 ## 已包含的素材与代码
 
-- GPU 工具可选依赖：[NVIDIA Warp](https://github.com/NVIDIA/warp) 1.18.0 与 [MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp) 3.15.0，均为 Apache-2.0。[GPU 运行工具](docs/GPU_COLLECTION_ZH.md)使用原生 MuJoCo 模型及 CUDA Graph；flex 临时缓冲适配沿用上游 `passive.flex_stretch_mul` 的 gather／Hessian／scatter 内核调用。没有 MPM、BladeMaster 或切割历史代码进入当前物理后端。
-- 绳子 GPU 弹性力适配：`wowskin_lab/core/gpu/cable.py` 根据 [MuJoCo 3.15.0 cable.cc](https://github.com/google-deepmind/mujoco/blob/3.15.0/plugin/elasticity/cable.cc) 翻译成 Warp 内核，保留原弯曲／扭转模型；[来源与修改说明](wowskin_lab/core/gpu/NOTICE)、[Apache-2.0 许可证](wowskin_lab/core/gpu/LICENSE)。这是本地适配，不是上游已支持 body 插件。
 - SERL++ 可选笛卡尔阻抗：[源码与摘要](assets/reference/serl_controller/manifest.json)、[Apache-2.0 许可证](assets/reference/serl_controller/LICENSE)。保留原文件；运行时只适配 MuJoCo `mj_fullM` 调用接口，初始化和输入处理属于本地接入。
 - SERL++ Peg Insert：[来源与逐文件 SHA256](assets/serl_peg/manifest.json)、[上游许可证](assets/serl_peg/LICENSE)。网格、凸分解与源 XML 保持原样；本地场景不复制 grasp weld，使用自己的机器人、抓法、控制与评分。
 - EBiM 线材、卡扣与 Robotiq：[来源 manifest](assets/ebim/manifest.json)、[许可证](assets/ebim/LICENSE)、[NOTICE](assets/ebim/NOTICE)。

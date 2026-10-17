@@ -41,11 +41,9 @@ class RawRobotRecorder:
         self.instruction = episode_instruction(task, instruction)
         self.instruction_source = 'task_template' if instruction is None else 'user_provided'
         self.record_depth, self.depth = record_depth, None
-        if env.cfg.get('camera_backend', 'opengl') == 'warp':
-            from wowskin_lab.core.gpu.cameras import WarpCameras
-            self.renderer = WarpCameras(env)
-        else:
-            self.renderer = mujoco.Renderer(env.model, width=640, height=480)
+        if env.cfg.get('camera_backend', 'opengl') != 'opengl':
+            raise ValueError('Scene cameras use the OpenGL renderer')
+        self.renderer = mujoco.Renderer(env.model, width=640, height=480)
         self.writer, self.h5, self.videos = None, None, {}
         self.progress = ('IDLE', 'B starts recording')
         self.optics, self.optical_writer = None, None
@@ -85,10 +83,6 @@ class RawRobotRecorder:
         require_training_tactile(self.env)
         if self.active:
             raise RuntimeError('Finish the current demonstration first')
-        if self.env.cfg.get('camera_backend') == 'warp':
-            # Prepare ray-tracing buffers and its Graph before the acquisition
-            # timer; reset changes the physics arrays held by the renderer.
-            self.renderer.update_scene(self.env.data, camera=next(iter(self.cameras.values())))
         self.directory.mkdir(parents=True, exist_ok=True)
         ids = [int(m.group(1)) for p in self.directory.iterdir()
                if (m := re.match(r'^(?:capture|demonstration)_(\d+)', p.name))]
@@ -129,8 +123,8 @@ class RawRobotRecorder:
             convention='OpenCV optical +Z, not Euclidean ray range',
             synchronized_with='camera_timestamp and corresponding RGB frame',
             compression='lossless LZF; original float values and validity masks',
-            source='MuJoCo Warp ray tracer' if self.env.cfg.get('camera_backend') == 'warp' else 'MuJoCo OpenGL renderer',
-            noise_model='none', background='zero/no hit' if self.env.cfg.get('camera_backend') == 'warp' else 'OpenGL far plane')
+            source='MuJoCo OpenGL renderer',
+            noise_model='none', background='OpenGL far plane')
         self.metadata['camera_renderer'] = dict(backend=self.env.cfg.get('camera_backend', 'opengl'),
             source_tactile_optics_unchanged=True, pixel_equivalent_across_backends=False)
         if not self.optics:
@@ -286,10 +280,7 @@ class RawRobotRecorder:
         simulated = float(self.env.data.time)-self.capture_sim_start
         self.metadata['acquisition_timing'] = dict(wall_s=wall, simulation_s=simulated,
             realtime_factor=simulated/wall if wall else 0.,
-            scope='Active raw capture including rendering, writing and operator pauses; excludes GPU preparation and LeRobot packing')
-        backend = getattr(self.env, '_gpu_physics', None)
-        if backend is not None:
-            self.metadata['physics_diagnostics'] = dict(backend.last_diagnostics)
+            scope='Active raw capture including rendering, writing and operator pauses; excludes startup and LeRobot packing')
         if hasattr(self.env, 'task_evaluation'):
             self.metadata['task_evaluation'] = self.env.task_evaluation()
             self.metadata['status_source'] = 'operator review; independent from automatic task score'

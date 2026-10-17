@@ -1,7 +1,9 @@
-"""Window-local key down/up input for MuJoCo's macOS passive viewer.
+"""Window-local key down/up input for the MuJoCo passive viewer.
 
-AppKit consumes application shortcuts before GLFW/MuJoCo sees them. No global
-keyboard listener, event injection, or accessibility permission is involved.
+On macOS, AppKit consumes application shortcuts before GLFW/MuJoCo sees them.
+On Linux, an X11 connection reads focus and the keymap; MuJoCo still receives
+the same key events, and ViewerStyleGuard puts visualization toggles back.
+No global keyboard listener, event injection, or accessibility permission is involved.
 """
 from collections import deque
 from dataclasses import dataclass
@@ -82,20 +84,29 @@ class KeyState:
 class ViewerKeyboard(KeyState):
     """Use as a context inside launch_passive, while the UI loop is alive.
 
-    On non-macOS the existing native callback remains a single-step fallback.
-    This fallback does not claim to provide held keys or consume native events.
+    Construct this before launch_passive. On Linux that is what calls
+    XInitThreads before GLFW opens its display. Without X11, the native
+    callback stays a single-step fallback: no held keys and no claim that
+    native shortcuts were consumed.
     """
     def __init__(self, reserved, title_contains):
         super().__init__(reserved)
         self.title_contains = title_contains
         self.continuous = sys.platform == 'darwin'
+        self.focus_backend = None
+        self.focus_error = None
         self._active = False
         self.focused = False
         self._monitor = None
         self._observers = []
         self._captured = {}
+        self._x11 = None
+        self._polled = set()
         self.click_regions = ()
         self._mouse_captured = False
+        if sys.platform.startswith('linux'):
+            from wowskin_lab.ui.x11_input import prepare_x11_threads
+            prepare_x11_threads()
 
     def click(self, x, y):
         """Normalized content coordinates, origin bottom left; queue only."""
@@ -110,6 +121,38 @@ class ViewerKeyboard(KeyState):
         if not self.continuous:
             self.event(code, True)
             self.event(code, False)
+
+    def poll(self):
+        """Read X11 focus and key edges. No effect until the Linux watcher exists."""
+        if self._x11 is None:
+            return
+        focused, pressed = self._x11.state()
+        pressed = {key for key in pressed if key in self.reserved}
+        if not focused:
+            if self.focused or self._polled:
+                self.focused = False
+                self._polled.clear()
+                self.clear()
+            return
+        gained = not self.focused
+        self.focused = True
+        if gained:
+            # A key already down in another window is not a new command.
+            self._polled = set(pressed)
+            return
+        for key in pressed - self._polled:
+            self.event(key, True)
+        for key in self._polled - pressed:
+            self.event(key, False)
+        self._polled = set(pressed)
+
+    def peek(self):
+        self.poll()
+        return super().peek()
+
+    def sample(self):
+        self.poll()
+        return super().sample()
 
     def _ui_call(self, function):
         from Foundation import NSThread
@@ -131,8 +174,23 @@ class ViewerKeyboard(KeyState):
             raise failures[0]
 
     def __enter__(self):
-        if self.continuous:
+        if sys.platform == 'darwin':
             self._ui_call(self._install)
+            self.focus_backend = 'appkit'
+            return self
+        if sys.platform.startswith('linux'):
+            from wowskin_lab.ui.x11_input import X11WindowInput, x11_is_ready
+            if x11_is_ready():
+                # Drop one-shot GLFW duplicates before the keymap watcher exists.
+                self.continuous = True
+                try:
+                    self._x11 = X11WindowInput(self.title_contains, self.reserved)
+                except Exception as exc:
+                    self._x11 = None
+                    self.continuous = False
+                    self.focus_error = exc
+                else:
+                    self.focus_backend = 'x11'
         return self
 
     def _install(self):
@@ -213,9 +271,13 @@ class ViewerKeyboard(KeyState):
     def __exit__(self, *exc):
         self._active = False
         self.focused = False
+        self._polled.clear()
         self.clear()
-        if self.continuous and self._monitor is not None:
+        if self._monitor is not None:
             self._ui_call(self._remove)
+        if self._x11 is not None:
+            self._x11.close()
+            self._x11 = None
 
     def _remove(self):
         import AppKit as A

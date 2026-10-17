@@ -10,7 +10,6 @@ if sys.version_info[:2] != (3, 12):
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--venv', type=Path, default=ROOT/'.venv',
                     help='Environment directory; override for an isolated installation check')
-parser.add_argument('--gpu', action='store_true', help='Also install pinned NVIDIA MuJoCo Warp dependencies')
 args = parser.parse_args()
 target = args.venv.resolve()
 python = target/'bin/python'
@@ -18,8 +17,6 @@ if not python.exists():
     subprocess.run([sys.executable, '-m', 'venv', str(target)], check=True)
 subprocess.run([str(python), '-m', 'pip', 'install', '-r', str(ROOT/'requirements.txt')], check=True)
 subprocess.run([str(python), '-m', 'pip', 'install', '--no-deps', '-e', str(ROOT), 'lerobot==0.3.3'], check=True)
-if args.gpu:
-    subprocess.run([str(python), '-m', 'pip', 'install', '-r', str(ROOT/'requirements/gpu.txt')], check=True)
 subprocess.run([str(python), '-c',
     'import mujoco; from wowskin_lab.data.lerobot_recording import upstream; upstream(); assert mujoco.__version__ == "3.15.0"; print("Ready: simulation + RGB-D + LeRobot v2.1 + ViSk training")'],
     cwd=ROOT, check=True)

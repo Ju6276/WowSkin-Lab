@@ -12,7 +12,7 @@ from wowskin_lab.ui.pointcloud import OnlinePointCloud
 
 
 class CameraPreview:
-    def __init__(self, model, data, hud, guides=None, *, pointcloud=None, gpu_frames=None):
+    def __init__(self, model, data, hud, guides=None, *, pointcloud=None):
         self.model, self.data, self.hud = model, data, hud
         self.renderer = None
         self.row = None
@@ -20,12 +20,10 @@ class CameraPreview:
         self.guides = guides
         self.cloud = OnlinePointCloud(**(pointcloud or {}))
         self.last_time = None
-        self.gpu_frames = gpu_frames
 
     def __enter__(self):
         # Same cameras, aspect ratio and full RGB size used by acquisition.
-        if self.gpu_frames is None:
-            self.renderer = mujoco.Renderer(self.model, width=640, height=480)
+        self.renderer = mujoco.Renderer(self.model, width=640, height=480)
         try:
             if hasattr(self.hud, "bind"):
                 self.hud.bind(self.model, self.data)
@@ -55,10 +53,7 @@ class CameraPreview:
             self.row = row
         if self.row is None or not handle.is_running() or time.monotonic() < self.next_frame:
             return
-        frame = self.gpu_frames() if self.gpu_frames is not None else None
-        if self.gpu_frames is not None and frame is None:
-            return
-        data = self.data if frame is None else frame[0]
+        data = self.data
         if self.last_time is not None and self.data.time < self.last_time:
             self.cloud.clear()
         self.last_time = float(self.data.time)
@@ -77,23 +72,17 @@ class CameraPreview:
             if mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, camera) < 0:
                 continue
             label = 'WRIST' if key == 'pixels52' else f'CAM {key.removeprefix("pixels")}'
-            if frame is None:
-                self.renderer.update_scene(self.data, camera=camera, scene_option=capture_options())
-                rgb = self.renderer.render().copy()
-            else:
-                rgb = frame[1][key]
+            self.renderer.update_scene(self.data, camera=camera, scene_option=capture_options())
+            rgb = self.renderer.render().copy()
             frames.append((f'{label} | {camera} | t={data.time:.2f}s', rgb))
             if capture_cloud and (self.cloud.mode == 3 or key != 'pixels52'):
                 # Same detached snapshot and same scene as RGB. Never step or
                 # insert operator guides between modalities or camera views.
-                if frame is None:
-                    self.renderer.enable_depth_rendering()
-                    try:
-                        depth = self.renderer.render().copy()
-                    finally:
-                        self.renderer.disable_depth_rendering()
-                else:
-                    depth = frame[2][key]
+                self.renderer.enable_depth_rendering()
+                try:
+                    depth = self.renderer.render().copy()
+                finally:
+                    self.renderer.disable_depth_rendering()
                 cid = self.model.camera(camera).id
                 focal = 240/np.tan(np.deg2rad(self.model.cam_fovy[cid])/2)
                 intrinsic = np.array([[focal,0,319.5],[0,focal,239.5],[0,0,1]])

@@ -3,6 +3,7 @@ import argparse
 from contextlib import nullcontext
 import json
 from pathlib import Path
+import sys
 import time
 
 import numpy as np
@@ -161,6 +162,11 @@ def viewer(env, optics, input_kind, *, depth_max_mm=None):
     from wowskin_lab.teleop.spacemouse import SpaceMouse, SpaceMouseController
     panda = isinstance(env, OpticalPandaEnv)
     keys = ViewerKeyboard(set(MOTION_KEYS) | {ord(x) for x in 'XZCRPM'} | {ESC, BACKSPACE}, 'MuJoCo')
+    if input_kind == 'spacemouse' and sys.platform.startswith('linux'):
+        from wowskin_lab.ui.x11_input import x11_is_ready
+        if not x11_is_ready():
+            raise RuntimeError('SpaceMouse on Linux needs an X11 session so the knob stops when the MuJoCo '
+                               'window is not focused. Use a desktop with DISPLAY set, or --input keyboard.')
     mouse_context = SpaceMouse() if input_kind == 'spacemouse' else nullcontext(None)
     with mujoco.viewer.launch_passive(env.model, env.data, key_callback=keys.native_callback,
                                      show_left_ui=False, show_right_ui=False) as handle:
@@ -184,6 +190,9 @@ def viewer(env, optics, input_kind, *, depth_max_mm=None):
             cam.lookat[:] += .55*halfwidth*right
         apply_free_camera(handle, cam)
         with keys, mouse_context as mouse:
+            if mouse is not None and keys.focus_backend is None:
+                detail = f' ({keys.focus_error})' if keys.focus_error else ''
+                raise RuntimeError('SpaceMouse needs the MuJoCo window focus watch, which did not start' + detail)
             control = SpaceMouseController()
             style = ViewerStyleGuard(handle, 'wasdeqikljuoxzcrpm')
             moving, next_image, show_mask = False, 0., False

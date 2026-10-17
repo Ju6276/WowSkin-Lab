@@ -220,10 +220,6 @@ class FrankaTactileSim(TactileSim):
         d.xfrc_applied[self.probe_body, :3] = rotation @ force-cfg["probe_mass_kg"]*m.opt.gravity
 
     def tactile_quality(self):
-        gpu = getattr(self, '_gpu_physics', None)
-        if gpu is not None and gpu.observations.values is not None:
-            left, right = gpu.observations.quality_values
-            return dict(min_volume_ratio=float(left), passive_min_volume_ratio=float(right))
         quality = super().tactile_quality()
         passive = self.passive_vertices_local()
         vertices = passive[self.passive_tets]
@@ -404,7 +400,7 @@ def viewer(args):
                                     show_left_ui=False, show_right_ui=False) as handle, keyboard:
         cam = camera(sim)
         apply_free_camera(handle, cam)
-        style = None if keyboard.continuous else ViewerStyleGuard(handle, "PSLBVADQ,.")
+        style = None if keyboard.focus_backend == 'appkit' else ViewerStyleGuard(handle, "PSLBVADQ,.")
         was_moving = False
         index = 0
         while handle.is_running() and time.monotonic() < deadline:

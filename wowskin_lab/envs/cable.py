@@ -213,9 +213,6 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         return np.stack((centres-axis*half[:,None], centres+axis*half[:,None]), axis=1)
 
     def evaluate_clip(self):
-        gpu = getattr(self, '_gpu_physics', None)
-        if gpu is not None:
-            return gpu.scoring.update()
         ends = self.cable_segments()
         clip = self.model.body('cclip_0').id
         local = (ends-self.data.xpos[clip])@self.data.xmat[clip].reshape(3,3)
@@ -250,10 +247,7 @@ class PandaCableEnv(PandaPickCubeTactileEnv):
         row.update(self.evaluate_clip())
         row['success'] = self.success = self.clip_score.success
         if hasattr(self, 'routing_score'):
-            if getattr(self, '_gpu_physics', None) is not None:
-                row.update(self.routing_score.metrics)
-            else:
-                row.update(self.routing_score.update(float(self.data.time), self.cable_segments()))
+            row.update(self.routing_score.update(float(self.data.time), self.cable_segments()))
             row['success'] = self.success = self.routing_score.success
             row['cable_end_anchor_error_m'] = float(np.linalg.norm(row['cable_end_m']-
                 self.cfg['cable_routing']['endpoint_world_m'][1]))
@@ -308,7 +302,7 @@ def viewer(env, args):
         with mujoco.viewer.launch_passive(env.model, env.data, key_callback=keyboard.native_callback,
                                           show_left_ui=False, show_right_ui=False) as handle, keyboard:
             apply_free_camera(handle, camera())
-            guard = None if keyboard.continuous else ViewerStyleGuard(handle, 'WASDEQXZCRVTIJKLUO,.')
+            guard = None if keyboard.focus_backend == 'appkit' else ViewerStyleGuard(handle, 'WASDEQXZCRVTIJKLUO,.')
             next_hud = 0.
             while handle.is_running() and (not args.seconds or time.monotonic()-start < args.seconds):
                 tick = time.monotonic()

@@ -173,13 +173,6 @@ class TactileSim:
         return (vertices-self.data.xpos[self.mount_body]) @ rotation
 
     def magnetic_field(self):
-        gpu = getattr(self, '_gpu_physics', None)
-        if gpu is not None and gpu.observations.values is not None:
-            ratios = gpu.observations.quality_values
-            self.min_volume_ratio = float(ratios[0])
-            if not np.isfinite(ratios).all() or np.any(ratios <= 0):
-                raise RuntimeError(f'Magnetic silicone FEM invalid: min V/V0={ratios} at t={self.data.time:.3f}s')
-            return gpu.observations.values.copy()
         v = self.skin_vertices_local()[self.tets]
         ds = np.stack([v[:, k] - v[:, 0] for k in (1, 2, 3)], axis=-1)
         deformation = ds @ self.dm_inverse
@@ -311,9 +304,6 @@ class TactileSim:
         so elastic sticking is not labelled as slip just because the arm moves.
         """
         flex_id = self.skin_flex if flex_id is None else flex_id
-        gpu = getattr(self, '_gpu_physics', None)
-        if gpu is not None and gpu.observations.values is not None:
-            return gpu.observations.skin_contact_state(flex_id)
         d, m = self.data, self.model
         selected = flex_vertex_slice(m, flex_id)
         positions = d.flexvert_xpos[selected]

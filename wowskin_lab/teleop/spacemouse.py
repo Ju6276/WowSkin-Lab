@@ -4,9 +4,14 @@ HID protocol: 3Dconnexion report 1 = six signed little-endian axes (or XYZ),
 report 2 = rotation on older devices; report 3 = button bits. Status/battery
 reports do not refresh motion. Axis convention follows robosuite's device
 decoder, with our camera-plane transform applied separately.
+
+Linux may read the same raw axes from spacenavd (libspnav protocol 1) when the
+daemon has grabbed hidraw. Those events are turned back into HID reports so
+scaling, signs and buttons stay on one path. Full scale remains 350.
 """
 from collections import deque
 from dataclasses import dataclass
+import ctypes
 import threading
 import time
 
@@ -17,6 +22,96 @@ import numpy as np
 # downward-facing tool must pitch away from the operator, so use +Rx here.
 # This is the user's control convention, not a robot or sensor calibration.
 HID_AXIS_SIGNS = np.array([1., -1., -1., 1., -1., 1.])
+_SPACEMOUSE_VENDORS = (0x256f, 0x046d)
+# libspnav v1: RAWAXIS=5, RAWBUTTON=6, DEV=3, DEV_RM=1.
+# Mask 0x34 is DEV | RAWAXIS | RAWBUTTON, skipping the daemon's axis map.
+_SPNAV_RAW_AXIS = 5
+_SPNAV_RAW_BUTTON = 6
+_SPNAV_DEVICE = 3
+_SPNAV_DEVICE_REMOVE = 1
+_SPNAV_RAW_MASK = 0x34
+
+
+def apply_spacenav_event(kind, a, b, raw, buttons):
+    """Apply one libspnav event. ``raw`` is six little-endian int16 device units.
+
+    The first three ints of ``spnav_event`` are (type, a, b): for a raw axis,
+    index and value; for a raw button, press and button number; for a device
+    event, operation and id. Non-raw motion is ignored so a transformed daemon
+    event cannot fight the raw value. Returns (buttons, removed, button_changed).
+    """
+    kind, a, b = int(kind), int(a), int(b)
+    buttons = int(buttons)
+    if kind == _SPNAV_RAW_AXIS and 0 <= a < 6:
+        raw[a] = max(-32768, min(32767, b))
+        return buttons, False, False
+    if kind == _SPNAV_RAW_BUTTON and b in (0, 1):
+        bit = 1 << b
+        buttons = (buttons | bit) if a else (buttons & ~bit)
+        return buttons & 3, False, True
+    if kind == _SPNAV_DEVICE and a == _SPNAV_DEVICE_REMOVE:
+        return buttons, True, False
+    return buttons, False, False
+
+
+def spacenav_reports(events, raw, buttons):
+    """Fold raw libspnav events into the HID reports MouseState already decodes.
+
+    Absolute axes are reported only when they change, so the caller also invokes
+    this with an empty event list to keep a held deflection inside the 0.25 s
+    freshness window. A device-remove event raises ConnectionError.
+    """
+    reports = []
+    for kind, a, b in events:
+        buttons, removed, changed = apply_spacenav_event(kind, a, b, raw, buttons)
+        if removed:
+            raise ConnectionError('SpaceMouse removed')
+        if changed:
+            reports.append(bytes((3, buttons & 0xFF)))
+    reports.append(bytes((1,)) + np.asarray(raw, dtype='<i2').tobytes())
+    return buttons, reports
+
+
+def _load_spnav():
+    try:
+        lib = ctypes.CDLL('libspnav.so.0')
+    except OSError:
+        return None
+    signatures = {
+        'spnav_open': [],
+        'spnav_close': [],
+        'spnav_fd': [],
+        'spnav_protocol': [],
+        'spnav_evmask': [ctypes.c_uint],
+        'spnav_dev_usbid': [ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint)],
+        'spnav_dev_name': [ctypes.c_char_p, ctypes.c_int],
+        'spnav_poll_event': [ctypes.c_void_p],
+    }
+    for name, args in signatures.items():
+        fn = getattr(lib, name, None)
+        if fn is None:
+            return None
+        fn.argtypes = args
+        fn.restype = ctypes.c_int
+    return lib
+
+
+def _spnav_peer_closed(fd):
+    """True when the spacenavd socket is readable because the peer hung up.
+
+    MSG_PEEK | MSG_DONTWAIT does not consume bytes libspnav still has to read.
+    """
+    libc = ctypes.CDLL(None, use_errno=True)
+    recv = libc.recv
+    recv.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
+    recv.restype = ctypes.c_ssize_t
+    buf = ctypes.create_string_buffer(1)
+    n = recv(fd, buf, 1, 0x02 | 0x40)  # MSG_PEEK | MSG_DONTWAIT on Linux
+    if n == 0:
+        return True
+    if n > 0:
+        return False
+    return ctypes.get_errno() not in (4, 11, 35)  # EINTR / EAGAIN / EWOULDBLOCK
 
 
 @dataclass(frozen=True)
@@ -70,30 +165,52 @@ class MouseState:
 
 
 class SpaceMouse:
-    """Single HID reader; retains only the most recent axes, not a motion queue."""
+    """Single reader; retains only the most recent axes, not a motion queue.
+
+    macOS opens the HID interface and seizes it so the knob does not move the
+    desktop pointer. Linux prefers spacenavd when that daemon is running,
+    because it usually owns hidraw; otherwise it uses the same HID reports.
+    """
     def __init__(self):
         self.state = MouseState()
         self.stop = threading.Event()
         self.thread = None
         self.device = None
         self.info = None
+        self._spnav_fd = -1
 
     def __enter__(self):
+        import sys
+        linux = sys.platform.startswith('linux')
+        if linux and self._open_spacenavd():
+            return self
         import hid
         # Multi-axis controller usage excludes duplicate vendor interfaces.
         devices = {d['path']: d for d in hid.enumerate()
-                   if d['vendor_id'] in (0x256f, 0x046d)
+                   if d['vendor_id'] in _SPACEMOUSE_VENDORS
                    and 'spacemouse' in (d.get('product_string') or '').lower()
                    and d.get('usage_page') == 1 and d.get('usage') == 8}
-        if len(devices) != 1:
-            raise RuntimeError(f'Expected one USB SpaceMouse, found {len(devices)}. Connect its USB data cable.')
-        path, description = next(iter(devices.items()))
+        if len(devices) == 1:
+            path, description = next(iter(devices.items()))
+            try:
+                self._open_hid(hid, path, description)
+            except Exception:
+                self._release_open_device()
+                raise
+            return self
+        extra = ''
+        if linux:
+            extra = (' On Linux, start spacenavd when it owns the device (libspnav.so.0, '
+                     '/var/run/spnav.sock), or allow this user to open hidraw.')
+        raise RuntimeError(f'Expected one USB SpaceMouse, found {len(devices)}. Connect its USB data cable.{extra}')
+
+    def _open_hid(self, hid, path, description):
+        import sys
         self.info = {k: description.get(k) for k in ('product_string', 'vendor_id', 'product_id')}
+        self.info['backend'] = 'hid'
         # macOS otherwise may route the same relative-axis reports to the
         # desktop pointer. Explicitly seize only this SpaceMouse while open.
-        import sys
         if sys.platform == 'darwin':
-            import ctypes
             backend = ctypes.CDLL(hid.__file__)
             exclusive = backend.hid_darwin_set_open_exclusive
             exclusive.argtypes = [ctypes.c_int]
@@ -104,7 +221,6 @@ class SpaceMouse:
         self.device.open_path(path)
         self.thread = threading.Thread(target=self._read, name='SpaceMouse-HID', daemon=True)
         self.thread.start()
-        return self
 
     def _read(self):
         try:
@@ -115,12 +231,87 @@ class SpaceMouse:
             with self.state.lock:
                 self.state.error = f'SpaceMouse disconnected: {exc}'
 
+    def _open_spacenavd(self):
+        """Use spacenavd raw events when the daemon socket is actually open."""
+        lib = _load_spnav()
+        if lib is None or lib.spnav_open() == -1:
+            return False
+        opened = False
+        try:
+            if lib.spnav_protocol() < 1 or lib.spnav_evmask(_SPNAV_RAW_MASK) == -1:
+                return False
+            vendor, product = ctypes.c_uint(), ctypes.c_uint()
+            if lib.spnav_dev_usbid(ctypes.byref(vendor), ctypes.byref(product)) == -1:
+                return False
+            if vendor.value not in _SPACEMOUSE_VENDORS:
+                raise RuntimeError(f'spacenavd device vendor 0x{vendor.value:04x} is not a SpaceMouse')
+            name = ctypes.create_string_buffer(256)
+            label = 'SpaceMouse'
+            if lib.spnav_dev_name(name, len(name)) != -1 and name.value:
+                label = name.value.decode(errors='replace')
+            fd = lib.spnav_fd()
+            if fd < 0:
+                return False
+            self.device = lib
+            self._spnav_fd = fd
+            self.info = dict(product_string=label, vendor_id=int(vendor.value), product_id=int(product.value),
+                             backend='spacenavd')
+            self.thread = threading.Thread(target=self._read_spacenavd, name='SpaceMouse-spnav', daemon=True)
+            self.thread.start()
+            opened = True
+            return True
+        finally:
+            if not opened:
+                self.device = None
+                self.thread = None
+                self.info = None
+                self._spnav_fd = -1
+                lib.spnav_close()
+
+    def _read_spacenavd(self):
+        import select
+        lib = self.device
+        event = (ctypes.c_int * 64)()
+        raw, buttons = np.zeros(6, dtype='<i2'), 0
+        fd = self._spnav_fd
+        try:
+            while not self.stop.is_set():
+                try:
+                    ready, _, _ = select.select([fd], [], [], 0.05)
+                except InterruptedError:
+                    continue
+                if ready and _spnav_peer_closed(fd):
+                    raise ConnectionError('spacenavd closed the connection')
+                events = []
+                for _ in range(64):
+                    kind = lib.spnav_poll_event(ctypes.addressof(event))
+                    if not kind:
+                        break
+                    events.append((int(kind), int(event[1]), int(event[2])))
+                buttons, reports = spacenav_reports(events, raw, buttons)
+                for report in reports:
+                    self.state.feed(report)
+        except Exception as exc:
+            with self.state.lock:
+                self.state.error = f'SpaceMouse disconnected: {exc}'
+
+    def _release_open_device(self):
+        device, info = self.device, self.info
+        self.device = None
+        self.info = None
+        self._spnav_fd = -1
+        if device is None:
+            return
+        if (info or {}).get('backend') == 'spacenavd':
+            device.spnav_close()
+        else:
+            device.close()
+
     def __exit__(self, *exc):
         self.stop.set()
         if self.thread:
             self.thread.join(timeout=1.)
-        if self.device:
-            self.device.close()
+        self._release_open_device()
 
 
 class SpaceMouseController:

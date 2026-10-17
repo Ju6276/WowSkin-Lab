@@ -38,8 +38,8 @@ def contact_forces(model, data, gel):
     gels = set(np.atleast_1d(gel).tolist())
     forces, force = {}, np.zeros(6)
     for index, contact in enumerate(data.contact):
-        # Warp readback updates geom, not MuJoCo's deprecated geom1/geom2
-        # storage. They are separate fields, so the legacy values can be stale.
+        # geom is the current contact pair. Deprecated geom1/geom2 are separate
+        # fields and can be stale.
         first, second = map(int, contact.geom)
         if not gels.intersection((first, second)):
             continue

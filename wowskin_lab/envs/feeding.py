@@ -428,7 +428,7 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         try:
             return super().sample(controller)
         except RuntimeError as error:
-            if not any(message in str(error) for message in ('MuJoCo instability/warning', 'MuJoCo Warp physics fault', 'FEM invalid', 'Silicone mesh inverted/nonfinite')):
+            if not any(message in str(error) for message in ('MuJoCo instability/warning', 'FEM invalid', 'Silicone mesh inverted/nonfinite')):
                 raise
             # Restore the sample boundary before propagating the failure.
             # Discard failed force peaks, filtering and random draws;
@@ -508,9 +508,6 @@ class PandaFeedingEnv(PandaPickCubeTactileEnv):
         return self.observation(), float(self.success), False, False, row
 
     def evaluate_delivery(self, row):
-        gpu = getattr(self, '_gpu_physics', None)
-        if gpu is not None:
-            return gpu.scoring.update()
         head = self.model.body('configurable_visual_head').id
         rotation = self.data.xmat[self.probe_body].reshape(3, 3)
         point = self.data.xpos[self.probe_body]+rotation@np.asarray(self.delivery.config['bowl_center_spoon_m'])

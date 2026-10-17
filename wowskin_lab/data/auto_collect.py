@@ -20,9 +20,7 @@ from wowskin_lab.envs.pick_cube import PandaPickCubeTactileEnv, response_configu
 def collect(output, episodes=2, seed=0, randomize=False, *, magnetic_fit=None,
             reskin_model=None, reskin_extrapolate=False, ideal=False,
             record_format='lerobot', instruction=None, record_depth=True, sensor_backend=None,
-            task='pick_cube', cable_layout=None, clip_model='rigid',
-            physics_backend='cpu', camera_backend='opengl', gpu_disable_multiccd=False, gpu_disable_nativeccd=False,
-            gpu_disable_noslip=False, gpu_solver_iterations=None, gpu_solver_tolerance=None):
+            task='pick_cube', cable_layout=None, clip_model='rigid'):
     output = Path(output).resolve()
     if output.exists():
         raise FileExistsError(f'Choose a new collection directory: {output}')
@@ -44,20 +42,14 @@ def collect(output, episodes=2, seed=0, randomize=False, *, magnetic_fit=None,
         from .scripted_tasks import collect_task
         return collect_task(output, episodes, seed, task=task, cable_layout=cable_layout,
             sensor_backend=sensor_backend, ideal=ideal, record_format=record_format,
-            instruction=instruction, record_depth=record_depth, clip_model=clip_model,
-            physics_backend=physics_backend, camera_backend=camera_backend, gpu_disable_multiccd=gpu_disable_multiccd,
-            gpu_disable_nativeccd=gpu_disable_nativeccd, gpu_disable_noslip=gpu_disable_noslip,
-            gpu_solver_iterations=gpu_solver_iterations, gpu_solver_tolerance=gpu_solver_tolerance)
+            instruction=instruction, record_depth=record_depth, clip_model=clip_model)
     if cable_layout is not None:
         raise ValueError('--cable-layout requires --task cable')
     cfg = response_configuration(SimpleNamespace(task='pick_cube', seed=seed,
         ideal=ideal, sensor_backend=sensor_backend,
         magnetic_fit=Path(magnetic_fit) if magnetic_fit else None,
         reskin_model=Path(reskin_model) if reskin_model else None,
-        reskin_extrapolate=reskin_extrapolate, physics_backend=physics_backend, camera_backend=camera_backend,
-        gpu_disable_multiccd=gpu_disable_multiccd,
-        gpu_disable_nativeccd=gpu_disable_nativeccd, gpu_disable_noslip=gpu_disable_noslip,
-        gpu_solver_iterations=gpu_solver_iterations, gpu_solver_tolerance=gpu_solver_tolerance))
+        reskin_extrapolate=reskin_extrapolate))
     cfg['randomize_cube'] = bool(randomize)
     env = PandaPickCubeTactileEnv(cfg, pollen=False)
     # Validate the first observation before creating output files or cameras.
@@ -164,10 +156,7 @@ def main(argv=None):
         reskin_extrapolate=args.reskin_extrapolate, ideal=args.ideal,
         record_format=args.record_format, instruction=args.instruction, record_depth=args.record_depth,
         sensor_backend=args.sensor_backend, task=args.task, cable_layout=args.cable_layout,
-        clip_model=args.clip_model, physics_backend=args.physics_backend, camera_backend=args.camera_backend,
-        gpu_disable_multiccd=args.gpu_disable_multiccd, gpu_disable_nativeccd=args.gpu_disable_nativeccd,
-        gpu_disable_noslip=args.gpu_disable_noslip, gpu_solver_iterations=args.gpu_solver_iterations,
-        gpu_solver_tolerance=args.gpu_solver_tolerance)
+        clip_model=args.clip_model)
     print(json.dumps(result, indent=2))
     if result['successes'] == 0:
         raise SystemExit('No successful trajectories; failure recordings were preserved and excluded')

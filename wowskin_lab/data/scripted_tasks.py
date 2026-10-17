@@ -152,9 +152,7 @@ class ElasticSingleClipController(SingleClipController):
 
 
 def collect_task(output, episodes, seed, *, task, cable_layout, sensor_backend,
-                 ideal, record_format, instruction, record_depth, clip_model='rigid',
-                 physics_backend='cpu', camera_backend='opengl', gpu_disable_multiccd=False, gpu_disable_nativeccd=False,
-                 gpu_disable_noslip=False, gpu_solver_iterations=None, gpu_solver_tolerance=None):
+                 ideal, record_format, instruction, record_depth, clip_model='rigid'):
     if clip_model not in ('rigid', 'elastic_beam'):
         raise ValueError('Unknown clip model')
     if clip_model != 'rigid' and task != 'cable':
@@ -174,10 +172,7 @@ def collect_task(output, episodes, seed, *, task, cable_layout, sensor_backend,
     if record_format not in ('dataset', 'lerobot'):
         raise ValueError(record_format)
     cfg = response_configuration(SimpleNamespace(task=task, cable_layout=cable_layout,
-        sensor_backend=sensor_backend, ideal=ideal, seed=seed, clip_model=clip_model,
-        physics_backend=physics_backend, camera_backend=camera_backend, gpu_disable_multiccd=gpu_disable_multiccd,
-        gpu_disable_nativeccd=gpu_disable_nativeccd, gpu_disable_noslip=gpu_disable_noslip,
-        gpu_solver_iterations=gpu_solver_iterations, gpu_solver_tolerance=gpu_solver_tolerance))
+        sensor_backend=sensor_backend, ideal=ideal, seed=seed, clip_model=clip_model))
     if task == 'cable':
         cfg['clip_model'] = clip_model
     env = Environment(cfg, pollen=False)

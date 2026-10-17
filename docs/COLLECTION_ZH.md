@@ -1,6 +1,6 @@
 # 遥操作与数据采集
 
-所有启动命令见 [README](../README.md)。在项目根目录运行，每次只启动一个遥操作窗口。图形入口使用 `.venv/bin/mjpython`。
+所有启动命令见 [README](../README.md)。在项目根目录运行，每次只启动一个遥操作窗口。macOS 图形入口使用 `.venv/bin/mjpython`；Linux 桌面使用 `.venv/bin/python`，见 README 的 Linux 桌面一节。
 
 ## 场景选择
 
@@ -81,6 +81,8 @@ raw 额外保存 `gripper_force_feedback/` 中的力目标、启用状态、双�
 ## SpaceMouse USB 遥操作
 
 使用 `--input spacemouse`。旋钮前后映射为基座 ±X、向左映射为基座 −Y、向右映射为基座 +Y、提起为基座 +Z，倾斜/扭转控制三维旋转。普通任务左键夹紧、右键张开、双键保持开度；薯片见上节。旋钮回中停止，失去窗口焦点停止输入。
+
+Linux 同样使用 `--input spacemouse`，启动命令换成 `.venv/bin/python`。窗口是否在前面由 X11 判断，不在前面时旋钮不会带动机械臂。系统若在运行 spacenavd，程序读它的原始轴。
 
 macOS 下此模式会独占打开 SpaceMouse，终端应显示 `exclusive HID=True`。若误用 `--input keyboard`，程序不会读取/独占 SpaceMouse，旋钮可能仍移动系统鼠标；请退出并按 README 的 SpaceMouse 命令启动，不需要关闭普通鼠标。
 
@@ -214,6 +216,6 @@ H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机
 
 三路相机布局可用 `.venv/bin/python scripts/preview_cameras.py --help` 查看；原两路与四路参考布局保存在 `configs/cameras.json`，不会自动改动当前采集配置。切换配置必须用新数据目录。
 
-## NVIDIA GPU 后端
+## 物理后端
 
-Mac 继续默认 CPU；Linux NVIDIA 使用同一仓库和采集入口，显式加 `--physics-backend warp`。安装、接触兼容选项、原绳子弹性迁移与验收范围见 [GPU 采集说明](GPU_COLLECTION_ZH.md)。不同后端与求解配置分别保存数据。
+Mac 和 Linux 采集都使用 CPU MuJoCo。单环境 CUDA 路径比同机 CPU 更慢，已从采集入口移除；4060 上的耗时对照留在 [验收记录](GPU_VALIDATION_ZH.md)。实时与否取决于任务和是否同时写相机，见该记录，不能把 Mac 上某一条遥操作当成所有任务在 Linux 上的保证。

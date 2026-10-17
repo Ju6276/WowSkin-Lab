@@ -8,7 +8,7 @@ Franka 触觉遥操作、RGB-D 数据采集和 ViSk / FTF 算法接入。基于 
 
 ## 安装
 
-当前安装入口面向 Apple Silicon macOS、Python 3.12（与 `.python-version` 一致）、MuJoCo 3.15，从源码目录运行。`pyproject.toml` 声明最低 Python 3.10；这不表示完整安装流程已在所有声明版本上验证。Linux NVIDIA 的可选 GPU 物理及采集入口见 [GPU 采集说明](docs/GPU_COLLECTION_ZH.md)，兼容设置和已验收范围须单独核对。
+当前安装入口面向 Apple Silicon macOS、Python 3.12（与 `.python-version` 一致）、MuJoCo 3.15，从源码目录运行。`pyproject.toml` 声明最低 Python 3.10；这不表示完整安装流程已在所有声明版本上验证。Linux 桌面遥操作见下一节，用普通 `python`，不用 `mjpython`。采集物理在 Mac 和 Linux 上都走 CPU MuJoCo。
 
 ```bash
 git clone https://github.com/Ju6276/WowSkin-Lab.git
@@ -20,6 +20,20 @@ python3.12 scripts/setup_capture.py
 只使用一个 `.venv`，采集、遥操作、ViSk 训练和部署共用。安装入口是 `scripts/setup_capture.py`，根目录 `requirements.txt` 包含运行与学习依赖；FTF notebook 的 `requirements/annotation.txt` 和下述可选 TACTO 依赖按需加装到同一个环境。LeRobot 仅安装所用数据 API 及依赖，不是其全套机器人运行环境。
 
 `pip check` 会报告 LeRobot 完整包所需但本项目未安装的八项依赖：`diffusers`、`cmake`、`opencv-python-headless`、`pynput`、`torchcodec`、`gymnasium`、`rerun-sdk`、`flask`。当前录制／读取使用 OpenCV 与 PyAV；完整 LeRobot 策略或硬件 API 需要另行补齐依赖。
+
+## Linux 桌面
+
+Mac 的图形窗口用 `mjpython`。Linux 没有这个程序，用同一个虚拟环境里的 `python`。物理和 Mac 上能操作的路径相同，都是 CPU MuJoCo。
+
+```bash
+python3.12 scripts/setup_capture.py
+.venv/bin/python -m wowskin_lab teleop --task pick_cube --input keyboard --ideal
+.venv/bin/python -m wowskin_lab teleop --task pick_cube --input spacemouse --ideal
+```
+
+桌面要有 `DISPLAY`（X11，或开了 XWayland 的 Wayland）。仿真窗口会开在 X11 上。先点一下这个窗口再操作。按住 W/A/S/D 会连续移动；点到别的窗口后，键盘和旋钮都停。
+
+SpaceMouse 在 `spacenavd` 正在运行时读它的原始轴，不用守护进程里的灵敏度或轴向映射，系统需要有 `libspnav.so.0`。没有守护进程时直接读 USB。旋钮先回到中间再推。终端会打印 `hid` 或 `spacenavd`。
 
 ## 启动与录制
 
@@ -192,7 +206,7 @@ wowskin_lab/
 configs/      相机、控制、评分、传感器参数与上游版本
 assets/       原始／派生素材、来源 manifest 与许可证
 scripts/      安装、训练、评估；diagnostics/ 为可选实验
-tests/        unit、physics、gpu、official、artifacts、manual
+tests/        unit、physics、official、artifacts、manual
 docs/         采集、学习、模型参数与论文索引
 data/         本机示范与算法导出，不进 Git
 examples/     示例清单、检查结果、截图与复现说明；大数据包不进 Git
@@ -201,7 +215,7 @@ outputs/      本机权重、标定与诊断输出，不进 Git
 
 默认 AnySkin 采用 MuJoCo 3.15 降阶指腹＋拟合偶极子；光学选项使用各自源模型。`--ideal` 关闭合成触觉噪声、滤波和延迟，不关闭接触力学。控制限制、参数来源与物理失效规则见 [模型说明](docs/MODEL_CALIBRATION_ZH.md)。AnySkin 只支持当前 trilinear 降阶模型；旧完整节点模式及其选择参数已移除，不再需要 MuJoCo 3.5。旧 full 模型记录不能按降阶模型重放。
 
-[MuJoCo GPU / CUDA Graph 后端](docs/GPU_COLLECTION_ZH.md)已接入共用环境、遥操作和自动采集：Mac 默认 CPU，NVIDIA 显式加 `--physics-backend warp`。绳子使用迁移自原插件的 Warp 弹性力，MPM 替换已撤下。GPU 兼容接触选项需显式启用；默认 IK/PD、触觉核心读数和任务评分已在 GPU，CPU 保留初始化、界面与保存。可显式加 `--camera-backend warp` 使用官方 GPU 场景相机；默认 OpenGL 保持原图像。不同渲染器分目录采集，当前不承诺所有任务与 CPU 默认接触结果一致或实时。
+采集使用 CPU MuJoCo。先前接到 CUDA Graph 的单环境路径在 RTX 4060 上比同机 CPU 更慢，也没有达到实时，已经从采集入口移除。当时的测量留在 [4060 对照记录](docs/GPU_VALIDATION_ZH.md)。
 
 ```bash
 # 以下检查包含学习接口，先按学习文档获取固定版 ViSk
@@ -210,6 +224,6 @@ outputs/      本机权重、标定与诊断输出，不进 Git
 .venv/bin/python -m tests all --list
 ```
 
-`unit` 检查坐标、输入和动作契约；`physics` 运行接触场景，AnySkin 物理测试不依赖 ReSkin 网络权重；`gpu` 在 NVIDIA 上对照 GPU 物理、Graph 和采集（具体未通过项见[验收记录](docs/GPU_VALIDATION_ZH.md)）；`official` 检查官方数据与学习接口；`artifacts` 依赖可选数据／权重；`manual` 需要人工操作窗口。Robotiq 强夹持的已知失败保留在物理测试中，不跳过。部分物理检查限定已验证的 MuJoCo 版本，可选模型检查缺少资源时跳过，不能把跳过项算作通过。普通遥操作不保存整场诊断，需要时加 `--diagnostic-log`；可选对照入口见[模型说明](docs/MODEL_CALIBRATION_ZH.md)。
+`unit` 检查坐标、输入和动作契约；`physics` 运行接触场景，AnySkin 物理测试不依赖 ReSkin 网络权重；`official` 检查官方数据与学习接口；`artifacts` 依赖可选数据／权重；`manual` 需要人工操作窗口。Robotiq 强夹持的已知失败保留在物理测试中，不跳过。部分物理检查限定已验证的 MuJoCo 版本，可选模型检查缺少资源时跳过，不能把跳过项算作通过。普通遥操作不保存整场诊断，需要时加 `--diagnostic-log`；可选对照入口见[模型说明](docs/MODEL_CALIBRATION_ZH.md)。
 
 [采集手册](docs/COLLECTION_ZH.md) · [ViSk / FTF](docs/LEARNING_WORKFLOWS_ZH.md) · [模型与参数](docs/MODEL_CALIBRATION_ZH.md) · [论文与算法](docs/PAPERS_ZH.md) · [TODO](TODO.md) · [第三方来源与发布事项](THIRD_PARTY.md)

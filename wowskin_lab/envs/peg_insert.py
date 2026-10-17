@@ -175,9 +175,6 @@ class PandaPegInsertEnv(PandaPickCubeTactileEnv):
         return self.observation(), {'uncalibrated': True}
 
     def evaluate_peg(self):
-        gpu = getattr(self, '_gpu_physics', None)
-        if gpu is not None:
-            return gpu.scoring.update()
         p, h = self.probe_body, self.model.body('hole').id
         return self.peg_score.update(float(self.data.time), self.data.xpos[p],
             self.data.xmat[p].reshape(3,3), self.data.xpos[h], self.data.xmat[h].reshape(3,3))
