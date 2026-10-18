@@ -1,6 +1,7 @@
 """One command menu for acquisition, simulation tools and policy adapters."""
 import argparse
 import importlib
+import os
 import sys
 
 from .paths import ROOT
@@ -26,6 +27,13 @@ COMMANDS = {
     'reskin-inverse': 'Official MagNet architecture: candidate-ordered magnetic input to position/depth',
     'cad': 'Reference CAD viewer/render',
 }
+
+
+def configure_offscreen_gl():
+    """Use EGL when Linux has no display. A set MUJOCO_GL value is left alone."""
+    if sys.platform.startswith('linux') and not os.environ.get('DISPLAY') and not os.environ.get('MUJOCO_GL'):
+        os.environ['MUJOCO_GL'] = 'egl'
+        os.environ.setdefault('PYOPENGL_PLATFORM', 'egl')
 
 
 def main(argv=None):
@@ -80,6 +88,8 @@ def main(argv=None):
         from .learning.gelsight_ddqn import main as gelsight_ddqn
         return gelsight_ddqn(rest)
     if command == 'record-auto':
+        # MuJoCo reads MUJOCO_GL when auto_collect imports it.
+        configure_offscreen_gl()
         from .data.auto_collect import main as collect_auto
         return collect_auto(rest)
     if command == 'official':

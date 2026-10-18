@@ -129,7 +129,7 @@ TACTO／GelSight 完整长组件替换原短指几何；FOTS 独立模块装在�
 
 ## 脚本自动采集
 
-统一入口是 `python -m wowskin_lab record-auto`；参数解析和方块脚本在 [auto_collect.py](wowskin_lab/data/auto_collect.py)，喂食／single clip 控制器在 [scripted_tasks.py](wowskin_lab/data/scripted_tasks.py)。脚本读取仿真物体姿态，通过正常控制接口执行，不是 agent 推理或人工遥操作。
+统一入口是 `python -m wowskin_lab record-auto`；参数解析和方块脚本在 [auto_collect.py](wowskin_lab/data/auto_collect.py)，喂食／single clip 控制器在 [scripted_tasks.py](wowskin_lab/data/scripted_tasks.py)。脚本读取仿真物体姿态，通过正常控制接口执行，不是 agent 推理或人工遥操作。没有 `DISPLAY` 的 Linux 会在加载 MuJoCo 前改用 EGL 离屏渲染；已经设置的 `MUJOCO_GL` 保持不变。
 
 ```bash
 # 喂食：从初始化已夹持、装豆的勺子开始，送至嘴前区域

@@ -192,7 +192,7 @@ H5 的机器人状态和触觉按 100 Hz 仿真时间同步保存，三路相机
 .venv/bin/python -m wowskin_lab record-auto --output data/automated/my_run --episodes 2 --randomize --magnetic-fit configs/magnetic_fit_pollen_nonslip.json --ideal
 ```
 
-使用新目录，并显式选择观察模型；不再自动选择网络并开启外推。网络缺失空载响应时，此入口会在创建数据目录前报错。上面的命令是 AnySkin 方块脚本示教，不代表磁场已标定。
+使用新目录，并显式选择观察模型；不再自动选择网络并开启外推。网络缺失空载响应时，此入口会在创建数据目录前报错。上面的命令是 AnySkin 方块脚本示教，不代表磁场已标定。没有 `DISPLAY` 的 Linux 会在加载 MuJoCo 前改用 EGL 离屏渲染；已经设置的 `MUJOCO_GL` 保持不变。
 
 三种光学后端另支持喂食与单卡扣脚本（将 `tacto` 换成 `digit_fots` 或 `gelsight`）：
 

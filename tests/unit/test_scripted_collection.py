@@ -2,10 +2,12 @@
 from pathlib import Path
 from types import SimpleNamespace
 from tempfile import TemporaryDirectory
+import os
 import unittest
 from unittest.mock import patch
 import numpy as np
 
+from wowskin_lab.__main__ import configure_offscreen_gl
 from wowskin_lab.data.auto_collect import collect, main
 
 
@@ -67,6 +69,21 @@ class ScriptedCollectionTests(unittest.TestCase):
                 self.assertEqual(config['cable_layout'], 'single_clip')
                 self.assertEqual(config['sensor'], 'tacto')
                 self.assertFalse(output.exists())
+
+    def test_headless_linux_collection_uses_egl_without_overriding_a_choice(self):
+        with patch.dict(os.environ, {}, clear=True), patch('wowskin_lab.__main__.sys.platform', 'linux'):
+            configure_offscreen_gl()
+            self.assertEqual(os.environ['MUJOCO_GL'], 'egl')
+            self.assertEqual(os.environ['PYOPENGL_PLATFORM'], 'egl')
+        with patch.dict(os.environ, {'DISPLAY': ':0'}, clear=True), patch('wowskin_lab.__main__.sys.platform', 'linux'):
+            configure_offscreen_gl()
+            self.assertNotIn('MUJOCO_GL', os.environ)
+        with patch.dict(os.environ, {'MUJOCO_GL': 'osmesa'}, clear=True), patch('wowskin_lab.__main__.sys.platform', 'linux'):
+            configure_offscreen_gl()
+            self.assertEqual(os.environ['MUJOCO_GL'], 'osmesa')
+        with patch.dict(os.environ, {}, clear=True), patch('wowskin_lab.__main__.sys.platform', 'darwin'):
+            configure_offscreen_gl()
+            self.assertNotIn('MUJOCO_GL', os.environ)
 
     def test_elastic_clip_is_not_silently_ignored_for_other_tasks(self):
         for task in ('feeding', 'pick_cube'):
